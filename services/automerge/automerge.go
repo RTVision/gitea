@@ -72,15 +72,17 @@ var ErrStackAutoMergeUnsupported = util.ErrorWrap(util.ErrUnprocessableContent, 
 
 // ScheduleAutoMerge if schedule is false and no error, pull can be merged directly
 func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pull *issues_model.PullRequest, style repo_model.MergeStyle, message string, deleteBranchAfterMerge bool) (scheduled bool, err error) {
-	stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
-	if err != nil {
-		return false, err
-	}
-	if stack != nil {
-		return false, ErrStackAutoMergeUnsupported
-	}
-
 	err = db.WithTx(ctx, func(ctx context.Context) error {
+		if err := issues_model.LockStackMembership(ctx, pull.ID); err != nil {
+			return err
+		}
+		stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
+		if err != nil {
+			return err
+		}
+		if stack != nil {
+			return ErrStackAutoMergeUnsupported
+		}
 		if err := pull_model.ScheduleAutoMerge(ctx, doer, pull.ID, style, message, deleteBranchAfterMerge); err != nil {
 			return err
 		}
