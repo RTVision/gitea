@@ -217,6 +217,11 @@ func DeleteIssue(ctx *context.Context) {
 	}
 
 	if err := issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+		if errors.Is(err, issues_model.ErrStackRevision) {
+			ctx.Flash.Error(ctx.Tr("repo.pulls.stack_delete_blocked"))
+			ctx.Redirect(issue.Link(), http.StatusSeeOther)
+			return
+		}
 		ctx.ServerError("DeleteIssueByID", err)
 		return
 	}

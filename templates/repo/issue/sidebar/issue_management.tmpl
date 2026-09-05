@@ -93,8 +93,9 @@
 		</div>
 		<div class="content">
 			<p>
-				{{if .Issue.IsPull}}
-					{{ctx.Locale.Tr "repo.pulls.delete.text"}}
+			{{if .Issue.IsPull}}
+				{{ctx.Locale.Tr "repo.pulls.delete.text"}}
+				{{if .PullStackData}}<br>{{ctx.Locale.Tr "repo.pulls.stack_delete_note"}}{{end}}
 				{{else}}
 					{{ctx.Locale.Tr "repo.issues.delete.text"}}
 				{{end}}
