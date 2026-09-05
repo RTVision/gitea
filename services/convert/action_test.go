@@ -187,3 +187,25 @@ func TestToActionsStatus_Cancelling(t *testing.T) {
 func TestToWorkflowRunAction_Cancelling(t *testing.T) {
 	assert.Equal(t, "in_progress", ToWorkflowRunAction(actions_model.StatusCancelling))
 }
+
+func TestToActionWorkflowRun_NeedsApproval(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	run := unittest.AssertExistsAndLoadBean(t, &actions_model.ActionRun{ID: 803})
+	for _, needsApproval := range []bool{true, false} {
+		run.NeedApproval = needsApproval
+		apiRun, err := ToActionWorkflowRun(t.Context(), run, nil, true)
+		require.NoError(t, err)
+		assert.Equal(t, needsApproval, apiRun.NeedsApproval)
+	}
+	run.Event = "pull_request"
+	run.EventPayload = `{"pull_request":{"head":{"sha":"contributor-head"}}}`
+	prRun, err := ToActionWorkflowRun(t.Context(), run, nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, "contributor-head", prRun.PullRequestHeadSHA)
+	assert.Equal(t, run.CommitSHA, prRun.HeadSha)
+	run.NeedApproval = true
+	oldAttempt := &actions_model.ActionRunAttempt{ID: -1, RunID: run.ID, Attempt: 1, TriggerUserID: run.TriggerUserID, Status: run.Status}
+	apiRun, err := ToActionWorkflowRun(t.Context(), run, oldAttempt, true)
+	require.NoError(t, err)
+	assert.False(t, apiRun.NeedsApproval)
+}
