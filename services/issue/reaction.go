@@ -48,3 +48,22 @@ func CreateCommentReaction(ctx context.Context, doer *user_model.User, comment *
 		CommentID: comment.ID,
 	})
 }
+
+// CreateReviewReaction creates a reaction on a pull request review.
+func CreateReviewReaction(ctx context.Context, doer *user_model.User, review *issues_model.Review, content string) (*issues_model.Reaction, error) {
+	if err := review.LoadIssue(ctx); err != nil {
+		return nil, err
+	}
+	if err := review.Issue.LoadRepo(ctx); err != nil {
+		return nil, err
+	}
+	if user_model.IsUserBlockedBy(ctx, doer, review.Issue.PosterID, review.Issue.Repo.OwnerID, review.ReviewerID) {
+		return nil, user_model.ErrBlockedUser
+	}
+	return issues_model.CreateReaction(ctx, &issues_model.ReactionOptions{
+		Type:     content,
+		DoerID:   doer.ID,
+		IssueID:  review.IssueID,
+		ReviewID: review.ID,
+	})
+}

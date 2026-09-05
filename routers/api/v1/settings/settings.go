@@ -39,7 +39,14 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/GeneralAPISettings"
 	ctx.JSON(http.StatusOK, api.GeneralAPISettings{
-		Features:               []string{"pull-tracking-summary"},
+		Features: []string{
+			"pull-auto-merge-state",
+			"pull-draft",
+			"pull-review-edit",
+			"pull-review-reactions",
+			"actions-run-approve",
+			"pull-tracking-summary",
+		},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,

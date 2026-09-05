@@ -694,8 +694,20 @@ func EditPullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	if len(form.Title) > 0 {
-		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, form.Title)
+	newTitle := form.Title
+	if newTitle == "" {
+		newTitle = issue.Title
+	}
+	if form.Draft != nil {
+		var valid bool
+		newTitle, valid = issues_model.TitleForWorkInProgressState(newTitle, *form.Draft)
+		if !valid || issues_model.HasWorkInProgressPrefix(newTitle) != *form.Draft {
+			ctx.APIError(http.StatusUnprocessableEntity, "cannot apply draft state with the configured work-in-progress prefixes")
+			return
+		}
+	}
+	if newTitle != issue.Title {
+		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, newTitle)
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
