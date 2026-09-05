@@ -31,6 +31,8 @@ type GeneralUISettings struct {
 
 // GeneralAPISettings contains global api settings exposed by it
 type GeneralAPISettings struct {
+	// Features lists additive API capabilities supported by this server.
+	Features []string `json:"features"`
 	// MaxResponseItems is the maximum number of items returned in API responses
 	MaxResponseItems int `json:"max_response_items"`
 	// DefaultPagingNum is the default number of items per page
@@ -41,8 +43,6 @@ type GeneralAPISettings struct {
 	DefaultMaxBlobSize int64 `json:"default_max_blob_size"`
 	// DefaultMaxResponseSize is the default maximum response size
 	DefaultMaxResponseSize int64 `json:"default_max_response_size"`
-	// Features lists additive API capabilities supported by this server.
-	Features []string `json:"features"`
 }
 
 // GeneralAttachmentSettings contains global Attachment settings exposed by API

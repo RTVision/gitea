@@ -37,6 +37,10 @@ type PullRequest struct {
 	State StateType `json:"state"`
 	// Whether the pull request is a draft
 	Draft bool `json:"draft"`
+	// Whether the pull request is scheduled to merge when checks succeed
+	AutoMergeEnabled bool `json:"auto_merge_enabled"`
+	// The merge method scheduled for auto-merge
+	AutoMergeMethod string `json:"auto_merge_method,omitempty"`
 	// Whether the pull request conversation is locked
 	IsLocked bool `json:"is_locked"`
 	// The number of comments on the pull request
@@ -164,6 +168,8 @@ type EditPullRequestOption struct {
 	Labels []int64 `json:"labels"`
 	// The new state for the pull request
 	State *string `json:"state"`
+	// Whether to mark the pull request as a draft
+	Draft *bool `json:"draft"`
 	// swagger:strfmt date-time
 	Deadline *time.Time `json:"due_date"`
 	// Whether to remove the current deadline

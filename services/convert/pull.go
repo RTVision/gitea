@@ -10,6 +10,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/cache"
@@ -110,6 +111,12 @@ func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			RepoID: -1,
 		},
 	}
+	scheduledMerges, err := pull_model.GetScheduledMergesByPullIDs(ctx, []int64{pr.ID})
+	if err != nil {
+		log.Error("GetScheduledMergesByPullIDs[%d]: %v", pr.ID, err)
+		return nil
+	}
+	setAPIPullRequestAutoMerge(apiPullRequest, scheduledMerges[pr.ID])
 
 	if err = pr.LoadRequestedReviewers(ctx); err != nil {
 		log.Error("LoadRequestedReviewers[%d]: %v", pr.ID, err)
@@ -321,6 +328,14 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	if err != nil {
 		return nil, err
 	}
+	pullIDs := make([]int64, 0, len(prs))
+	for _, pr := range prs {
+		pullIDs = append(pullIDs, pr.ID)
+	}
+	scheduledMerges, err := pull_model.GetScheduledMergesByPullIDs(ctx, pullIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	gitRepo, err := git.OpenRepository(ctx, baseRepo)
 	if err != nil {
@@ -382,6 +397,7 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 				RepoID: -1,
 			},
 		}
+		setAPIPullRequestAutoMerge(apiPullRequest, scheduledMerges[pr.ID])
 
 		pr.RequestedReviewers = reviewersMap[pr.IssueID]
 		for _, reviewer := range pr.RequestedReviewers {
@@ -478,4 +494,12 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	}
 
 	return apiPullRequests, nil
+}
+
+func setAPIPullRequestAutoMerge(apiPullRequest *api.PullRequest, scheduledMerge *pull_model.AutoMerge) {
+	if scheduledMerge == nil {
+		return
+	}
+	apiPullRequest.AutoMergeEnabled = true
+	apiPullRequest.AutoMergeMethod = string(scheduledMerge.MergeStyle)
 }

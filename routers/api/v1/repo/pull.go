@@ -210,7 +210,12 @@ func GetPullRequest(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // GetPullRequest returns a single PR based on index
@@ -299,7 +304,12 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch
@@ -665,8 +675,20 @@ func EditPullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	if len(form.Title) > 0 {
-		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, form.Title)
+	newTitle := form.Title
+	if newTitle == "" {
+		newTitle = issue.Title
+	}
+	if form.Draft != nil {
+		var valid bool
+		newTitle, valid = issues_model.TitleForWorkInProgressState(newTitle, *form.Draft)
+		if !valid || issues_model.HasWorkInProgressPrefix(newTitle) != *form.Draft {
+			ctx.APIError(http.StatusUnprocessableEntity, "cannot apply draft state with the configured work-in-progress prefixes")
+			return
+		}
+	}
+	if newTitle != issue.Title {
+		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, newTitle)
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
