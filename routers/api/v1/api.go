@@ -1540,6 +1540,27 @@ func Routes() *web.Router {
 					})
 					m.Get("/{base}/*", repo.GetPullRequestByBaseHead)
 				}, mustAllowPulls, reqRepoReader(unit.TypeCode), context.ReferencesGitRepo())
+				m.Group("/stacks", func() {
+					m.Get("/capabilities", repo.StackCapabilities)
+					m.Combo("").Get(repo.ListPullRequestStacks).
+						Post(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.CreatePullRequestStackOption{}), repo.CreatePullRequestStack)
+					m.Group("/{id}", func() {
+						m.Combo("").Get(repo.GetPullRequestStack).
+							Patch(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.EditPullRequestStackOption{}), repo.AppendPullRequestStack).
+							Delete(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackRevisionOption{}), repo.DeletePullRequestStack)
+						m.Post("/rebase", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.RebasePullRequestStack)
+						m.Post("/land", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.LandPullRequestStack)
+						m.Post("/sync", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.SynchronizePullRequestStackOption{}), repo.SynchronizePullRequestStack)
+						m.Group("/operations", func() {
+							m.Get("", repo.ListPullRequestStackOperations)
+							m.Group("/{operation}", func() {
+								m.Get("", repo.GetPullRequestStackOperation)
+								m.Post("/cancel", reqToken(), reqRepoWriter(unit.TypeCode), repo.CancelPullRequestStackOperation)
+								m.Post("/retry", reqToken(), reqRepoWriter(unit.TypeCode), repo.RetryPullRequestStackOperation)
+							})
+						})
+					})
+				}, mustAllowPulls, reqRepoReader(unit.TypeCode), context.ReferencesGitRepo())
 				m.Group("/statuses", func() { // "/statuses/{sha}" only accepts commit ID
 					m.Combo("/{sha}").Get(repo.GetCommitStatuses).
 						Post(reqToken(), reqRepoWriter(unit.TypeCode), bind(api.CreateStatusOption{}), repo.NewCommitStatus)
