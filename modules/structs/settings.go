@@ -31,7 +31,7 @@ type GeneralUISettings struct {
 
 // GeneralAPISettings contains global api settings exposed by it
 type GeneralAPISettings struct {
-	// Features lists optional API capabilities supported by this server.
+	// Features lists additive API capabilities supported by this server.
 	Features []string `json:"features"`
 	// MaxResponseItems is the maximum number of items returned in API responses
 	MaxResponseItems int `json:"max_response_items"`

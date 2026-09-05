@@ -58,12 +58,13 @@ func (err ErrReactionAlreadyExist) Unwrap() error {
 	return util.ErrAlreadyExist
 }
 
-// Reaction represents a reactions on issues and comments.
+// Reaction represents a reaction on an issue, comment, or pull request review.
 type Reaction struct {
 	ID               int64              `xorm:"pk autoincr"`
 	Type             string             `xorm:"INDEX UNIQUE(s) NOT NULL"`
 	IssueID          int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
 	CommentID        int64              `xorm:"INDEX UNIQUE(s)"`
+	ReviewID         int64              `xorm:"INDEX UNIQUE(s) NOT NULL DEFAULT(0)"`
 	UserID           int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
 	OriginalAuthorID int64              `xorm:"INDEX UNIQUE(s) NOT NULL DEFAULT(0)"`
 	OriginalAuthor   string             `xorm:"INDEX UNIQUE(s)"`
@@ -110,6 +111,7 @@ type FindReactionsOptions struct {
 	db.ListOptions
 	IssueID   int64
 	CommentID int64
+	ReviewID  int64
 	UserID    int64
 	Reaction  string
 }
@@ -128,6 +130,7 @@ func (opts *FindReactionsOptions) toConds() builder.Cond {
 	} else if opts.CommentID == -1 {
 		cond = cond.And(builder.Eq{"reaction.comment_id": 0})
 	}
+	cond = cond.And(builder.Eq{"reaction.review_id": opts.ReviewID})
 	if opts.UserID > 0 {
 		cond = cond.And(builder.Eq{
 			"reaction.user_id":            opts.UserID,
@@ -139,6 +142,16 @@ func (opts *FindReactionsOptions) toConds() builder.Cond {
 	}
 
 	return cond
+}
+
+// ToConds converts reaction filters into database conditions.
+func (opts FindReactionsOptions) ToConds() builder.Cond {
+	return opts.toConds()
+}
+
+// ToOrders implements db.FindOptions interface.
+func (opts FindReactionsOptions) ToOrders() string {
+	return "id"
 }
 
 // FindCommentReactions returns a ReactionList of all reactions from an comment
@@ -155,6 +168,15 @@ func FindIssueReactions(ctx context.Context, issueID int64, listOptions db.ListO
 		ListOptions: listOptions,
 		IssueID:     issueID,
 		CommentID:   -1,
+	})
+}
+
+// FindReviewReactions returns reactions for a pull request review.
+func FindReviewReactions(ctx context.Context, issueID, reviewID int64, listOptions db.ListOptions) (ReactionList, int64, error) {
+	return FindReactions(ctx, FindReactionsOptions{
+		ListOptions: listOptions,
+		IssueID:     issueID,
+		ReviewID:    reviewID,
 	})
 }
 
@@ -183,10 +205,12 @@ func createReaction(ctx context.Context, opts *ReactionOptions) (*Reaction, erro
 		UserID:    opts.DoerID,
 		IssueID:   opts.IssueID,
 		CommentID: opts.CommentID,
+		ReviewID:  opts.ReviewID,
 	}
 	findOpts := FindReactionsOptions{
 		IssueID:   opts.IssueID,
 		CommentID: opts.CommentID,
+		ReviewID:  opts.ReviewID,
 		Reaction:  opts.Type,
 		UserID:    opts.DoerID,
 	}
@@ -216,6 +240,7 @@ type ReactionOptions struct {
 	DoerID    int64
 	IssueID   int64
 	CommentID int64
+	ReviewID  int64
 }
 
 // CreateReaction creates reaction for issue or comment.
@@ -236,12 +261,17 @@ func DeleteReaction(ctx context.Context, opts *ReactionOptions) error {
 		UserID:    opts.DoerID,
 		IssueID:   opts.IssueID,
 		CommentID: opts.CommentID,
+		ReviewID:  opts.ReviewID,
 	}
 
 	sess := db.GetEngine(ctx).Where("original_author_id = 0")
 	if opts.CommentID == -1 {
 		reaction.CommentID = 0
 		sess.MustCols("comment_id")
+	}
+	if opts.ReviewID == -1 {
+		reaction.ReviewID = 0
+		sess.MustCols("review_id")
 	}
 
 	_, err := sess.Delete(reaction)
@@ -255,6 +285,7 @@ func DeleteIssueReaction(ctx context.Context, doerID, issueID int64, content str
 		DoerID:    doerID,
 		IssueID:   issueID,
 		CommentID: -1,
+		ReviewID:  -1,
 	})
 }
 
@@ -265,6 +296,16 @@ func DeleteCommentReaction(ctx context.Context, doerID, issueID, commentID int64
 		DoerID:    doerID,
 		IssueID:   issueID,
 		CommentID: commentID,
+	})
+}
+
+// DeleteReviewReaction deletes a reaction on a pull request review.
+func DeleteReviewReaction(ctx context.Context, doerID, issueID, reviewID int64, content string) error {
+	return DeleteReaction(ctx, &ReactionOptions{
+		Type:     content,
+		DoerID:   doerID,
+		IssueID:  issueID,
+		ReviewID: reviewID,
 	})
 }
 

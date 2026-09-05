@@ -661,12 +661,46 @@ func HasWorkInProgressPrefix(title string) bool {
 
 func CutWorkInProgressPrefix(title string) (origTitle string, ok bool) {
 	for _, prefix := range setting.Repository.PullRequest.WorkInProgressPrefixes {
+		if strings.TrimSpace(prefix) == "" {
+			continue
+		}
 		prefixLen := len(prefix)
 		if prefixLen <= len(title) && util.AsciiEqualFold(title[:prefixLen], prefix) {
 			return title[len(prefix):], true
 		}
 	}
 	return title, false
+}
+
+// TitleForWorkInProgressState returns a title matching the requested work-in-progress state.
+func TitleForWorkInProgressState(title string, workInProgress bool) (string, bool) {
+	if workInProgress {
+		if HasWorkInProgressPrefix(title) {
+			return title, true
+		}
+		for _, prefix := range setting.Repository.PullRequest.WorkInProgressPrefixes {
+			if strings.TrimSpace(prefix) == "" {
+				continue
+			}
+			candidate := prefix + " " + title
+			if HasWorkInProgressPrefix(candidate) {
+				return candidate, true
+			}
+		}
+		return title, false
+	}
+
+	for HasWorkInProgressPrefix(title) {
+		withoutPrefix, ok := CutWorkInProgressPrefix(title)
+		if !ok || withoutPrefix == title {
+			return title, false
+		}
+		title = strings.TrimSpace(withoutPrefix)
+	}
+	if title == "" || HasWorkInProgressPrefix(title) {
+		return title, false
+	}
+	return title, true
 }
 
 // IsFilesConflicted determines if the Pull Request has changes conflicting with the target branch.

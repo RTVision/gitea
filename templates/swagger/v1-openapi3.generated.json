@@ -5835,6 +5835,11 @@
             "type": "integer",
             "x-go-name": "ContentVersion"
           },
+          "draft": {
+            "description": "Whether to mark the pull request as a draft",
+            "type": "boolean",
+            "x-go-name": "Draft"
+          },
           "due_date": {
             "format": "date-time",
             "type": "string",
@@ -5871,6 +5876,21 @@
             "x-go-name": "RemoveDeadline"
           }
         },
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
+      "EditPullReviewOption": {
+        "properties": {
+          "body": {
+            "description": "Body is the updated review summary",
+            "type": "string",
+            "x-go-name": "Body"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "EditPullReviewOption options for editing a pull request review summary.",
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
       },
@@ -6658,6 +6678,14 @@
             "format": "int64",
             "type": "integer",
             "x-go-name": "DefaultPagingNum"
+          },
+          "features": {
+            "description": "Features lists additive API capabilities supported by this server.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "x-go-name": "Features"
           },
           "max_response_items": {
             "description": "MaxResponseItems is the maximum number of items returned in API responses",
@@ -8765,6 +8793,16 @@
             },
             "type": "array",
             "x-go-name": "Assignees"
+          },
+          "auto_merge_enabled": {
+            "description": "Whether the pull request is scheduled to merge when checks succeed",
+            "type": "boolean",
+            "x-go-name": "AutoMergeEnabled"
+          },
+          "auto_merge_method": {
+            "description": "The merge method scheduled for auto-merge",
+            "type": "string",
+            "x-go-name": "AutoMergeMethod"
           },
           "base": {
             "$ref": "#/components/schemas/PRBranchInfo"
@@ -30015,6 +30053,68 @@
           "repository"
         ]
       },
+      "patch": {
+        "operationId": "repoEditPullReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPullReviewOption"
+              }
+            }
+          },
+          "x-originalParamName": "body"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PullReview"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          }
+        },
+        "summary": "Edit a pull request review summary",
+        "tags": [
+          "repository"
+        ]
+      },
       "post": {
         "operationId": "repoSubmitPullReview",
         "parameters": [
@@ -30211,6 +30311,192 @@
           }
         },
         "summary": "Dismiss a review for a pull request",
+        "tags": [
+          "repository"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/reactions": {
+      "delete": {
+        "operationId": "repoDeletePullReviewReaction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditReactionOption"
+              }
+            }
+          },
+          "x-originalParamName": "content"
+        },
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/empty"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          }
+        },
+        "summary": "Remove a reaction from a pull request review summary",
+        "tags": [
+          "repository"
+        ]
+      },
+      "get": {
+        "operationId": "repoGetPullReviewReactions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ReactionList"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          }
+        },
+        "summary": "Get reactions on a pull request review summary",
+        "tags": [
+          "repository"
+        ]
+      },
+      "post": {
+        "operationId": "repoPostPullReviewReaction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditReactionOption"
+              }
+            }
+          },
+          "x-originalParamName": "content"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/Reaction"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          }
+        },
+        "summary": "Add a reaction to a pull request review summary",
         "tags": [
           "repository"
         ]
