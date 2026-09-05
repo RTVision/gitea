@@ -677,7 +677,8 @@ func CutWorkInProgressPrefix(title string) (origTitle string, ok bool) {
 func TitleForWorkInProgressState(title string, workInProgress bool) (string, bool) {
 	if workInProgress {
 		if HasWorkInProgressPrefix(title) {
-			return title, true
+			_, valid := TitleForWorkInProgressState(title, false)
+			return title, valid
 		}
 		for _, prefix := range setting.Repository.PullRequest.WorkInProgressPrefixes {
 			if strings.TrimSpace(prefix) == "" {
@@ -685,7 +686,8 @@ func TitleForWorkInProgressState(title string, workInProgress bool) (string, boo
 			}
 			candidate := prefix + " " + title
 			if HasWorkInProgressPrefix(candidate) {
-				return candidate, true
+				_, valid := TitleForWorkInProgressState(candidate, false)
+				return candidate, valid
 			}
 		}
 		return title, false
