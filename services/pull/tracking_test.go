@@ -47,10 +47,10 @@ func TestPullRequestChecksState(t *testing.T) {
 	}{
 		{name: "no checks", statuses: nil, want: nil},
 		{name: "skipped only", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusSkipped}}, want: nil},
-		{name: "passing", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusSuccess}, {State: commitstatus.CommitStatusSkipped}}, want: trackingChecksStatePtr(api.PullRequestChecksPassing)},
-		{name: "pending", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusPending}, {State: commitstatus.CommitStatusSuccess}}, want: trackingChecksStatePtr(api.PullRequestChecksPending)},
-		{name: "failure wins", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusPending}, {State: commitstatus.CommitStatusFailure}}, want: trackingChecksStatePtr(api.PullRequestChecksFailing)},
-		{name: "warning fails", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusWarning}}, want: trackingChecksStatePtr(api.PullRequestChecksFailing)},
+		{name: "passing", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusSuccess}, {State: commitstatus.CommitStatusSkipped}}, want: new(api.PullRequestChecksPassing)},
+		{name: "pending", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusPending}, {State: commitstatus.CommitStatusSuccess}}, want: new(api.PullRequestChecksPending)},
+		{name: "failure wins", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusPending}, {State: commitstatus.CommitStatusFailure}}, want: new(api.PullRequestChecksFailing)},
+		{name: "warning fails", statuses: []*git_model.CommitStatus{{State: commitstatus.CommitStatusWarning}}, want: new(api.PullRequestChecksFailing)},
 	}
 
 	for _, test := range tests {
@@ -58,8 +58,4 @@ func TestPullRequestChecksState(t *testing.T) {
 			assert.Equal(t, test.want, pullRequestChecksState(test.statuses))
 		})
 	}
-}
-
-func trackingChecksStatePtr(state api.PullRequestChecksState) *api.PullRequestChecksState {
-	return &state
 }
