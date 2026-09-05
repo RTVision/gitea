@@ -5835,6 +5835,11 @@
             "type": "integer",
             "x-go-name": "ContentVersion"
           },
+          "draft": {
+            "description": "Whether to mark the pull request as a draft",
+            "type": "boolean",
+            "x-go-name": "Draft"
+          },
           "due_date": {
             "format": "date-time",
             "type": "string",
@@ -6658,6 +6663,14 @@
             "format": "int64",
             "type": "integer",
             "x-go-name": "DefaultPagingNum"
+          },
+          "features": {
+            "description": "Features lists additive API capabilities supported by this server.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "x-go-name": "Features"
           },
           "max_response_items": {
             "description": "MaxResponseItems is the maximum number of items returned in API responses",
@@ -8765,6 +8778,16 @@
             },
             "type": "array",
             "x-go-name": "Assignees"
+          },
+          "auto_merge_enabled": {
+            "description": "Whether the pull request is scheduled to merge when checks succeed",
+            "type": "boolean",
+            "x-go-name": "AutoMergeEnabled"
+          },
+          "auto_merge_method": {
+            "description": "The merge method scheduled for auto-merge",
+            "type": "string",
+            "x-go-name": "AutoMergeMethod"
           },
           "base": {
             "$ref": "#/components/schemas/PRBranchInfo"
