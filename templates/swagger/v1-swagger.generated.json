@@ -16485,6 +16485,13 @@
             "description": "Page size of results",
             "name": "limit",
             "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -16730,6 +16737,13 @@
             "name": "head",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -16774,6 +16788,13 @@
             "name": "index",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -17382,6 +17403,57 @@
           },
           "422": {
             "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/pulls/{index}/revert": {
+      "post": {
+        "description": "Requires repository code write access. Creates a new branch; never modifies the target branch. Conflicts or an unknown historical merge range return 409.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Open a pull request reverting a merged pull request",
+        "operationId": "repoRevertPullRequest",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "index",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/PullRequest"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/error"
+          },
+          "423": {
+            "$ref": "#/responses/repoArchivedError"
           }
         }
       }
@@ -32091,6 +32163,17 @@
           "format": "int64",
           "x-go-name": "ChangedFiles"
         },
+        "checks_state": {
+          "description": "The combined state of the pull request's latest checks when pull tracking summaries are enabled",
+          "type": "string",
+          "enum": [
+            "passing",
+            "failing",
+            "pending"
+          ],
+          "x-go-enum-desc": "passing PullRequestChecksPassing indicates that at least one check passed and none failed or remain pending.\nfailing PullRequestChecksFailing indicates that a check failed, errored, or warned.\npending PullRequestChecksPending indicates that a check is still running or has an unknown state.",
+          "x-go-name": "ChecksState"
+        },
         "closed_at": {
           "type": "string",
           "format": "date-time",
@@ -32166,6 +32249,11 @@
           "type": "string",
           "x-go-name": "MergeBase"
         },
+        "merge_base_commit_sha": {
+          "description": "The base branch SHA immediately before a server-managed merge, when recorded.",
+          "type": "string",
+          "x-go-name": "MergedBaseCommitID"
+        },
         "merge_commit_sha": {
           "description": "The SHA of the merge commit",
           "type": "string",
@@ -32230,6 +32318,17 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ReviewComments"
+        },
+        "review_decision": {
+          "description": "The review policy result when pull tracking summaries are enabled",
+          "type": "string",
+          "enum": [
+            "approved",
+            "changes-requested",
+            "review-required"
+          ],
+          "x-go-enum-desc": "approved PullRequestReviewApproved indicates that all enabled review gates pass.\nchanges-requested PullRequestReviewChangesRequested indicates an active official rejection.\nreview-required PullRequestReviewRequired indicates that an enabled review gate is unsatisfied.",
+          "x-go-name": "ReviewDecision"
         },
         "state": {
           "description": "The current state of the pull request",
