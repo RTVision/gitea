@@ -15,9 +15,9 @@ import (
 	issue_service "gitea.dev/services/issue"
 )
 
-// PullRequestTrackingSummary contains the optional policy and check state
+// RequestTrackingSummary contains the optional policy and check state
 // fields exposed by the pull request API.
-type PullRequestTrackingSummary struct {
+type RequestTrackingSummary struct {
 	ReviewDecision *api.PullRequestReviewDecision
 	ChecksState    *api.PullRequestChecksState
 }
@@ -25,8 +25,8 @@ type PullRequestTrackingSummary struct {
 // GetPullRequestTrackingSummaries evaluates summaries for a batch of pull
 // requests. Reviews, protected branch rules, and commit statuses are loaded in
 // batches so a list response does not issue one query per pull request.
-func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullRequestList, headCommitIDs map[int64]string) (map[int64]PullRequestTrackingSummary, error) {
-	summaries := make(map[int64]PullRequestTrackingSummary, len(prs))
+func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullRequestList, headCommitIDs map[int64]string) (map[int64]RequestTrackingSummary, error) {
+	summaries := make(map[int64]RequestTrackingSummary, len(prs))
 	if len(prs) == 0 {
 		return summaries, nil
 	}
@@ -66,7 +66,7 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 	}
 
 	for _, pr := range prs {
-		var summary PullRequestTrackingSummary
+		var summary RequestTrackingSummary
 		pb := rulesByRepo[pr.BaseRepoID].GetFirstMatched(pr.BaseBranch)
 		if decision := pullRequestReviewDecision(ctx, pb, pr, reviewsByIssue[pr.IssueID]); decision != nil {
 			summary.ReviewDecision = decision
