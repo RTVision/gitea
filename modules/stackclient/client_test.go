@@ -83,18 +83,22 @@ func TestFromRemote(t *testing.T) {
 }
 
 func TestFromRemoteRequiresBaseURLForAmbiguousSSHPath(t *testing.T) {
-	t.Setenv("GITEA_URL", "")
-	_, err := FromRemote("git@code.example.test:/srv/git/acme/widget.git", "secret")
-	var ambiguous ErrAmbiguousRemoteURL
-	require.ErrorAs(t, err, &ambiguous)
-	assert.Contains(t, err.Error(), "Set GITEA_URL")
+	for _, remote := range []string{"git@code.example.test:/srv/git/acme/widget.git", "ssh://git@code.example.test/srv/git/acme/widget.git"} {
+		t.Run(remote, func(t *testing.T) {
+			t.Setenv("GITEA_URL", "")
+			_, err := FromRemote(remote, "secret")
+			var ambiguous ErrAmbiguousRemoteURL
+			require.ErrorAs(t, err, &ambiguous)
+			assert.Contains(t, err.Error(), "Set GITEA_URL")
 
-	t.Setenv("GITEA_URL", "https://code.example.test/gitea")
-	client, err := FromRemote("git@code.example.test:/srv/git/acme/widget.git", "secret")
-	require.NoError(t, err)
-	assert.Equal(t, "https://code.example.test/gitea", client.BaseURL)
-	assert.Equal(t, "acme", client.Owner)
-	assert.Equal(t, "widget", client.Repo)
+			t.Setenv("GITEA_URL", "https://code.example.test/gitea")
+			client, err := FromRemote(remote, "secret")
+			require.NoError(t, err)
+			assert.Equal(t, "https://code.example.test/gitea", client.BaseURL)
+			assert.Equal(t, "acme", client.Owner)
+			assert.Equal(t, "widget", client.Repo)
+		})
+	}
 }
 
 func TestClientRejectsRedirectToAnotherHost(t *testing.T) {
