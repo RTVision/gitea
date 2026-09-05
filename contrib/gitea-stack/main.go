@@ -60,7 +60,9 @@ func runMain(arguments []string) int {
 		printUsage()
 		return 2
 	}
-	repo := gitx.Repo{Dir: "."}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	repo := gitx.Repo{Dir: ".", Ctx: ctx}
 	store, err := localstate.Open(repo)
 	if err != nil {
 		return reportError(err, *jsonOutput)
@@ -81,8 +83,6 @@ func runMain(arguments []string) int {
 	if store.RestackExists() && !(args[0] == "restack" || args[0] == "snapshots") {
 		return reportError(fail(3, "restack_in_progress", "restack in progress; run restack --continue or --abort"), *jsonOutput)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
 	err = app.run(ctx, args[0], args[1:])
 	if err != nil {
 		return reportError(err, *jsonOutput)
@@ -95,6 +95,9 @@ func printUsage() {
 }
 
 func reportError(err error, jsonOutput bool) int {
+	if gitErr, ok := errors.AsType[gitx.ContextError](err); ok {
+		err = mapGitContextError(gitErr.Operation, gitErr)
+	}
 	code, kind := 1, "unexpected"
 	if commandErr, ok := errors.AsType[commandError](err); ok {
 		code, kind = commandErr.code, commandErr.kind

@@ -16,10 +16,28 @@ import (
 	"gitea.dev/modules/process"
 )
 
-type Repo struct{ Dir string }
+type Repo struct {
+	Dir string
+	Ctx context.Context
+}
+
+type ContextError struct {
+	Operation string
+	Err       error
+}
+
+func (e ContextError) Error() string { return e.Err.Error() }
+func (e ContextError) Unwrap() error { return e.Err }
+
+func (r Repo) context() context.Context {
+	if r.Ctx != nil {
+		return r.Ctx
+	}
+	return context.Background()
+}
 
 func (r Repo) Run(env []string, args ...string) (string, error) {
-	return r.RunContext(context.Background(), env, args...)
+	return r.RunContext(r.context(), env, args...)
 }
 
 func (r Repo) RunContext(ctx context.Context, env []string, args ...string) (string, error) {
@@ -30,7 +48,11 @@ func (r Repo) RunContext(ctx context.Context, env []string, args ...string) (str
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return strings.TrimSpace(stdout.String()), ctxErr
+			operation := "command"
+			if len(args) != 0 {
+				operation = args[0]
+			}
+			return strings.TrimSpace(stdout.String()), ContextError{Operation: operation, Err: ctxErr}
 		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {

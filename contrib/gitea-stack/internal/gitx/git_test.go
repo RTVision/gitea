@@ -107,6 +107,16 @@ func TestRunContextHonorsCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+func TestRunUsesRepositoryContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := (Repo{Dir: t.TempDir(), Ctx: ctx}).Run(nil, "status")
+	require.ErrorIs(t, err, context.Canceled)
+	var contextErr ContextError
+	require.ErrorAs(t, err, &contextErr)
+	assert.Equal(t, "status", contextErr.Operation)
+}
+
 func TestRunContextBoundsInheritedPipeWait(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a shell script as a fake git executable")
