@@ -29,12 +29,20 @@ func TestAPIExposedSettings(t *testing.T) {
 
 	apiSettings := DecodeJSON(t, resp, &api.GeneralAPISettings{})
 	assert.Equal(t, &api.GeneralAPISettings{
+		Features: []string{
+			"pull-auto-merge-state",
+			"pull-draft",
+			"pull-review-edit",
+			"pull-review-reactions",
+			"actions-run-approve",
+			"pull-tracking-summary",
+			"pull-revert",
+		},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,
 		DefaultMaxBlobSize:     setting.API.DefaultMaxBlobSize,
 		DefaultMaxResponseSize: setting.API.DefaultMaxResponseSize,
-		Features:               []string{"pull-review-edit", "pull-review-reactions"},
 	}, apiSettings)
 
 	req = NewRequest(t, "GET", "/api/v1/settings/repository")

@@ -106,6 +106,11 @@ func ListPullRequests(ctx *context.APIContext) {
 	//   description: Page size of results
 	//   type: integer
 	//   minimum: 0
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestList"
@@ -152,6 +157,10 @@ func ListPullRequests(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
+	if err := enrichPullRequestTrackingSummaries(ctx, prs, apiPrs); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 
 	ctx.SetLinkHeader(maxResults, listOptions.PageSize)
 	ctx.SetTotalCountHeader(maxResults)
@@ -182,6 +191,11 @@ func GetPullRequest(ctx *context.APIContext) {
 	//   type: integer
 	//   format: int64
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
@@ -210,7 +224,12 @@ func GetPullRequest(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // GetPullRequest returns a single PR based on index
@@ -241,6 +260,11 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	//   description: head of the pull request to get
 	//   type: string
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
@@ -299,7 +323,12 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch
@@ -665,8 +694,20 @@ func EditPullRequest(ctx *context.APIContext) {
 		return
 	}
 
-	if len(form.Title) > 0 {
-		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, form.Title)
+	newTitle := form.Title
+	if newTitle == "" {
+		newTitle = issue.Title
+	}
+	if form.Draft != nil {
+		var valid bool
+		newTitle, valid = issues_model.TitleForWorkInProgressState(newTitle, *form.Draft)
+		if !valid || issues_model.HasWorkInProgressPrefix(newTitle) != *form.Draft {
+			ctx.APIError(http.StatusUnprocessableEntity, "cannot apply draft state with the configured work-in-progress prefixes")
+			return
+		}
+	}
+	if newTitle != issue.Title {
+		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, newTitle)
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return

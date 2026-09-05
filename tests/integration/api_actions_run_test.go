@@ -539,6 +539,8 @@ func testAPIActionsApproveWorkflowRun(t *testing.T) {
 	}
 
 	run := insertBlockedRun(2001)
+	resp := MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/actions/runs/%d", repo.FullName(), run.ID)).AddTokenAuth(ownerToken), http.StatusOK)
+	assert.True(t, DecodeJSON(t, resp, &api.ActionWorkflowRun{}).NeedsApproval)
 
 	t.Run("ForbiddenWithoutPermission", func(t *testing.T) {
 		req := NewRequest(t, "POST", fmt.Sprintf("/api/v1/repos/%s/actions/runs/%d/approve", repo.FullName(), run.ID)).
@@ -552,6 +554,7 @@ func testAPIActionsApproveWorkflowRun(t *testing.T) {
 		resp := MakeRequest(t, req, http.StatusOK)
 		apiRun := DecodeJSON(t, resp, &api.ActionWorkflowRun{})
 		assert.Equal(t, run.ID, apiRun.ID)
+		assert.False(t, apiRun.NeedsApproval)
 		assertApproved(t, run.ID, 5)
 	})
 

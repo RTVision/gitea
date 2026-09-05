@@ -146,6 +146,17 @@ ruleLoop:
 }
 
 func HasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.ProtectedBranch, pr *issues_model.PullRequest) bool {
+	return hasAllRequiredCodeownerReviews(ctx, pb, pr, nil)
+}
+
+// HasAllRequiredCodeownerReviewsWithReviews is the batch-friendly form of
+// HasAllRequiredCodeownerReviews. A non-nil review list is treated as the
+// already loaded review set for the pull request.
+func HasAllRequiredCodeownerReviewsWithReviews(ctx context.Context, pb *git_model.ProtectedBranch, pr *issues_model.PullRequest, reviews issues_model.ReviewList) bool {
+	return hasAllRequiredCodeownerReviews(ctx, pb, pr, reviews)
+}
+
+func hasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.ProtectedBranch, pr *issues_model.PullRequest, reviews issues_model.ReviewList) bool {
 	if !pb.BlockOnCodeownerReviews {
 		return true
 	}
@@ -181,25 +192,30 @@ func HasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.Protected
 	// even if it wouldn't count as an "official" review toward RequiredApprovals (e.g. the
 	// owner lacks write access, or isn't on the approvals whitelist). Unlike the other
 	// branch-protection checks below, this one only cares whether a listed code owner approved.
-	approvingReviews, err := issues_model.FindLatestReviews(ctx, issues_model.FindReviewOptions{
-		Types:        []issues_model.ReviewType{issues_model.ReviewTypeApprove, issues_model.ReviewTypeReject},
-		IssueID:      pr.IssueID,
-		OfficialOnly: false,
-		Dismissed:    optional.Some(false),
-	})
-	if err != nil {
-		log.Warn("Failed to get approving reviews for PR review %d, error: %v", pr.ID, err)
-		return false
+	if reviews == nil {
+		var err error
+		reviews, err = issues_model.FindLatestReviews(ctx, issues_model.FindReviewOptions{
+			Types:        []issues_model.ReviewType{issues_model.ReviewTypeApprove, issues_model.ReviewTypeReject},
+			IssueID:      pr.IssueID,
+			OfficialOnly: false,
+			Dismissed:    optional.Some(false),
+		})
+		if err != nil {
+			log.Warn("Failed to get approving reviews for PR review %d, error: %v", pr.ID, err)
+			return false
+		}
+	} else {
+		reviews = latestCodeownerReviews(reviews)
 	}
 
 	if pb.IgnoreStaleApprovals {
-		validApprovingReviews := make(issues_model.ReviewList, 0, len(approvingReviews))
-		for _, review := range approvingReviews {
+		validApprovingReviews := make(issues_model.ReviewList, 0, len(reviews))
+		for _, review := range reviews {
 			if !review.Stale {
 				validApprovingReviews = append(validApprovingReviews, review)
 			}
 		}
-		approvingReviews = validApprovingReviews
+		reviews = validApprovingReviews
 	}
 
 	teamMembersByID := make(map[int64][]*user_model.User)
@@ -237,7 +253,7 @@ func HasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.Protected
 
 		// and at least 1 approving review from one of them
 		hasRuleApproval := slices.ContainsFunc(ruleReviewers, func(elem *user_model.User) bool {
-			return slices.ContainsFunc(approvingReviews, func(review *issues_model.Review) bool {
+			return slices.ContainsFunc(reviews, func(review *issues_model.Review) bool {
 				return review.ReviewerID == elem.ID && review.Type == issues_model.ReviewTypeApprove
 			})
 		})
@@ -248,6 +264,27 @@ func HasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.Protected
 	}
 
 	return true
+}
+
+func latestCodeownerReviews(reviews issues_model.ReviewList) issues_model.ReviewList {
+	latest := make(map[int64]*issues_model.Review)
+	for _, review := range reviews {
+		if review == nil {
+			continue
+		}
+		if review.Dismissed || (review.Type != issues_model.ReviewTypeApprove && review.Type != issues_model.ReviewTypeReject) {
+			continue
+		}
+		if existing := latest[review.ReviewerID]; existing == nil || existing.ID < review.ID {
+			latest[review.ReviewerID] = review
+		}
+	}
+
+	result := make(issues_model.ReviewList, 0, len(latest))
+	for _, review := range latest {
+		result = append(result, review)
+	}
+	return result
 }
 
 func PullRequestCodeOwnersReview(ctx context.Context, pr *issues_model.PullRequest) ([]*ReviewRequestNotifier, error) {

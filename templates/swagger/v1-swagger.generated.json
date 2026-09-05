@@ -25620,6 +25620,11 @@
           "type": "string",
           "x-go-name": "LogsURL"
         },
+        "needs_approval": {
+          "description": "NeedsApproval is true only for the current attempt waiting for approval.",
+          "type": "boolean",
+          "x-go-name": "NeedsApproval"
+        },
         "path": {
           "type": "string",
           "x-go-name": "Path"
@@ -25628,6 +25633,11 @@
           "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is \u003e 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
           "type": "string",
           "x-go-name": "PreviousAttemptURL"
+        },
+        "pull_request_head_sha": {
+          "description": "PullRequestHeadSHA identifies the contributor commit recorded when a PR run was triggered.",
+          "type": "string",
+          "x-go-name": "PullRequestHeadSHA"
         },
         "pull_requests": {
           "type": "array",
@@ -29108,6 +29118,11 @@
           "format": "int64",
           "x-go-name": "ContentVersion"
         },
+        "draft": {
+          "description": "Whether to mark the pull request as a draft",
+          "type": "boolean",
+          "x-go-name": "Draft"
+        },
         "due_date": {
           "type": "string",
           "format": "date-time",
@@ -29142,6 +29157,21 @@
           "description": "Whether to remove the current deadline",
           "type": "boolean",
           "x-go-name": "RemoveDeadline"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "EditPullReviewOption": {
+      "type": "object",
+      "title": "EditPullReviewOption options for editing a pull request review summary.",
+      "required": [
+        "body"
+      ],
+      "properties": {
+        "body": {
+          "description": "Body is the updated review summary",
+          "type": "string",
+          "x-go-name": "Body"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -32036,6 +32066,16 @@
             "$ref": "#/definitions/User"
           },
           "x-go-name": "Assignees"
+        },
+        "auto_merge_enabled": {
+          "description": "Whether the pull request is scheduled to merge when checks succeed",
+          "type": "boolean",
+          "x-go-name": "AutoMergeEnabled"
+        },
+        "auto_merge_method": {
+          "description": "The merge method scheduled for auto-merge",
+          "type": "string",
+          "x-go-name": "AutoMergeMethod"
         },
         "base": {
           "$ref": "#/definitions/PRBranchInfo"
