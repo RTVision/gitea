@@ -156,7 +156,7 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 	if err != nil {
 		return nil, err
 	}
-	notifyStackChanged(ctx, doer, stack.ID)
+	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
 
@@ -179,9 +179,6 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 			return err
 		}
 		if err = checkStackAuthority(ctx, doer, repo); err != nil {
-			return err
-		}
-		if err = issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {
 			return err
 		}
 		existing, err := issues_model.GetStackEntries(ctx, stack.ID)
@@ -207,6 +204,9 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 		if err != nil {
 			return err
 		}
+		if err = issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {
+			return err
+		}
 		added := entries[openCount:]
 		for i, entry := range added {
 			entry.Position = len(existing) + i + 1
@@ -220,7 +220,7 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 	if err != nil {
 		return nil, err
 	}
-	notifyStackChanged(ctx, doer, stack.ID)
+	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
 
@@ -287,7 +287,7 @@ func Unstack(ctx context.Context, doer *user_model.User, stackID, expectedRevisi
 		return nil
 	})
 	if err == nil {
-		notifyStackChanged(ctx, doer, stackID)
+		notifyStackChanged(ctx, doer, stackID, nil)
 	}
 	return err
 }
