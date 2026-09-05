@@ -9,8 +9,10 @@ import (
 	"testing"
 
 	actions_model "gitea.dev/models/actions"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	actions_module "gitea.dev/modules/actions"
 	"gitea.dev/modules/actions/jobparser"
@@ -145,4 +147,38 @@ func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
 	assert.True(t, shouldCreateSkippedCommitStatusForFilteredWorkflow(newNotifyInput(&repo_model.Repository{ID: 1}, &user_model.User{ID: 2}, actions_module.GithubEventPullRequest), &actions_module.DetectedWorkflow{
 		TriggerEvent: &jobparser.Event{Name: actions_module.GithubEventPullRequest},
 	}))
+}
+
+func TestScopedWorkflowFiltersUseStackTrunk(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	source := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	branch, err := git_model.GetBranchExisting(t.Context(), source.ID, source.DefaultBranch)
+	require.NoError(t, err)
+	t.Cleanup(func() { scopedWorkflowCache.Remove(source.ID) })
+	payload := &api.PullRequestPayload{Action: api.HookIssueOpened, PullRequest: &api.PullRequest{
+		Base:  &api.PRBranchInfo{Ref: "feature-parent", Sha: "parent-sha"},
+		Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}},
+	}}
+	for _, tc := range []struct {
+		filter  string
+		matched bool
+	}{
+		{"branches: [release]", true},
+		{"branches: [feature-parent]", false},
+		{"branches-ignore: [release]", false},
+		{"branches-ignore: [feature-parent]", true},
+	} {
+		t.Run(tc.filter, func(t *testing.T) {
+			content := []byte("on:\n  pull_request:\n    " + tc.filter + "\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n")
+			events, err := actions_module.GetEventsFromContent(content)
+			require.NoError(t, err)
+			scopedWorkflowCache.Add(source.ID, &cachedScopedWorkflows{sha: branch.CommitID, parsed: []*actions_module.ParsedScopedWorkflow{{EntryName: "check.yml", Content: content, Events: events}}})
+			matched, filtered, err := detectScopedWorkflowsForSource(t.Context(), &notifyInput{Event: actions_module.GithubEventPullRequest, Payload: payload}, nil, nil, source)
+			require.NoError(t, err)
+			assert.Equal(t, tc.matched, len(matched) == 1)
+			assert.Equal(t, !tc.matched, len(filtered) == 1)
+			assert.Equal(t, "feature-parent", payload.PullRequest.Base.Ref)
+			assert.Equal(t, "parent-sha", payload.PullRequest.Base.Sha)
+		})
+	}
 }
