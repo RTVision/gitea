@@ -29151,6 +29151,21 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "EditPullReviewOption": {
+      "type": "object",
+      "title": "EditPullReviewOption options for editing a pull request review summary.",
+      "required": [
+        "body"
+      ],
+      "properties": {
+        "body": {
+          "description": "Body is the updated review summary",
+          "type": "string",
+          "x-go-name": "Body"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "EditReactionOption": {
       "description": "EditReactionOption contain the reaction type",
       "type": "object",
