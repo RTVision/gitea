@@ -265,6 +265,35 @@ func TestStackNumberSelection(t *testing.T) {
 	assert.Contains(t, err.Error(), "was canceled")
 }
 
+func TestStatusServerFailureReturnsNoServerState(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "remote", "add", "origin", "https://code.example.test/acme/widget.git")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	t.Setenv("GITEA_URL", server.URL)
+	t.Setenv("GITEA_TOKEN", "test-token")
+	state := &localstate.State{Remote: "origin", Stack: 1}
+	app := &application{repo: gitx.Repo{Dir: dir}}
+
+	got, err := app.statusServer(t.Context(), state, 1)
+	require.NoError(t, err)
+	assert.Nil(t, got.Stack)
+
+	app.stackFlag = "S1"
+	got, err = app.statusServer(t.Context(), state, 1)
+	require.Error(t, err)
+	assert.Nil(t, got.Stack)
+}
+
+func TestStatusHeaderDistinguishesUnavailableServer(t *testing.T) {
+	local := &localstate.State{Stack: 12, Trunk: "main", LastRevision: 7}
+	assert.Equal(t, "S12 on main rev 7 (server unavailable)", statusHeader(local, nil))
+	assert.Equal(t, "S12 on main rev 7 op 0", statusHeader(local, &api.PullRequestStack{}))
+}
+
 func TestSyncDetectsUpperLayerAfterLowerLocalHeadMoves(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "work")
 	runGit(t, filepath.Dir(dir), "init", "-b", "main", dir)

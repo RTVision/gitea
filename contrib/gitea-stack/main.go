@@ -182,7 +182,10 @@ func (a *application) optionalState() (*localstate.State, bool, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return &localstate.State{}, false, nil
 	}
-	return state, err == nil, err
+	if err != nil {
+		return nil, false, err
+	}
+	return state, true, nil
 }
 
 func isBoundStackCommand(command string) bool {
@@ -452,17 +455,11 @@ func (a *application) status(ctx context.Context) error {
 	}
 	var server *api.PullRequestStack
 	if number != 0 && (a.stackFlag != "" || os.Getenv("GITEA_TOKEN") != "" || os.Getenv("GITEA_STACK_TOKEN") != "") {
-		client, clientErr := a.client(state)
-		if clientErr != nil {
-			if a.stackFlag != "" {
-				return clientErr
-			}
-		} else {
-			server, err = client.GetStack(ctx, number)
-			if err != nil && a.stackFlag != "" {
-				return mapAPIError(err)
-			}
+		result, err := a.statusServer(ctx, state, number)
+		if err != nil {
+			return err
 		}
+		server = result.Stack
 	}
 	local := state
 	if a.stackFlag != "" || (local != nil && local.Stack != number) {
@@ -489,11 +486,7 @@ func (a *application) status(ctx context.Context) error {
 			a.success(map[string]any{"local": nil, "server": server})
 			return nil
 		}
-		op := int64(0)
-		if server != nil {
-			op = server.ActiveOperation
-		}
-		fmt.Fprintf(os.Stdout, "S%d on %s  rev %d  op %d\n", local.Stack, local.Trunk, local.LastRevision, op)
+		fmt.Fprintln(os.Stdout, statusHeader(local, server))
 		for i, layer := range local.Layers {
 			status := "open"
 			if layer.LandedSHA != "" {
@@ -504,6 +497,35 @@ func (a *application) status(ctx context.Context) error {
 	}
 	a.success(map[string]any{"local": local, "server": server})
 	return nil
+}
+
+func statusHeader(local *localstate.State, server *api.PullRequestStack) string {
+	if server == nil {
+		return fmt.Sprintf("S%d on %s rev %d (server unavailable)", local.Stack, local.Trunk, local.LastRevision)
+	}
+	return fmt.Sprintf("S%d on %s rev %d op %d", local.Stack, local.Trunk, local.LastRevision, server.ActiveOperation)
+}
+
+type statusServerResult struct {
+	Stack *api.PullRequestStack
+}
+
+func (a *application) statusServer(ctx context.Context, state *localstate.State, number int64) (statusServerResult, error) {
+	client, err := a.client(state)
+	if err != nil {
+		if a.stackFlag != "" {
+			return statusServerResult{}, err
+		}
+		return statusServerResult{}, nil
+	}
+	server, err := client.GetStack(ctx, number)
+	if err != nil {
+		if a.stackFlag != "" {
+			return statusServerResult{}, mapAPIError(err)
+		}
+		return statusServerResult{}, nil
+	}
+	return statusServerResult{Stack: server}, nil
 }
 
 func short(sha string) string {

@@ -130,7 +130,6 @@ func TestRunContextBoundsInheritedPipeWait(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	repoDir := t.TempDir()
-	started := time.Now()
 	go func() {
 		_, err := (Repo{Dir: repoDir}).RunContext(ctx, []string{"READY_FILE=" + ready}, "--version")
 		done <- err
@@ -139,6 +138,7 @@ func TestRunContextBoundsInheritedPipeWait(t *testing.T) {
 		_, err := os.Stat(ready)
 		return err == nil
 	}, time.Second, 10*time.Millisecond)
+	started := time.Now()
 	cancel()
 	err := <-done
 	require.ErrorIs(t, err, context.Canceled)
