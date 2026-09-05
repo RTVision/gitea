@@ -30079,6 +30079,9 @@
           "409": {
             "$ref": "#/components/responses/error"
           },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
           "423": {
             "$ref": "#/components/responses/repoArchivedError"
           }
