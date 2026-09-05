@@ -71,7 +71,7 @@ func MergeRequiredContextsCommitStatus(commitStatuses []*git_model.CommitStatus,
 
 // IsPullCommitStatusPass returns if all required status checks PASS
 func IsPullCommitStatusPass(ctx context.Context, pr *issues_model.PullRequest) (bool, error) {
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+	pb, err := getPullProtectedBranch(ctx, pr)
 	if err != nil {
 		return false, fmt.Errorf("GetFirstMatchProtectedBranchRule: %w", err)
 	}
@@ -144,7 +144,7 @@ func GetPullRequestCommitStatusState(ctx context.Context, pr *issues_model.PullR
 		return "", fmt.Errorf("GetLatestCommitStatus: %w", err)
 	}
 
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+	pb, err := getPullProtectedBranch(ctx, pr)
 	if err != nil {
 		return "", fmt.Errorf("LoadProtectedBranch: %w", err)
 	}

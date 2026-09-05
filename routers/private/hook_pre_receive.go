@@ -15,6 +15,7 @@ import (
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
 	"gitea.dev/modules/private"
+	repo_module "gitea.dev/modules/repository"
 	"gitea.dev/modules/util"
 	"gitea.dev/modules/web"
 	"gitea.dev/services/agit"
@@ -139,6 +140,23 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	if branchName == defaultBranch && newCommitID == objectFormat.EmptyObjectID().String() {
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is the default branch and cannot be deleted", branchName)
 		return
+	}
+	if !ctx.opts.IsWiki && newCommitID == objectFormat.EmptyObjectID().String() {
+		if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, branchName); err != nil {
+			if errors.Is(err, issues_model.ErrBranchInStack) {
+				ctx.PrivateUserErrorf(http.StatusForbidden, "%s", err)
+			} else {
+				ctx.PrivateInternalErrorf("Unable to check stack branch: %v", err)
+			}
+			return
+		}
+	}
+
+	if ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
+		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID); err != nil {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
+			return
+		}
 	}
 
 	protectBranch, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repo.ID, branchName)

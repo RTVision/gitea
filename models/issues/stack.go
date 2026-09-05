@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 
 	"gitea.dev/models/db"
 	"gitea.dev/modules/timeutil"
@@ -19,6 +20,22 @@ var (
 	ErrStackRevision = errors.New("stack revision changed or operation in progress")
 	ErrInvalidStack  = errors.New("invalid pull request stack")
 )
+
+// LockStackMembership must precede transaction reads so membership and auto-merge
+// eligibility use a snapshot taken after competing reservations have committed.
+func LockStackMembership(ctx context.Context, pullIDs ...int64) error {
+	if !db.InTransaction(ctx) {
+		return errors.New("stack membership reservation requires a transaction")
+	}
+	pullIDs = slices.Clone(pullIDs)
+	slices.Sort(pullIDs)
+	for _, id := range slices.Compact(pullIDs) {
+		if _, err := db.GetEngine(ctx).ID(id).NoAutoTime().SetExpr("id", "id").Update(new(PullRequest)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 type PullRequestStack struct {
 	ID                int64  `xorm:"pk autoincr"`

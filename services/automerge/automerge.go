@@ -24,6 +24,7 @@ import (
 	"gitea.dev/modules/process"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/timeutil"
+	"gitea.dev/modules/util"
 	"gitea.dev/services/automergequeue"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
@@ -67,9 +68,21 @@ func populateRecentAutoMergeItems(ctx context.Context) {
 	}
 }
 
+var ErrStackAutoMergeUnsupported = util.ErrorWrap(util.ErrUnprocessableContent, "Auto-merge isn't available for stacked pull requests. Use Land on the stack page to merge when checks pass. Custom merge messages and branch deletion aren't applied to stacked pull requests.")
+
 // ScheduleAutoMerge if schedule is false and no error, pull can be merged directly
 func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pull *issues_model.PullRequest, style repo_model.MergeStyle, message string, deleteBranchAfterMerge bool) (scheduled bool, err error) {
 	err = db.WithTx(ctx, func(ctx context.Context) error {
+		if err := issues_model.LockStackMembership(ctx, pull.ID); err != nil {
+			return err
+		}
+		stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
+		if err != nil {
+			return err
+		}
+		if stack != nil {
+			return ErrStackAutoMergeUnsupported
+		}
 		if err := pull_model.ScheduleAutoMerge(ctx, doer, pull.ID, style, message, deleteBranchAfterMerge); err != nil {
 			return err
 		}
@@ -129,6 +142,14 @@ func handleAutoMergeItem(item automergequeue.AutoMergeItem) {
 
 // handlePullRequestAutoMerge merge the pull request if all checks are successful
 func handlePullRequestAutoMerge(ctx context.Context, pr *issues_model.PullRequest, expectedHeadCommitID string) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil {
+		return err
+	}
+	if stack != nil {
+		return errSkipAutoMerge
+	}
+
 	_ = pr.LoadIssue(ctx)
 	if (pr.Issue != nil && pr.Issue.IsClosed) || pr.HasMerged {
 		// if the PR has been closed or merged, delete the automerge record and skip

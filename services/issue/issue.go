@@ -198,6 +198,17 @@ func GetRefEndNamesAndURLs(issues []*issues_model.Issue, repoLink string) (map[i
 // deleteIssue deletes the issue
 func deleteIssue(ctx context.Context, issue *issues_model.Issue) ([]string, error) {
 	return db.WithTx2(ctx, func(ctx context.Context) ([]string, error) {
+		if issue.IsPull {
+			pr, err := issues_model.GetPullRequestByIssueID(ctx, issue.ID)
+			if err != nil && !issues_model.IsErrPullRequestNotExist(err) {
+				return nil, err
+			}
+			if pr != nil {
+				if err := issues_model.DeleteStacksForPull(ctx, pr.ID); err != nil {
+					return nil, err
+				}
+			}
+		}
 		if _, err := db.GetEngine(ctx).ID(issue.ID).NoAutoCondition().Delete(issue); err != nil {
 			return nil, err
 		}
