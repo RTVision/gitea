@@ -45,6 +45,10 @@ import (
 	repo_service "gitea.dev/services/repository"
 )
 
+func isPullRequestStackConflict(err error) bool {
+	return errors.Is(err, pull_service.ErrPullRequestStacked) || errors.Is(err, issues_model.ErrStackRevision)
+}
+
 // ListPullRequests returns a list of all PRs
 func ListPullRequests(ctx *context.APIContext) {
 	// swagger:operation GET /repos/{owner}/{repo}/pulls repository repoListPullRequests
@@ -790,7 +794,10 @@ func EditPullRequest(ctx *context.APIContext) {
 			return
 		}
 		if err := pull_service.ChangeTargetBranch(ctx, pr, ctx.Doer, form.Base); err != nil {
-			if issues_model.IsErrPullRequestAlreadyExists(err) {
+			if isPullRequestStackConflict(err) {
+				ctx.APIError(http.StatusConflict, err.Error())
+				return
+			} else if issues_model.IsErrPullRequestAlreadyExists(err) {
 				ctx.APIError(http.StatusConflict, err.Error())
 				return
 			} else if issues_model.IsErrIssueIsClosed(err) {
@@ -960,7 +967,9 @@ func MergePullRequest(ctx *context.APIContext) {
 
 	// start with merging by checking
 	if err := pull_service.CheckPullMergeable(ctx, ctx.Doer, &ctx.Repo.Permission, pr, mergeCheckType, repo_model.MergeStyle(form.Do), form.ForceMerge); err != nil {
-		if errors.Is(err, pull_service.ErrIsClosed) {
+		if isPullRequestStackConflict(err) {
+			ctx.APIError(http.StatusConflict, err.Error())
+		} else if errors.Is(err, pull_service.ErrIsClosed) {
 			ctx.APIErrorNotFound()
 		} else if errors.Is(err, pull_service.ErrNoPermissionToMerge) {
 			ctx.APIError(http.StatusMethodNotAllowed, "User not allowed to merge PR")
@@ -985,6 +994,10 @@ func MergePullRequest(ctx *context.APIContext) {
 	// handle manually-merged mark
 	if manuallyMerged {
 		if err := pull_service.MergedManually(ctx, pr, ctx.Doer, ctx.Repo.GitRepo, form.MergeCommitID); err != nil {
+			if isPullRequestStackConflict(err) {
+				ctx.APIError(http.StatusConflict, err.Error())
+				return
+			}
 			if pull_service.IsErrInvalidMergeStyle(err) {
 				ctx.APIError(http.StatusMethodNotAllowed, fmt.Sprintf("%s is not allowed an allowed merge style for this repository", repo_model.MergeStyle(form.Do)))
 				return
@@ -1027,7 +1040,10 @@ func MergePullRequest(ctx *context.APIContext) {
 	if form.MergeWhenChecksSucceed {
 		scheduled, err := automerge.ScheduleAutoMerge(ctx, ctx.Doer, pr, repo_model.MergeStyle(form.Do), message, deleteBranchAfterMerge)
 		if err != nil {
-			if pull_model.IsErrAlreadyScheduledToAutoMerge(err) {
+			if isPullRequestStackConflict(err) {
+				ctx.APIError(http.StatusConflict, err.Error())
+				return
+			} else if pull_model.IsErrAlreadyScheduledToAutoMerge(err) {
 				ctx.APIError(http.StatusConflict, err.Error())
 				return
 			}
@@ -1041,7 +1057,9 @@ func MergePullRequest(ctx *context.APIContext) {
 	}
 
 	if err := pull_service.Merge(pr, ctx.Doer, repo_model.MergeStyle(form.Do), form.HeadCommitID, message, false); err != nil {
-		if pull_service.IsErrInvalidMergeStyle(err) {
+		if isPullRequestStackConflict(err) {
+			ctx.APIError(http.StatusConflict, err.Error())
+		} else if pull_service.IsErrInvalidMergeStyle(err) {
 			ctx.APIError(http.StatusMethodNotAllowed, fmt.Sprintf("%s is not allowed an allowed merge style for this repository", repo_model.MergeStyle(form.Do)))
 		} else if conflictError, ok := err.(pull_service.ErrMergeConflicts); ok {
 			ctx.JSON(http.StatusConflict, conflictError)
@@ -1275,7 +1293,10 @@ func UpdatePullRequest(ctx *context.APIContext) {
 	message := fmt.Sprintf("Merge branch '%s' into %s", pr.BaseBranch, pr.HeadBranch)
 
 	if err = pull_service.Update(pr, ctx.Doer, message, rebase); err != nil {
-		if pull_service.IsErrMergeConflicts(err) {
+		if isPullRequestStackConflict(err) {
+			ctx.APIError(http.StatusConflict, err.Error())
+			return
+		} else if pull_service.IsErrMergeConflicts(err) {
 			ctx.APIError(http.StatusConflict, "merge failed because of conflict")
 			return
 		} else if pull_service.IsErrRebaseConflicts(err) {
