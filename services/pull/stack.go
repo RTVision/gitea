@@ -144,6 +144,9 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 	}
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
 	err := db.WithTx(ctx, func(ctx context.Context) error {
+		if err := issues_model.LockStackMembership(ctx, opts.PullRequestIDs...); err != nil {
+			return err
+		}
 		entries, err := validateStackChain(ctx, repo, opts.TrunkBranch, opts.PullRequestIDs)
 		if err != nil {
 			return err
@@ -169,6 +172,9 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 	}
 	var stack *issues_model.PullRequestStack
 	err := db.WithTx(ctx, func(ctx context.Context) error {
+		if err := issues_model.LockStackMembership(ctx, pullIDs...); err != nil {
+			return err
+		}
 		var err error
 		stack, err = issues_model.GetStackByID(ctx, stackID)
 		if err != nil {
