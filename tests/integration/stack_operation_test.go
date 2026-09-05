@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -33,18 +34,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func waitForStackOperation(t *testing.T, id int64) *issues_model.StackOperation {
+func waitForStackOperation(t *testing.T, id int64, settled ...string) *issues_model.StackOperation {
 	t.Helper()
+	require.NotEmpty(t, settled)
 	var op *issues_model.StackOperation
 	for range 20 {
 		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 15*time.Second))
 		var err error
 		op, err = issues_model.GetStackOperation(t.Context(), id)
 		require.NoError(t, err)
-		if op.State == "completed" || op.State == "blocked" {
+		if slices.Contains(settled, op.State) {
 			return op
 		}
 	}
+	require.FailNow(t, "stack operation did not settle", "id=%d expected=%v state=%s error=%s", id, settled, op.State, op.LastError)
 	return op
 }
 
@@ -102,7 +105,7 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 					require.NoError(t, err)
 				}
 				if style == repo_model.MergeStyleMerge {
-					op = waitForStackOperation(t, op.ID)
+					op = waitForStackOperation(t, op.ID, "waiting", "completed", "blocked")
 					require.Equal(t, "waiting", op.State, op.LastError)
 					oldHead, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/stack-lower")
 					require.NoError(t, err)
@@ -112,7 +115,7 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, gitcmd.NewCommand("update-ref").AddDynamicArguments("refs/heads/release", strings.TrimSpace(advanced), trunk).WithRepo(repo).Run(t.Context()))
 					require.NoError(t, commitstatus_service.CreateCommitStatus(t.Context(), repo, actor, oldHead, &git_model.CommitStatus{Context: "stack-ci", State: commitstatus.CommitStatusSuccess}))
-					op = waitForStackOperation(t, op.ID)
+					op = waitForStackOperation(t, op.ID, "waiting", "completed", "blocked")
 					require.Equal(t, "waiting", op.State, op.LastError)
 					newHead, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/stack-lower")
 					require.NoError(t, err)
@@ -120,7 +123,7 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 					assert.False(t, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: lower.ID}).HasMerged)
 					require.NoError(t, commitstatus_service.CreateCommitStatus(t.Context(), repo, actor, newHead, &git_model.CommitStatus{Context: "stack-ci", State: commitstatus.CommitStatusSuccess}))
 				}
-				op = waitForStackOperation(t, op.ID)
+				op = waitForStackOperation(t, op.ID, "completed", "blocked")
 				require.Equal(t, "completed", op.State, op.LastError)
 				assert.Equal(t, 1, op.Completed)
 				lower = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: lower.ID})
@@ -142,7 +145,7 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 				}
 				op, err = pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: 2, Kind: "land", MergeStyle: style})
 				require.NoError(t, err)
-				op = waitForStackOperation(t, op.ID)
+				op = waitForStackOperation(t, op.ID, "completed", "blocked")
 				require.Equal(t, "completed", op.State, op.LastError)
 				stack, err = issues_model.GetStackByID(t.Context(), stack.ID)
 				require.NoError(t, err)
