@@ -918,6 +918,8 @@ func MergePullRequest(ctx *context.APIContext) {
 	//     "$ref": "#/responses/empty"
 	//   "409":
 	//     "$ref": "#/responses/error"
+	//   "422":
+	//     "$ref": "#/responses/error"
 	//   "423":
 	//     "$ref": "#/responses/repoArchivedError"
 
@@ -977,6 +979,10 @@ func MergePullRequest(ctx *context.APIContext) {
 		} else if errors.Is(err, pull_service.ErrHeadCommitsNotAllVerified) {
 			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
 		} else {
+			if message, status := util.ErrorUnwrapForUser(err); message != "" {
+				ctx.APIError(status, message)
+				return
+			}
 			ctx.APIErrorInternal(err)
 		}
 		return

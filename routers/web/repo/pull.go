@@ -1137,6 +1137,11 @@ func MergePullRequest(ctx *context.Context) {
 		// schedule auto merge
 		scheduled, err := automerge.ScheduleAutoMerge(ctx, ctx.Doer, pr, repo_model.MergeStyle(form.Do), message, deleteBranchAfterMerge)
 		if err != nil {
+			if errors.Is(err, automerge.ErrStackAutoMergeUnsupported) {
+				ctx.Flash.Error(err.Error())
+				ctx.JSONRedirect(issue.Link())
+				return
+			}
 			ctx.ServerError("ScheduleAutoMerge", err)
 			return
 		} else if scheduled {
