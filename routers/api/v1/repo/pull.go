@@ -210,7 +210,12 @@ func GetPullRequest(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // GetPullRequest returns a single PR based on index
@@ -299,7 +304,12 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch

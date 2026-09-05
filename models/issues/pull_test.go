@@ -329,6 +329,11 @@ func testTitleForWorkInProgressState(t *testing.T) {
 	assert.False(t, ok)
 	assert.Empty(t, title)
 
+	for _, invalidTitle := range []string{"", "   ", "WIP:", "WIP:   ", "WIP: [WIP]   "} {
+		title, ok = issues_model.TitleForWorkInProgressState(invalidTitle, true)
+		assert.False(t, ok, invalidTitle)
+	}
+
 	setting.Repository.PullRequest.WorkInProgressPrefixes = []string{"", " "}
 	title, ok = issues_model.TitleForWorkInProgressState("feature", true)
 	assert.False(t, ok)
