@@ -39,6 +39,7 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/GeneralAPISettings"
 	ctx.JSON(http.StatusOK, api.GeneralAPISettings{
+		Features:               []string{"actions-run-approve"},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,
