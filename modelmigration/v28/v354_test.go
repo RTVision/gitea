@@ -4,9 +4,11 @@
 package v28
 
 import (
-	"gitea.dev/modelmigration/migrationtest"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"gitea.dev/modelmigration/migrationtest"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddPullRequestMergedBaseCommitID(t *testing.T) {
