@@ -4,6 +4,7 @@
 package structs
 
 import (
+	"encoding/json" //nolint:depguard // RawMessage preserves the durable operation journal in the API.
 	"time"
 )
 
@@ -93,6 +94,148 @@ type PullRequest struct {
 	PinOrder int `json:"pin_order"`
 	// The version of the pull request content for optimistic locking
 	ContentVersion int `json:"content_version"`
+	// The stack containing this pull request, if any
+	Stack *PullRequestStackRef `json:"stack,omitempty"`
+}
+
+// PullRequestStackRef identifies a pull request's position in a stack.
+type PullRequestStackRef struct {
+	// The stack number
+	Number int64 `json:"number"`
+	// The number of pull requests in the stack
+	Size int `json:"size"`
+	// The one-based position of this pull request in the stack
+	Position int `json:"position"`
+	// The trunk branch and commit used for policy and workflow selection
+	Base *PullRequestStackBase `json:"base"`
+}
+
+// PullRequestStackBase identifies the trunk of a pull request stack.
+type PullRequestStackBase struct {
+	// The trunk branch
+	Ref string `json:"ref"`
+	// The trunk commit SHA
+	Sha string `json:"sha"`
+}
+
+// PullRequestStack represents an ordered pull request stack.
+type PullRequestStack struct {
+	// The stack number
+	Number int64 `json:"number"`
+	// The trunk branch
+	Trunk string `json:"trunk"`
+	// The stack lifecycle state
+	State string `json:"state"`
+	// The revision used for optimistic locking
+	Revision int64 `json:"revision"`
+	// The active background operation number, or zero
+	ActiveOperation int64 `json:"active_operation"`
+	// The ordered pull requests in the stack
+	Entries []*PullRequestStackEntry `json:"entries"`
+}
+
+// PullRequestStackEntry represents one layer in a pull request stack.
+type PullRequestStackEntry struct {
+	// The stable one-based position in the stack
+	Position int `json:"position"`
+	// The pull request
+	PullRequest *PullRequest `json:"pull_request"`
+	// The parent pull request number, or zero when the trunk is the parent
+	ParentPullRequest int64 `json:"parent_pull_request"`
+	// The last observed head commit SHA
+	HeadSHA string `json:"head_sha"`
+	// The saved replay boundary commit SHA
+	ParentSHA string `json:"parent_sha"`
+	// The commit recorded after this layer landed
+	LandedSHA string `json:"landed_sha,omitempty"`
+}
+
+// PullRequestStackOperation represents durable stack operation progress.
+type PullRequestStackOperation struct {
+	// The operation number
+	Number int64 `json:"number"`
+	// The stack number
+	StackNumber int64 `json:"stack_number"`
+	// The stack revision captured when the operation started
+	ExpectedRevision int64 `json:"expected_revision"`
+	// The operation kind
+	Kind string `json:"kind"`
+	// The operation state
+	State string `json:"state"`
+	// The selected final stack position
+	ThroughPosition int `json:"through_position"`
+	// The number of completed layers
+	Completed int `json:"completed"`
+	// The merge style for landing operations
+	MergeStyle string `json:"merge_style,omitempty"`
+	// The last operation error
+	Error string `json:"error,omitempty"`
+	// Persisted per-layer operation progress
+	Journal json.RawMessage `json:"journal"`
+	// swagger:strfmt date-time
+	Created *time.Time `json:"created_at"`
+	// swagger:strfmt date-time
+	Updated *time.Time `json:"updated_at"`
+}
+
+// CreatePullRequestStackOption creates a stack from an existing pull request chain.
+type CreatePullRequestStackOption struct {
+	// The stack trunk branch
+	Trunk string `json:"trunk" binding:"Required"`
+	// Ordered pull request numbers, starting at the trunk
+	PullRequests []int64 `json:"pull_requests" binding:"Required"`
+}
+
+// EditPullRequestStackOption appends pull requests to a stack.
+type EditPullRequestStackOption struct {
+	// The expected stack revision
+	Revision int64 `json:"revision" binding:"Required"`
+	// Ordered pull request numbers to append
+	PullRequests []int64 `json:"pull_requests" binding:"Required"`
+}
+
+// PullRequestStackRevisionOption identifies an expected stack revision.
+type PullRequestStackRevisionOption struct {
+	// The expected stack revision
+	Revision int64 `json:"revision" binding:"Required"`
+}
+
+// PullRequestStackOperationOption starts a durable stack operation.
+type PullRequestStackOperationOption struct {
+	// The expected stack revision
+	Revision int64 `json:"revision" binding:"Required"`
+	// The final selected position; zero lands only the next open layer
+	ThroughPosition int `json:"through_position"`
+	// The merge style for a landing operation
+	MergeStyle string `json:"merge_style,omitempty"`
+}
+
+// SynchronizePullRequestStackOption records validated heads after a local restack.
+type SynchronizePullRequestStackOption struct {
+	// The expected stack revision
+	Revision int64 `json:"revision" binding:"Required"`
+	// The ordered current heads and their saved parent boundaries
+	Heads []PullRequestStackHead `json:"heads" binding:"Required"`
+}
+
+// PullRequestStackHead identifies one locally restacked layer.
+type PullRequestStackHead struct {
+	// The pull request number
+	PullRequest int64 `json:"pull_request" binding:"Required"`
+	// The exact current remote head SHA
+	HeadSHA string `json:"head_sha" binding:"Required"`
+	// The exact parent boundary used to build the layer
+	ParentSHA string `json:"parent_sha" binding:"Required"`
+}
+
+// PullRequestStackCapabilities describes server-side stacked pull request support.
+type PullRequestStackCapabilities struct {
+	// Whether new stacks and operations may be created
+	Enabled bool `json:"enabled"`
+	// Supported durable operation kinds
+	Operations []string `json:"operations"`
+	// Supported merge styles for stack landing
+	MergeStyles []string `json:"merge_styles"`
 }
 
 // PRBranchInfo information about a branch

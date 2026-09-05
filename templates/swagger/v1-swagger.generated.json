@@ -8593,6 +8593,9 @@
           "404": {
             "$ref": "#/responses/notFound"
           },
+          "409": {
+            "$ref": "#/responses/error"
+          },
           "423": {
             "$ref": "#/responses/repoArchivedError"
           }
@@ -8649,6 +8652,9 @@
           },
           "404": {
             "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/error"
           },
           "422": {
             "$ref": "#/responses/validationError"
@@ -18949,6 +18955,625 @@
         }
       }
     },
+    "/repos/{owner}/{repo}/stacks": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "List a repository's pull request stacks",
+        "operationId": "repoListPullRequestStacks",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStackList"
+          },
+          "500": {
+            "$ref": "#/responses/error"
+          }
+        }
+      },
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Create a pull request stack",
+        "operationId": "repoCreatePullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CreatePullRequestStackOption"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/PullRequestStack"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/capabilities": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get stacked pull request capabilities",
+        "operationId": "repoGetStackCapabilities",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStackCapabilities"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get a pull request stack",
+        "operationId": "repoGetPullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStack"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      },
+      "delete": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Unstack a pull request stack",
+        "operationId": "repoDeletePullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PullRequestStackRevisionOption"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The pull requests were unstacked"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          }
+        }
+      },
+      "patch": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Append pull requests to a stack",
+        "operationId": "repoAppendPullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/EditPullRequestStackOption"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStack"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/land": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Start ordered landing of a pull request stack prefix",
+        "operationId": "repoLandPullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PullRequestStackOperationOption"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/responses/PullRequestStackOperation"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/operations": {
+      "get": {
+        "tags": [
+          "repository"
+        ],
+        "summary": "List pull request stack operations",
+        "operationId": "repoListPullRequestStackOperations",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStackOperationList"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/operations/{operation}": {
+      "get": {
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get a pull request stack operation",
+        "operationId": "repoGetPullRequestStackOperation",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "operation",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStackOperation"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/operations/{operation}/cancel": {
+      "post": {
+        "tags": [
+          "repository"
+        ],
+        "summary": "Cancel a pull request stack operation",
+        "operationId": "repoCancelPullRequestStackOperation",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "operation",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The operation was cancelled"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/operations/{operation}/retry": {
+      "post": {
+        "tags": [
+          "repository"
+        ],
+        "summary": "Retry a pull request stack operation",
+        "operationId": "repoRetryPullRequestStackOperation",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "operation",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/responses/PullRequestStackOperation"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/rebase": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Start a pull request stack rebase",
+        "operationId": "repoRebasePullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PullRequestStackOperationOption"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/responses/PullRequestStackOperation"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/sync": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Synchronize locally restacked pull request heads and boundaries",
+        "operationId": "repoSynchronizePullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SynchronizePullRequestStackOption"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestStack"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
     "/repos/{owner}/{repo}/stargazers": {
       "get": {
         "produces": [
@@ -27587,6 +28212,27 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "CreatePullRequestStackOption": {
+      "type": "object",
+      "title": "CreatePullRequestStackOption creates a stack from an existing pull request chain.",
+      "properties": {
+        "pull_requests": {
+          "description": "Ordered pull request numbers, starting at the trunk",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "PullRequests"
+        },
+        "trunk": {
+          "description": "The stack trunk branch",
+          "type": "string",
+          "x-go-name": "Trunk"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "CreatePullReviewComment": {
       "description": "CreatePullReviewComment represent a review comment for creation api",
       "type": "object",
@@ -28918,6 +29564,28 @@
           "description": "Whether to remove the current deadline",
           "type": "boolean",
           "x-go-name": "RemoveDeadline"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "EditPullRequestStackOption": {
+      "type": "object",
+      "title": "EditPullRequestStackOption appends pull requests to a stack.",
+      "properties": {
+        "pull_requests": {
+          "description": "Ordered pull request numbers to append",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "PullRequests"
+        },
+        "revision": {
+          "description": "The expected stack revision",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -31959,6 +32627,9 @@
           "format": "int64",
           "x-go-name": "ReviewComments"
         },
+        "stack": {
+          "$ref": "#/definitions/PullRequestStackRef"
+        },
         "state": {
           "description": "The current state of the pull request",
           "type": "string",
@@ -32075,6 +32746,290 @@
         "url": {
           "type": "string",
           "x-go-name": "URL"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStack": {
+      "type": "object",
+      "title": "PullRequestStack represents an ordered pull request stack.",
+      "properties": {
+        "active_operation": {
+          "description": "The active background operation number, or zero",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ActiveOperation"
+        },
+        "entries": {
+          "description": "The ordered pull requests in the stack",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PullRequestStackEntry"
+          },
+          "x-go-name": "Entries"
+        },
+        "number": {
+          "description": "The stack number",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Number"
+        },
+        "revision": {
+          "description": "The revision used for optimistic locking",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "state": {
+          "description": "The stack lifecycle state",
+          "type": "string",
+          "x-go-name": "State"
+        },
+        "trunk": {
+          "description": "The trunk branch",
+          "type": "string",
+          "x-go-name": "Trunk"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackBase": {
+      "type": "object",
+      "title": "PullRequestStackBase identifies the trunk of a pull request stack.",
+      "properties": {
+        "ref": {
+          "description": "The trunk branch",
+          "type": "string",
+          "x-go-name": "Ref"
+        },
+        "sha": {
+          "description": "The trunk commit SHA",
+          "type": "string",
+          "x-go-name": "Sha"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackCapabilities": {
+      "type": "object",
+      "title": "PullRequestStackCapabilities describes server-side stacked pull request support.",
+      "properties": {
+        "enabled": {
+          "description": "Whether new stacks and operations may be created",
+          "type": "boolean",
+          "x-go-name": "Enabled"
+        },
+        "merge_styles": {
+          "description": "Supported merge styles for stack landing",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "MergeStyles"
+        },
+        "operations": {
+          "description": "Supported durable operation kinds",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Operations"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackEntry": {
+      "type": "object",
+      "title": "PullRequestStackEntry represents one layer in a pull request stack.",
+      "properties": {
+        "head_sha": {
+          "description": "The last observed head commit SHA",
+          "type": "string",
+          "x-go-name": "HeadSHA"
+        },
+        "landed_sha": {
+          "description": "The commit recorded after this layer landed",
+          "type": "string",
+          "x-go-name": "LandedSHA"
+        },
+        "parent_pull_request": {
+          "description": "The parent pull request number, or zero when the trunk is the parent",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ParentPullRequest"
+        },
+        "parent_sha": {
+          "description": "The saved replay boundary commit SHA",
+          "type": "string",
+          "x-go-name": "ParentSHA"
+        },
+        "position": {
+          "description": "The stable one-based position in the stack",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Position"
+        },
+        "pull_request": {
+          "$ref": "#/definitions/PullRequest"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackHead": {
+      "type": "object",
+      "title": "PullRequestStackHead identifies one locally restacked layer.",
+      "properties": {
+        "head_sha": {
+          "description": "The exact current remote head SHA",
+          "type": "string",
+          "x-go-name": "HeadSHA"
+        },
+        "parent_sha": {
+          "description": "The exact parent boundary used to build the layer",
+          "type": "string",
+          "x-go-name": "ParentSHA"
+        },
+        "pull_request": {
+          "description": "The pull request number",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PullRequest"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackOperation": {
+      "type": "object",
+      "title": "PullRequestStackOperation represents durable stack operation progress.",
+      "properties": {
+        "completed": {
+          "description": "The number of completed layers",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Completed"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Created"
+        },
+        "error": {
+          "description": "The last operation error",
+          "type": "string",
+          "x-go-name": "Error"
+        },
+        "expected_revision": {
+          "description": "The stack revision captured when the operation started",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExpectedRevision"
+        },
+        "journal": {
+          "description": "Persisted per-layer operation progress",
+          "x-go-name": "Journal"
+        },
+        "kind": {
+          "description": "The operation kind",
+          "type": "string",
+          "x-go-name": "Kind"
+        },
+        "merge_style": {
+          "description": "The merge style for landing operations",
+          "type": "string",
+          "x-go-name": "MergeStyle"
+        },
+        "number": {
+          "description": "The operation number",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Number"
+        },
+        "stack_number": {
+          "description": "The stack number",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StackNumber"
+        },
+        "state": {
+          "description": "The operation state",
+          "type": "string",
+          "x-go-name": "State"
+        },
+        "through_position": {
+          "description": "The selected final stack position",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ThroughPosition"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Updated"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackOperationOption": {
+      "type": "object",
+      "title": "PullRequestStackOperationOption starts a durable stack operation.",
+      "properties": {
+        "merge_style": {
+          "description": "The merge style for a landing operation",
+          "type": "string",
+          "x-go-name": "MergeStyle"
+        },
+        "revision": {
+          "description": "The expected stack revision",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "through_position": {
+          "description": "The final selected position; zero lands only the next open layer",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ThroughPosition"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackRef": {
+      "type": "object",
+      "title": "PullRequestStackRef identifies a pull request's position in a stack.",
+      "properties": {
+        "base": {
+          "$ref": "#/definitions/PullRequestStackBase"
+        },
+        "number": {
+          "description": "The stack number",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Number"
+        },
+        "position": {
+          "description": "The one-based position of this pull request in the stack",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Position"
+        },
+        "size": {
+          "description": "The number of pull requests in the stack",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Size"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestStackRevisionOption": {
+      "type": "object",
+      "title": "PullRequestStackRevisionOption identifies an expected stack revision.",
+      "properties": {
+        "revision": {
+          "description": "The expected stack revision",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -33031,6 +33986,27 @@
           ],
           "x-go-enum-desc": "APPROVED ReviewStateApproved pr is approved\nPENDING ReviewStatePending pr state is pending\nCOMMENT ReviewStateComment is a comment review\nREQUEST_CHANGES ReviewStateRequestChanges changes for pr are requested\nREQUEST_REVIEW ReviewStateRequestReview review is requested from user",
           "x-go-name": "Event"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "SynchronizePullRequestStackOption": {
+      "type": "object",
+      "title": "SynchronizePullRequestStackOption records validated heads after a local restack.",
+      "properties": {
+        "heads": {
+          "description": "The ordered current heads and their saved parent boundaries",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PullRequestStackHead"
+          },
+          "x-go-name": "Heads"
+        },
+        "revision": {
+          "description": "The expected stack revision",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -34731,6 +35707,42 @@
         }
       }
     },
+    "PullRequestStack": {
+      "description": "PullRequestStack",
+      "schema": {
+        "$ref": "#/definitions/PullRequestStack"
+      }
+    },
+    "PullRequestStackCapabilities": {
+      "description": "PullRequestStackCapabilities",
+      "schema": {
+        "$ref": "#/definitions/PullRequestStackCapabilities"
+      }
+    },
+    "PullRequestStackList": {
+      "description": "PullRequestStackList",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/PullRequestStack"
+        }
+      }
+    },
+    "PullRequestStackOperation": {
+      "description": "PullRequestStackOperation",
+      "schema": {
+        "$ref": "#/definitions/PullRequestStackOperation"
+      }
+    },
+    "PullRequestStackOperationList": {
+      "description": "PullRequestStackOperationList",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/PullRequestStackOperation"
+        }
+      }
+    },
     "PullReview": {
       "description": "PullReview",
       "schema": {
@@ -34899,6 +35911,19 @@
       "description": "ServerVersion",
       "schema": {
         "$ref": "#/definitions/ServerVersion"
+      }
+    },
+    "StackRevisionConflict": {
+      "description": "StackRevisionConflict",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Revision"
+          }
+        }
       }
     },
     "StopWatchList": {

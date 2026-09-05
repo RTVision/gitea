@@ -5,6 +5,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -67,6 +68,32 @@ type notifyInput struct {
 	Ref         git.RefName
 	Payload     api.Payloader
 	PullRequest *issues_model.PullRequest
+}
+
+func workflowMatchPayload(payload api.Payloader) api.Payloader {
+	pullPayload, ok := payload.(*api.PullRequestPayload)
+	if !ok || pullPayload.PullRequest == nil || pullPayload.PullRequest.Stack == nil || pullPayload.PullRequest.Stack.Base == nil || pullPayload.PullRequest.Base == nil {
+		return payload
+	}
+	matchedPayload := *pullPayload
+	matchedPull := *pullPayload.PullRequest
+	matchedBase := *pullPayload.PullRequest.Base
+	matchedBase.Ref = pullPayload.PullRequest.Stack.Base.Ref
+	matchedBase.Sha = pullPayload.PullRequest.Stack.Base.Sha
+	matchedPull.Base = &matchedBase
+	matchedPayload.PullRequest = &matchedPull
+	return &matchedPayload
+}
+
+func validateStackWorkflowPayload(stack *issues_model.PullRequestStack, payload api.Payloader) error {
+	if stack == nil {
+		return nil
+	}
+	pullPayload, ok := payload.(*api.PullRequestPayload)
+	if !ok || pullPayload.PullRequest == nil || pullPayload.PullRequest.Stack == nil || pullPayload.PullRequest.Stack.Base == nil || pullPayload.PullRequest.Stack.Base.Ref != stack.TrunkBranch || pullPayload.PullRequest.Stack.Base.Sha == "" {
+		return errors.New("stack trunk provenance is unavailable; refusing to select pull request workflows")
+	}
+	return nil
 }
 
 func newNotifyInput(repo *repo_model.Repository, doer *user_model.User, event webhook_module.HookEventType) *notifyInput {
@@ -139,6 +166,15 @@ func notify(ctx context.Context, input *notifyInput) error {
 	if input.Repo.IsEmpty || input.Repo.IsArchived {
 		return nil
 	}
+	if input.PullRequest != nil {
+		stack, err := issues_model.GetPullRequestStack(ctx, input.PullRequest.ID)
+		if err != nil {
+			return fmt.Errorf("resolve pull request stack: %w", err)
+		}
+		if err := validateStackWorkflowPayload(stack, input.Payload); err != nil {
+			return err
+		}
+	}
 	if unit_model.TypeActions.UnitGlobalDisabled() {
 		if err := CleanRepoScheduleTasks(ctx, input.Repo); err != nil {
 			log.Error("CleanRepoScheduleTasks: %v", err)
@@ -188,9 +224,10 @@ func notify(ctx context.Context, input *notifyInput) error {
 	var detectedWorkflows []*actions_module.DetectedWorkflow
 	var filteredWorkflows []*actions_module.DetectedWorkflow
 	actionsConfig := input.Repo.MustGetUnit(ctx, unit_model.TypeActions).ActionsConfig()
+	matchPayload := workflowMatchPayload(input.Payload)
 	workflows, schedules, filtered, err := actions_module.DetectWorkflows(ctx, gitRepo, commit,
 		input.Event,
-		input.Payload,
+		matchPayload,
 		shouldDetectSchedules,
 	)
 	if err != nil {
@@ -229,12 +266,15 @@ func notify(ctx context.Context, input *notifyInput) error {
 
 	if input.PullRequest != nil {
 		// detect pull_request_target workflows
-		baseRef := git.BranchPrefix + input.PullRequest.BaseBranch
-		baseCommit, err := gitRepo.GetCommit(ctx, baseRef)
+		baseRevision := git.BranchPrefix + input.PullRequest.BaseBranch
+		if pullPayload, ok := input.Payload.(*api.PullRequestPayload); ok && pullPayload.PullRequest != nil && pullPayload.PullRequest.Stack != nil && pullPayload.PullRequest.Stack.Base != nil {
+			baseRevision = pullPayload.PullRequest.Stack.Base.Sha
+		}
+		baseCommit, err := gitRepo.GetCommit(ctx, baseRevision)
 		if err != nil {
 			return fmt.Errorf("gitRepo.GetCommit: %w", err)
 		}
-		baseWorkflows, _, baseFiltered, err := actions_module.DetectWorkflows(ctx, gitRepo, baseCommit, input.Event, input.Payload, false)
+		baseWorkflows, _, baseFiltered, err := actions_module.DetectWorkflows(ctx, gitRepo, baseCommit, input.Event, matchPayload, false)
 		if err != nil {
 			return fmt.Errorf("DetectWorkflows: %w", err)
 		}

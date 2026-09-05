@@ -263,6 +263,11 @@ func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 		apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 	}
 
+	apiPullRequest.Stack, err = ToAPIPullRequestStackRef(ctx, pr)
+	if err != nil {
+		log.Error("ToAPIPullRequestStackRef[%d]: %v", pr.ID, err)
+	}
+
 	return apiPullRequest
 }
 

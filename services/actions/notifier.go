@@ -24,6 +24,7 @@ import (
 	webhook_module "gitea.dev/modules/webhook"
 	"gitea.dev/services/convert"
 	notify_service "gitea.dev/services/notify"
+	pull_service "gitea.dev/services/pull"
 )
 
 type actionsNotifier struct {
@@ -471,6 +472,7 @@ func (n *actionsNotifier) PullRequestReview(ctx context.Context, pr *issues_mode
 				Content: review.Content,
 			},
 		}).Notify(ctx)
+	pull_service.WakeStackOperationForPull(ctx, pr.ID)
 }
 
 func (n *actionsNotifier) PullRequestReviewRequest(ctx context.Context, doer *user_model.User, issue *issues_model.Issue, reviewer *user_model.User, isRequest bool, comment *issues_model.Comment) {
@@ -710,6 +712,7 @@ func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 		}).
 		WithPullRequest(pr).
 		Notify(ctx)
+	pull_service.WakeStackOperationForPull(ctx, pr.ID)
 }
 
 func (n *actionsNotifier) PullRequestChangeTargetBranch(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, oldBranch string) {

@@ -14,6 +14,7 @@ import (
 	user_model "gitea.dev/models/user"
 	actions_module "gitea.dev/modules/actions"
 	"gitea.dev/modules/actions/jobparser"
+	api "gitea.dev/modules/structs"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,6 +102,27 @@ func TestIfNeedApproval(t *testing.T) {
 		assert.True(t, need)
 		assert.False(t, called, "permission check must not run for restricted user")
 	})
+}
+
+func TestWorkflowMatchPayloadUsesStackTrunkWithoutChangingEvent(t *testing.T) {
+	payload := &api.PullRequestPayload{PullRequest: &api.PullRequest{
+		Base:  &api.PRBranchInfo{Ref: "feature-parent", Sha: "parent-sha"},
+		Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}},
+	}}
+
+	matched, ok := workflowMatchPayload(payload).(*api.PullRequestPayload)
+	require.True(t, ok)
+	assert.Equal(t, "release", matched.PullRequest.Base.Ref)
+	assert.Equal(t, "trunk-sha", matched.PullRequest.Base.Sha)
+	assert.Equal(t, "feature-parent", payload.PullRequest.Base.Ref)
+	assert.Equal(t, "parent-sha", payload.PullRequest.Base.Sha)
+}
+
+func TestValidateStackWorkflowPayloadFailsClosed(t *testing.T) {
+	stack := &issues_model.PullRequestStack{TrunkBranch: "release"}
+	assert.Error(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Base: &api.PRBranchInfo{Ref: "feature"}}}))
+	assert.Error(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release"}}}}))
+	assert.NoError(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}}}}))
 }
 
 func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {

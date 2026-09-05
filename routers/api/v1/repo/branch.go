@@ -10,6 +10,7 @@ import (
 
 	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
+	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
@@ -118,6 +119,8 @@ func DeleteBranch(ctx *context.APIContext) {
 	//     "$ref": "#/responses/error"
 	//   "404":
 	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/error"
 	//   "423":
 	//     "$ref": "#/responses/repoArchivedError"
 	if ctx.Repo.Repository.IsEmpty {
@@ -155,6 +158,8 @@ func DeleteBranch(ctx *context.APIContext) {
 			ctx.APIErrorNotFound()
 		case errors.Is(err, repo_service.ErrBranchIsDefault):
 			ctx.APIError(http.StatusForbidden, "can not delete default or pull request target branch")
+		case errors.Is(err, issues_model.ErrBranchInStack):
+			ctx.APIError(http.StatusConflict, err.Error())
 		case errors.Is(err, git_model.ErrBranchIsProtected):
 			ctx.APIError(http.StatusForbidden, "branch protected")
 		default:
@@ -496,6 +501,8 @@ func RenameBranch(ctx *context.APIContext) {
 	//     "$ref": "#/responses/forbidden"
 	//   "404":
 	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/error"
 	//   "422":
 	//     "$ref": "#/responses/validationError"
 
@@ -519,6 +526,8 @@ func RenameBranch(ctx *context.APIContext) {
 		switch {
 		case repo_model.IsErrUserDoesNotHaveAccessToRepo(err):
 			ctx.APIError(http.StatusForbidden, "User must be a repo or site admin to rename default or protected branches.")
+		case errors.Is(err, issues_model.ErrBranchInStack):
+			ctx.APIError(http.StatusConflict, err.Error())
 		case errors.Is(err, git_model.ErrBranchIsProtected):
 			ctx.APIError(http.StatusForbidden, "Failed to rename branch due to branch protection rules.")
 		default:

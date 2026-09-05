@@ -43,13 +43,18 @@ func GenerateGiteaContext(ctx context.Context, run *actions_model.ActionRun, att
 	if pullPayload, err := run.GetPullRequestEventPayload(); err == nil && pullPayload.PullRequest != nil && pullPayload.PullRequest.Base != nil && pullPayload.PullRequest.Head != nil {
 		baseRef = pullPayload.PullRequest.Base.Ref
 		headRef = pullPayload.PullRequest.Head.Ref
+		policyBase := pullPayload.PullRequest.Base
+		if pullPayload.PullRequest.Stack != nil && pullPayload.PullRequest.Stack.Base != nil {
+			baseRef = pullPayload.PullRequest.Stack.Base.Ref
+			policyBase = &api.PRBranchInfo{Ref: pullPayload.PullRequest.Stack.Base.Ref, Sha: pullPayload.PullRequest.Stack.Base.Sha}
+		}
 
 		// if the TriggerEvent is pull_request_target, ref and sha need to be set according to the base of pull request
 		// In GitHub's documentation, ref should be the branch or tag that triggered workflow. But when the TriggerEvent is pull_request_target,
 		// the ref will be the base branch.
 		if run.TriggerEvent == actions_module.GithubEventPullRequestTarget {
-			ref = git.BranchPrefix + pullPayload.PullRequest.Base.Ref
-			sha = pullPayload.PullRequest.Base.Sha
+			ref = git.BranchPrefix + policyBase.Ref
+			sha = policyBase.Sha
 		}
 	}
 
