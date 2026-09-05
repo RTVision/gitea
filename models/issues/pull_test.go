@@ -330,7 +330,7 @@ func testTitleForWorkInProgressState(t *testing.T) {
 	assert.Empty(t, title)
 
 	for _, invalidTitle := range []string{"", "   ", "WIP:", "WIP:   ", "WIP: [WIP]   "} {
-		title, ok = issues_model.TitleForWorkInProgressState(invalidTitle, true)
+		_, ok = issues_model.TitleForWorkInProgressState(invalidTitle, true)
 		assert.False(t, ok, invalidTitle)
 	}
 
