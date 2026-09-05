@@ -225,6 +225,10 @@ func GetPullRequest(ctx *context.APIContext) {
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
 	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
 	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -324,6 +328,10 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
 	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if apiPr == nil {
+		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
+		return
+	}
 	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
 		ctx.APIErrorInternal(err)
 		return
