@@ -103,7 +103,11 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 		return
 	}
 	stack, err := issues_model.GetPullRequestStack(ctx, issue.PullRequest.ID)
-	if err != nil || stack == nil {
+	if err != nil {
+		ctx.ServerError("GetPullRequestStack", err)
+		return
+	}
+	if stack == nil {
 		return
 	}
 	data, err := loadPullStackData(ctx, stack)

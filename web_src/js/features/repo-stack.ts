@@ -11,7 +11,13 @@ export function initRepoStackStatus() {
       return !status.querySelector('[data-status-final="true"]');
     };
     const poll = async () => {
-      if (await refresh()) setTimeout(poll, Number(status.getAttribute('data-reloading-interval')));
+      let retry = true;
+      try {
+        retry = await refresh();
+      } catch {
+        // Keep the current fragment while a transient network failure recovers.
+      }
+      if (retry) setTimeout(poll, Number(status.getAttribute('data-reloading-interval')));
     };
     poll(); // no await
   }
