@@ -979,10 +979,6 @@ func MergePullRequest(ctx *context.APIContext) {
 		} else if errors.Is(err, pull_service.ErrHeadCommitsNotAllVerified) {
 			ctx.APIError(http.StatusMethodNotAllowed, err.Error())
 		} else {
-			if message, status := util.ErrorUnwrapForUser(err); message != "" {
-				ctx.APIError(status, message)
-				return
-			}
 			ctx.APIErrorInternal(err)
 		}
 		return
@@ -1035,6 +1031,10 @@ func MergePullRequest(ctx *context.APIContext) {
 		if err != nil {
 			if pull_model.IsErrAlreadyScheduledToAutoMerge(err) {
 				ctx.APIError(http.StatusConflict, err.Error())
+				return
+			}
+			if message, status := util.ErrorUnwrapForUser(err); message != "" {
+				ctx.APIError(status, message)
 				return
 			}
 			ctx.APIErrorInternal(err)
