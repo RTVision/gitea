@@ -279,7 +279,11 @@ func IsOfficialReviewer(ctx context.Context, issue *Issue, reviewer *user_model.
 	}
 
 	pr := issue.PullRequest
-	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+	branch, err := ResolvePullRequestPolicyBranch(ctx, pr)
+	if err != nil {
+		return false, err
+	}
+	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, branch)
 	if err != nil {
 		return false, err
 	}
@@ -309,7 +313,11 @@ func IsOfficialReviewerTeam(ctx context.Context, issue *Issue, team *organizatio
 	if err := issue.LoadPullRequest(ctx); err != nil {
 		return false, err
 	}
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, issue.PullRequest.BaseRepoID, issue.PullRequest.BaseBranch)
+	branch, err := ResolvePullRequestPolicyBranch(ctx, issue.PullRequest)
+	if err != nil {
+		return false, err
+	}
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, issue.PullRequest.BaseRepoID, branch)
 	if err != nil {
 		return false, err
 	}

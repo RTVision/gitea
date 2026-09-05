@@ -97,6 +97,7 @@ var (
 			PopulateSquashCommentWithCommitMessages  bool
 			AddCoCommitterTrailers                   bool
 			RetargetChildrenOnMerge                  bool
+			EnableStacks                             bool
 			DelayCheckForInactiveDays                int
 			DefaultDeleteBranchAfterMerge            bool
 			DefaultTitleSource                       string
@@ -191,6 +192,7 @@ var (
 			PopulateSquashCommentWithCommitMessages  bool
 			AddCoCommitterTrailers                   bool
 			RetargetChildrenOnMerge                  bool
+			EnableStacks                             bool
 			DelayCheckForInactiveDays                int
 			DefaultDeleteBranchAfterMerge            bool
 			DefaultTitleSource                       string
