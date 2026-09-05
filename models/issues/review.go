@@ -1003,6 +1003,10 @@ func DeleteReview(ctx context.Context, r *Review) error {
 			return errors.New("review request can not be deleted using this method")
 		}
 
+		if _, err := db.Delete[Reaction](ctx, &FindReactionsOptions{IssueID: r.IssueID, ReviewID: r.ID}); err != nil {
+			return err
+		}
+
 		opts := FindCommentsOptions{
 			Type:     CommentTypeCode,
 			IssueID:  r.IssueID,
@@ -1044,6 +1048,16 @@ func DeleteReview(ctx context.Context, r *Review) error {
 		}
 		return nil
 	})
+}
+
+// UpdateReviewContent updates only a review's summary body.
+func UpdateReviewContent(ctx context.Context, review *Review, content string) error {
+	if review.Content == content {
+		return nil
+	}
+	review.Content = content
+	_, err := db.GetEngine(ctx).ID(review.ID).Cols("content").Update(review)
+	return err
 }
 
 // GetCodeCommentsCount return count of CodeComments a Review has

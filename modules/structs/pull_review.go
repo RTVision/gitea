@@ -51,6 +51,13 @@ type PullReview struct {
 	HTMLPullURL string `json:"pull_request_url"`
 }
 
+// EditPullReviewOption options for editing a pull request review summary.
+type EditPullReviewOption struct {
+	// required: true
+	// Body is the updated review summary
+	Body string `json:"body" binding:"Required"`
+}
+
 // PullReviewComment represents a comment on a pull request review
 type PullReviewComment struct {
 	ID       int64  `json:"id"`

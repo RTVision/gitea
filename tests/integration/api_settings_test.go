@@ -35,6 +35,7 @@ func TestAPIExposedSettings(t *testing.T) {
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,
 		DefaultMaxBlobSize:     setting.API.DefaultMaxBlobSize,
 		DefaultMaxResponseSize: setting.API.DefaultMaxResponseSize,
+		Features:               []string{"pull-review-edit", "pull-review-reactions"},
 	}, apiSettings)
 
 	req = NewRequest(t, "GET", "/api/v1/settings/repository")
