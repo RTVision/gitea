@@ -470,7 +470,8 @@ func checkPullRequestMergeable(id int64) {
 		log.Error("lock.Lock(): %v", err)
 		return
 	}
-	defer func() { releaser(); WakeStackOperationForPull(ctx, id) }()
+	wakeCtx := ctx
+	defer func() { releaser(); WakeStackOperationForPull(wakeCtx, id) }()
 
 	ctx, _, finished := process.GetManager().AddContext(ctx, fmt.Sprintf("Test PR[%d] from patch checking queue", id))
 	defer finished()
