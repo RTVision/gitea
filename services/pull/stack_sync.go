@@ -22,6 +22,7 @@ type StackHeadExpectation struct {
 // SynchronizeStack records explicitly published local replay boundaries.
 func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expectedRevision int64, expected []StackHeadExpectation) (*issues_model.PullRequestStack, error) {
 	var stack *issues_model.PullRequestStack
+	changes := make(map[int64][2]string)
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		var err error
 		stack, err = issues_model.GetStackByID(ctx, stackID)
@@ -33,9 +34,6 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 			return err
 		}
 		if err := checkStackAuthority(ctx, doer, repo); err != nil {
-			return err
-		}
-		if err := issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {
 			return err
 		}
 		entries, err := issues_model.GetStackEntries(ctx, stack.ID)
@@ -65,6 +63,12 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 			if expected[i].PullRequestID != entry.PullRequestID || expected[i].HeadSHA != entry.HeadSHA || expected[i].ParentSHA != entry.OldParentSHA {
 				return fmt.Errorf("%w: published layer %d no longer matches its expected head and parent", issues_model.ErrStackRevision, open[i].Position)
 			}
+		}
+		if err := issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {
+			return err
+		}
+		for i, entry := range live {
+			changes[entry.PullRequestID] = [2]string{open[i].HeadSHA, entry.HeadSHA}
 			if _, err := db.GetEngine(ctx).ID(open[i].ID).Cols("head_sha", "old_parent_sha").Update(entry); err != nil {
 				return err
 			}
@@ -75,6 +79,6 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 	if err != nil {
 		return nil, err
 	}
-	notifyStackChanged(ctx, doer, stack.ID)
+	notifyStackChanged(ctx, doer, stack.ID, changes)
 	return stack, nil
 }
