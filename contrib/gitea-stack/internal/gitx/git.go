@@ -5,22 +5,33 @@ package gitx
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"gitea.dev/modules/process"
 )
 
 type Repo struct{ Dir string }
 
 func (r Repo) Run(env []string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", r.Dir}, args...)...)
+	return r.RunContext(context.Background(), env, args...)
+}
+
+func (r Repo) RunContext(ctx context.Context, env []string, args ...string) (string, error) {
+	cmd := process.CommandContext(ctx, "git", append([]string{"-C", r.Dir}, args...)...)
+	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Env = append(os.Environ(), env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return strings.TrimSpace(stdout.String()), ctxErr
+		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
 			message = err.Error()
@@ -117,30 +128,30 @@ func (r Repo) Remotes() ([]string, error) {
 	return strings.Fields(out), nil
 }
 
-func (r Repo) Fetch(remote string, branches []string) error {
+func (r Repo) FetchContext(ctx context.Context, remote string, branches []string) error {
 	args := []string{"fetch", "--no-tags", "--", remote}
 	for _, branch := range branches {
 		args = append(args, "+refs/heads/"+branch+":refs/remotes/"+remote+"/"+branch)
 	}
-	_, err := r.Run(nil, args...)
+	_, err := r.RunContext(ctx, nil, args...)
 	return err
 }
 
-func (r Repo) PushLease(remote, branch, expected string) error {
+func (r Repo) PushLeaseContext(ctx context.Context, remote, branch, expected string) error {
 	lease := "--force-with-lease=refs/heads/" + branch + ":" + expected
-	_, err := r.Run(nil, "push", lease, "--", remote, "refs/heads/"+branch+":refs/heads/"+branch)
+	_, err := r.RunContext(ctx, nil, "push", lease, "--", remote, "refs/heads/"+branch+":refs/heads/"+branch)
 	return err
 }
 
-func (r Repo) RemoteHead(remote, branch string) (string, error) {
-	out, err := r.Run(nil, "ls-remote", "--heads", "--", remote, "refs/heads/"+branch)
+func (r Repo) RemoteHeadContext(ctx context.Context, remote, branch string) (string, error) {
+	out, err := r.RunContext(ctx, nil, "ls-remote", "--heads", "--", remote, "refs/heads/"+branch)
 	if err != nil || out == "" {
 		return "", err
 	}
 	return strings.Fields(out)[0], nil
 }
 
-func (r Repo) Rebase(oldBase, newBase, branch, signingKey string) error {
+func (r Repo) RebaseContext(ctx context.Context, oldBase, newBase, branch, signingKey string) error {
 	args := []string{"rebase", "--no-fork-point", "--reapply-cherry-picks", "--empty=keep", "--onto", newBase, oldBase, branch}
 	if signingKey != "" {
 		if signingKey == "default" {
@@ -149,7 +160,7 @@ func (r Repo) Rebase(oldBase, newBase, branch, signingKey string) error {
 			args = append(args, "--gpg-sign="+signingKey)
 		}
 	}
-	_, err := r.Run(nil, args...)
+	_, err := r.RunContext(ctx, nil, args...)
 	return err
 }
 
@@ -171,13 +182,13 @@ func (r Repo) WorktreesForBranch(branch string) ([]string, error) {
 	return paths, nil
 }
 
-func (r Repo) RebaseContinue() error {
-	_, err := r.Run([]string{"GIT_EDITOR=true"}, "rebase", "--continue")
+func (r Repo) RebaseContinueContext(ctx context.Context) error {
+	_, err := r.RunContext(ctx, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
 	return err
 }
 
-func (r Repo) RebaseAbort() error {
-	_, err := r.Run(nil, "rebase", "--abort")
+func (r Repo) RebaseAbortContext(ctx context.Context) error {
+	_, err := r.RunContext(ctx, nil, "rebase", "--abort")
 	return err
 }
 

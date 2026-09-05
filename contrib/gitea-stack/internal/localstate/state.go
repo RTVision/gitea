@@ -4,6 +4,7 @@
 package localstate
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -55,6 +56,22 @@ type Restack struct {
 }
 
 type Store struct{ Dir string }
+
+type ForeignLockError struct {
+	Host string
+	PID  int
+	Path string
+}
+
+func (e ForeignLockError) Error() string {
+	return fmt.Sprintf("repository is locked by pid %d on host %s.\nFinish or stop that command on %s, then remove %s there.", e.PID, e.Host, e.Host, e.Path)
+}
+
+type lockOwner struct {
+	Host  string `json:"host"`
+	PID   int    `json:"pid"`
+	Nonce string `json:"nonce,omitempty"`
+}
 
 func Open(repo gitx.Repo) (*Store, error) {
 	dir, err := repo.GitPath("gitea-stack")
@@ -127,35 +144,54 @@ func (s *Store) Lock() (func(), error) {
 		return nil, err
 	}
 	path := s.path("operation.lock")
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	host, err := os.Hostname()
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			data, readErr := os.ReadFile(path)
-			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
-			if readErr == nil && parseErr == nil {
-				process, findErr := os.FindProcess(pid)
-				if findErr == nil {
-					signalErr := process.Signal(syscall.Signal(0))
-					if signalErr != nil && !errors.Is(signalErr, os.ErrProcessDone) && !errors.Is(signalErr, syscall.ESRCH) {
-						return nil, errors.New("another gitea-stack operation is running")
-					}
-					if signalErr == nil {
-						return nil, errors.New("another gitea-stack operation is running")
-					}
-					if removeErr := os.Remove(path); removeErr == nil {
-						return s.Lock()
-					}
-				}
-			}
-			return nil, errors.New("another gitea-stack operation is running")
+		return nil, err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		owner := lockOwner{Host: host, PID: os.Getpid(), Nonce: rand.Text()}
+		data, marshalErr := json.Marshal(owner)
+		if marshalErr == nil {
+			_, marshalErr = file.Write(append(data, '\n'))
 		}
+		closeErr := file.Close()
+		if marshalErr != nil || closeErr != nil {
+			_ = os.Remove(path)
+			return nil, errors.Join(marshalErr, closeErr)
+		}
+		return func() {
+			var current lockOwner
+			currentData, err := os.ReadFile(path)
+			if err == nil && json.Unmarshal(currentData, &current) == nil && current == owner {
+				_ = os.Remove(path)
+			}
+		}, nil
+	}
+	if !errors.Is(err, os.ErrExist) {
 		return nil, err
 	}
-	if _, err := fmt.Fprintf(file, "%d\n", os.Getpid()); err != nil {
-		file.Close()
-		os.Remove(path)
-		return nil, err
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		return nil, errors.New("another gitea-stack operation is running")
 	}
-	file.Close()
-	return func() { _ = os.Remove(path) }, nil
+	var owner lockOwner
+	if unmarshalErr := json.Unmarshal(data, &owner); unmarshalErr != nil || owner.Host == "" || owner.PID <= 0 {
+		if _, legacyErr := strconv.Atoi(strings.TrimSpace(string(data))); legacyErr == nil {
+			return nil, fmt.Errorf("another gitea-stack operation may be running; remove legacy lock %s only after checking every host", path)
+		}
+		return nil, errors.New("another gitea-stack operation is running")
+	}
+	if owner.Host != host {
+		return nil, ForeignLockError{Host: owner.Host, PID: owner.PID, Path: path}
+	}
+	process, findErr := os.FindProcess(owner.PID)
+	if findErr != nil {
+		return nil, errors.New("another gitea-stack operation is running")
+	}
+	signalErr := process.Signal(syscall.Signal(0))
+	if signalErr == nil || (!errors.Is(signalErr, os.ErrProcessDone) && !errors.Is(signalErr, syscall.ESRCH)) {
+		return nil, errors.New("another gitea-stack operation is running")
+	}
+	return nil, fmt.Errorf("repository lock belongs to stopped pid %d on this host; remove %s and retry", owner.PID, path)
 }

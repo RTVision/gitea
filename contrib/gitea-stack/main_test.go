@@ -4,6 +4,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -75,12 +77,16 @@ func trimLine(value string) string {
 }
 
 func TestCompiledCLIReleasesLockAndContinuesConflict(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "global.gitconfig"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	binary := buildCLI(t)
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")
 	remote := filepath.Join(root, "remote.git")
 	runGit(t, root, "init", "--bare", remote)
 	runGit(t, root, "init", "-b", "main", repo)
+	runGit(t, repo, "config", "user.name", "Stack Test")
+	runGit(t, repo, "config", "user.email", "stack@example.test")
 	runGit(t, repo, "remote", "add", "origin", remote)
 	writeFile(t, filepath.Join(repo, "content"), "base\n")
 	commitGit(t, repo, "base")
@@ -93,6 +99,35 @@ func TestCompiledCLIReleasesLockAndContinuesConflict(t *testing.T) {
 	output, code := runCLI(t, binary, repo, "init", "--trunk", "main", "--remote", "origin", "feature")
 	require.Equal(t, 0, code, output)
 	assert.NoFileExists(t, filepath.Join(repo, ".git", "gitea-stack", "operation.lock"))
+	store, err := localstate.Open(gitx.Repo{Dir: repo})
+	require.NoError(t, err)
+	state, err := store.Load()
+	require.NoError(t, err)
+	output, code = runCLI(t, binary, repo, "--json", "--stack", "S2", "sync")
+	require.Equal(t, 3, code, output)
+	assert.Contains(t, output, `"code":"stack_unsubmitted"`)
+	state.Stack = 1
+	require.NoError(t, store.Save(state))
+	host, err := os.Hostname()
+	require.NoError(t, err)
+	writeFile(t, filepath.Join(store.Dir, "operation.lock"), "{\"host\":\"foreign.example.test\",\"pid\":99999999}\n")
+	output, code = runCLI(t, binary, repo, "--json", "status")
+	require.Equal(t, 3, code, output)
+	assert.Contains(t, output, `"code":"lock_foreign_host"`)
+	assert.Contains(t, output, filepath.Join(".git", "gitea-stack", "operation.lock"))
+	require.NoError(t, os.Remove(filepath.Join(store.Dir, "operation.lock")))
+	writeFile(t, filepath.Join(store.Dir, "operation.lock"), fmt.Sprintf("{\"host\":%q,\"pid\":%d}\n", host, os.Getpid()))
+	output, code = runCLI(t, binary, repo, "--json", "--stack", "S2", "sync")
+	require.Equal(t, 3, code, output)
+	assert.Contains(t, output, `"code":"stack_mismatch"`)
+	require.NoError(t, os.Remove(filepath.Join(store.Dir, "operation.lock")))
+	runGit(t, repo, "remote", "set-url", "origin", "git@code.example.test:/srv/git/acme/widget.git")
+	t.Setenv("GITEA_TOKEN", "test-token")
+	output, code = runCLI(t, binary, repo, "--json", "--stack", "S1", "status")
+	require.Equal(t, 3, code, output)
+	assert.Contains(t, output, `"code":"url_ambiguous"`)
+	t.Setenv("GITEA_TOKEN", "")
+	runGit(t, repo, "remote", "set-url", "origin", remote)
 
 	runGit(t, repo, "switch", "main")
 	writeFile(t, filepath.Join(repo, "content"), "trunk\n")
@@ -110,7 +145,7 @@ func TestCompiledCLIReleasesLockAndContinuesConflict(t *testing.T) {
 	require.Equal(t, 0, code, output)
 	assert.NoFileExists(t, filepath.Join(repo, ".git", "gitea-stack", "restack.json"))
 	featureHead := trimLine(runGit(t, repo, "rev-parse", "feature"))
-	_, err := exec.Command("git", "-C", repo, "merge-base", "--is-ancestor", newTrunk, featureHead).CombinedOutput()
+	_, err = exec.Command("git", "-C", repo, "merge-base", "--is-ancestor", newTrunk, featureHead).CombinedOutput()
 	assert.NoError(t, err)
 }
 
@@ -175,7 +210,7 @@ func TestSyncRemoteLeaseContentSafety(t *testing.T) {
 			assert.Equal(t, local, trimLine(runGit(t, work, "rev-parse", "feature")), "sync preserves unpublished local commits")
 			if scenario != "topology-only" {
 				assert.Equal(t, accepted, state.Layers[0].RemoteSHA)
-				err := app.pushLayers(state, 1)
+				err := app.pushLayers(t.Context(), state, 1)
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "remote branch feature moved")
 				assert.Equal(t, serverHead, trimLine(runGit(t, remote, "rev-parse", "feature")))
@@ -187,14 +222,92 @@ func TestSyncRemoteLeaseContentSafety(t *testing.T) {
 			assert.False(t, remoteLeaseCanAdvance(repo, local, accepted, serverHead, nil))
 			assert.False(t, remoteLeaseCanAdvance(repo, local, accepted, "missing-object", &api.PullRequestStackEntry{HeadSHA: "missing-object"}))
 			assert.True(t, remoteLeaseCanAdvance(repo, serverHead, "", serverHead, nil))
-			require.NoError(t, app.restack([]string{"--no-sign"}))
+			require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
 			state, err = store.Load()
 			require.NoError(t, err)
-			require.NoError(t, app.pushLayers(state, 1))
+			require.NoError(t, app.pushLayers(t.Context(), state, 1))
 			assert.Equal(t, "unpublished\n", runGit(t, remote, "show", "feature:local.txt"))
 			assert.Equal(t, "feature\n", runGit(t, remote, "show", "feature:feature.txt"))
 			assert.Equal(t, "parent\n", runGit(t, remote, "show", "feature:parent.txt"))
 			assert.Equal(t, "2", trimLine(runGit(t, remote, "rev-list", "--count", "main..feature")), "only feature and unpublished commits are replayed")
 		})
 	}
+}
+
+func TestStackNumberSelection(t *testing.T) {
+	state := &localstate.State{Stack: 7}
+	app := &application{stackFlag: "S8"}
+	_, err := app.boundStackNumber(state, false)
+	var commandErr commandError
+	require.ErrorAs(t, err, &commandErr)
+	assert.Equal(t, "stack_mismatch", commandErr.kind)
+
+	app.stackFlag = "S8"
+	number, err := app.serverStackNumber(state)
+	require.NoError(t, err)
+	assert.Equal(t, int64(8), number)
+
+	app.stackFlag = ""
+	number, err = app.boundStackNumber(&localstate.State{}, true)
+	require.NoError(t, err)
+	assert.Zero(t, number, "the first submit remains valid before the local stack has a server id")
+	store := &localstate.Store{Dir: t.TempDir()}
+	require.NoError(t, store.Save(&localstate.State{}))
+	app.store = store
+	require.NoError(t, app.preflightStackBinding("submit"))
+	_, err = app.boundStackNumber(&localstate.State{}, false)
+	require.ErrorAs(t, err, &commandErr)
+	assert.Equal(t, "stack_unsubmitted", commandErr.kind)
+
+	err = mapGitContextError("fetch", context.Canceled)
+	require.ErrorAs(t, err, &commandErr)
+	assert.Equal(t, "git_timeout", commandErr.kind)
+	assert.Contains(t, err.Error(), "was canceled")
+}
+
+func TestSyncDetectsUpperLayerAfterLowerLocalHeadMoves(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "work")
+	runGit(t, filepath.Dir(dir), "init", "-b", "main", dir)
+	runGit(t, dir, "config", "user.name", "Stack Test")
+	runGit(t, dir, "config", "user.email", "stack@example.test")
+	writeFile(t, filepath.Join(dir, "base"), "base\n")
+	trunk := commitGit(t, dir, "base")
+	runGit(t, dir, "switch", "-c", "layer-1")
+	writeFile(t, filepath.Join(dir, "lower"), "lower\n")
+	lowerRemote := commitGit(t, dir, "lower")
+	runGit(t, dir, "switch", "-c", "layer-2")
+	writeFile(t, filepath.Join(dir, "upper"), "upper\n")
+	upperRemote := commitGit(t, dir, "upper")
+	runGit(t, dir, "switch", "layer-1")
+	writeFile(t, filepath.Join(dir, "local"), "unpublished\n")
+	commitGit(t, dir, "lower local change")
+	runGit(t, dir, "update-ref", "refs/remotes/origin/main", trunk)
+	runGit(t, dir, "update-ref", "refs/remotes/origin/layer-1", lowerRemote)
+	runGit(t, dir, "update-ref", "refs/remotes/origin/layer-2", upperRemote)
+
+	state := &localstate.State{Remote: "origin", Trunk: "main", Layers: []localstate.Layer{
+		{Branch: "layer-1", PullRequest: 1, ParentSHA: trunk, HeadSHA: lowerRemote, RemoteSHA: lowerRemote},
+		{Branch: "layer-2", PullRequest: 2, ParentSHA: lowerRemote, HeadSHA: upperRemote, RemoteSHA: upperRemote},
+	}}
+	server := &api.PullRequestStack{Entries: []*api.PullRequestStackEntry{
+		{PullRequest: &api.PullRequest{Index: 1}, HeadSHA: lowerRemote},
+		{PullRequest: &api.PullRequest{Index: 2}, HeadSHA: upperRemote},
+	}}
+	app := &application{repo: gitx.Repo{Dir: dir}}
+	needsRestack, needsReconciliation, err := app.updateSyncState(state, server, trunk)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"layer-2"}, needsRestack)
+	assert.Empty(t, needsReconciliation)
+}
+
+func TestSyncStateDoesNotRequireLandedLocalBranch(t *testing.T) {
+	state := &localstate.State{Remote: "origin", Layers: []localstate.Layer{{Branch: "deleted-layer", PullRequest: 1}}}
+	server := &api.PullRequestStack{Entries: []*api.PullRequestStackEntry{{PullRequest: &api.PullRequest{Index: 1}, LandedSHA: "landed"}}}
+	app := &application{repo: gitx.Repo{Dir: t.TempDir()}}
+
+	needsRestack, needsReconciliation, err := app.updateSyncState(state, server, "trunk")
+	require.NoError(t, err)
+	assert.Empty(t, needsRestack)
+	assert.Empty(t, needsReconciliation)
+	assert.Equal(t, "landed", state.Layers[0].LandedSHA)
 }

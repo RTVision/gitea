@@ -6,7 +6,7 @@
 go build -o gitea-stack ./contrib/gitea-stack
 ```
 
-Set `GITEA_TOKEN` (or `GITEA_STACK_TOKEN`) for commands that call the API. The server URL is derived from the selected Git remote; set `GITEA_URL=https://code.example.com/gitea` when the instance uses a URL prefix or the Git remote is SSH. Choose a remote with global `--remote`, `stack.remote`, or a repository with exactly one remote.
+Set `GITEA_TOKEN` (or `GITEA_STACK_TOKEN`) for commands that call the API. The server URL is derived from the selected Git remote; set `GITEA_URL=https://code.example.com/gitea` when the instance uses a URL prefix or an SSH remote has path components before the owner and repository. Those SSH paths may be filesystem paths, so the CLI requires `GITEA_URL` instead of guessing an HTTP prefix. Choose a remote with global `--remote`, `stack.remote`, or a repository with exactly one remote.
 
 Start a local stack with explicit ordered branches. Omitting branches creates an empty definition that `new` can extend.
 
@@ -28,7 +28,7 @@ gitea-stack list
 gitea-stack adopt --trunk main --prs '#41,#42'
 ```
 
-`sync` fetches named stack refs and refreshes server state. It never rewrites branches. It adopts a changed remote head as a new push lease only when the local branch already matches it, or when the server records that exact head and its complete Git tree equals the tree of the previously accepted remote head. This permits topology-only server rewrites while preserving unpublished local commits. A server-recorded head alone is not trusted: changed content (including whitespace), an unknown prior lease, or unavailable objects retain the old lease and require explicit Git reconciliation before pushing. JSON output lists affected open branches in `needs_reconciliation`.
+`sync` fetches named stack refs and refreshes server state. It never rewrites branches. It adopts a changed remote head as a new push lease only when the local branch already matches it, or when the server records that exact head and its complete Git tree equals the tree of the previously accepted remote head. This permits topology-only server rewrites while preserving unpublished local commits. A server-recorded head alone is not trusted: changed content (including whitespace), an unknown prior lease, or unavailable objects retain the old lease and require explicit Git reconciliation before pushing. JSON output lists remote divergence in `needs_reconciliation` and local layers whose saved parent no longer matches the previous local head in `needs_restack`.
 
 ```sh
 gitea-stack sync
@@ -53,8 +53,12 @@ gitea-stack op cancel 17
 gitea-stack op retry 17
 ```
 
+Global `--stack S12` selects a server stack for `status`, server `rebase`, and `op` commands; without it, those commands use the locally bound stack. For local mutations (`push`, `submit`, `sync`, `land`, and `unstack`), an explicit selector must match the local binding. The first `submit` remains valid before a local stack has a server id.
+
 `land --through` is required. Ordered landing can finish a prefix and block on a later layer; the operation's `completed` value records what already landed. Run `sync`, restack the remaining open suffix, and push it with synchronized boundaries. `unstack` removes active membership while retaining PRs, branches, and local Git backup refs.
 
 Global `--json` emits one JSON object on stdout. Human progress and errors use stderr. Local-only commands (`init`, `new`, navigation, local `restack`, and snapshots) do not require an API token.
+
+The repository operation lock records its host and process id. If the CLI reports a stopped local owner or a foreign host, verify that process on the named host before removing the exact `operation.lock` path printed in the error.
 
 Exit codes are: `2` usage, `3` local precondition, `4` revision conflict, `5` restack conflict, `6` rejected remote or operation, `7` token error, `8` missing stack/PR/branch, and `9` stacks disabled. Unexpected failures use `1`.

@@ -46,6 +46,12 @@ type ErrDisabled struct{}
 
 func (ErrDisabled) Error() string { return "stacked pull requests are disabled on this server" }
 
+type ErrAmbiguousRemoteURL struct{ Remote string }
+
+func (e ErrAmbiguousRemoteURL) Error() string {
+	return fmt.Sprintf("cannot derive the Gitea URL from %s.\nSet GITEA_URL to the server root, for example https://gitea.example.com.", e.Remote)
+}
+
 type ErrAPI struct {
 	Status  int
 	Message string
@@ -104,6 +110,9 @@ func FromRemote(remoteURL, token string) (*Client, error) {
 	owner, repo := parts[len(parts)-2], strings.TrimSuffix(parts[len(parts)-1], ".git")
 	baseURL := os.Getenv("GITEA_URL")
 	if baseURL == "" {
+		if inferredBase == "" && len(parts) > 2 {
+			return nil, ErrAmbiguousRemoteURL{Remote: remoteURL}
+		}
 		baseURL = inferredBase
 		if baseURL == "" {
 			baseURL = "https://" + host

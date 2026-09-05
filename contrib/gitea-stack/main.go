@@ -48,7 +48,7 @@ func runMain(arguments []string) int {
 	global := flag.NewFlagSet("gitea-stack", flag.ContinueOnError)
 	jsonOutput := global.Bool("json", false, "print machine-readable JSON")
 	remote := global.String("remote", "", "git remote")
-	stack := global.String("stack", "", "stack number (S12 or 12)")
+	stack := global.String("stack", "", "server stack id; must match the bound stack for local commands")
 	quiet := global.Bool("quiet", false, "suppress progress")
 	_ = global.Bool("yes", false, "accept planned updates")
 	global.SetOutput(os.Stderr)
@@ -66,9 +66,16 @@ func runMain(arguments []string) int {
 		return reportError(err, *jsonOutput)
 	}
 	app := &application{repo: repo, store: store, jsonOutput: *jsonOutput, quiet: *quiet, remoteFlag: *remote, stackFlag: *stack, commandName: args[0]}
+	if err := app.preflightStackBinding(args[0]); err != nil {
+		return reportError(err, *jsonOutput)
+	}
 	unlock, err := store.Lock()
 	if err != nil {
-		return reportError(fail(3, "locked", "%v", err), *jsonOutput)
+		kind := "locked"
+		if _, ok := errors.AsType[localstate.ForeignLockError](err); ok {
+			kind = "lock_foreign_host"
+		}
+		return reportError(fail(3, kind, "%v", err), *jsonOutput)
 	}
 	defer unlock()
 	if store.RestackExists() && !(args[0] == "restack" || args[0] == "snapshots") {
@@ -138,7 +145,7 @@ func (a *application) run(ctx context.Context, command string, args []string) er
 		}
 		return a.sync(ctx)
 	case "restack":
-		return a.restack(args)
+		return a.restack(ctx, args)
 	case "rebase":
 		return a.serverRebase(ctx, args)
 	case "land":
@@ -165,6 +172,36 @@ func (a *application) state() (*localstate.State, error) {
 		return nil, err
 	}
 	return state, nil
+}
+
+func (a *application) optionalState() (*localstate.State, bool, error) {
+	state, err := a.store.Load()
+	if errors.Is(err, os.ErrNotExist) {
+		return &localstate.State{}, false, nil
+	}
+	return state, err == nil, err
+}
+
+func isBoundStackCommand(command string) bool {
+	switch command {
+	case "push", "submit", "sync", "land", "unstack":
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *application) preflightStackBinding(command string) error {
+	if !isBoundStackCommand(command) {
+		return nil
+	}
+	state, err := a.state()
+	if err != nil {
+		return err
+	}
+	allowUnsubmitted := command == "push" || command == "submit"
+	_, err = a.boundStackNumber(state, allowUnsubmitted)
+	return err
 }
 
 func parseStack(value string) (int64, error) {
@@ -227,6 +264,9 @@ func (a *application) client(state *localstate.State) (*stackclient.Client, erro
 	}
 	client, err := stackclient.FromRemote(remoteURL, token)
 	if err != nil {
+		if _, ok := errors.AsType[stackclient.ErrAmbiguousRemoteURL](err); ok {
+			return nil, fail(3, "url_ambiguous", "%v", err)
+		}
 		return nil, err
 	}
 	return client, nil
@@ -248,6 +288,17 @@ func mapAPIError(err error) error {
 		return fail(9, "disabled", "%v", disabled)
 	default:
 		return err
+	}
+}
+
+func mapGitContextError(operation string, err error) error {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return fail(6, "git_timeout", "git %s timed out because its deadline expired. Check network access to the remote and retry.", operation)
+	case errors.Is(err, context.Canceled):
+		return fail(6, "git_timeout", "git %s was canceled. Check network access to the remote and retry.", operation)
+	default:
+		return fail(6, "remote_failed", "%v", err)
 	}
 }
 
@@ -351,34 +402,96 @@ func (a *application) newLayer(args []string) error {
 	return nil
 }
 
-func (a *application) stackNumber(state *localstate.State) (int64, error) {
+func (a *application) serverStackNumber(state *localstate.State) (int64, error) {
 	if a.stackFlag != "" {
 		return parseStack(a.stackFlag)
 	}
-	if state.Stack == 0 {
+	if state == nil || state.Stack == 0 {
 		return 0, fail(8, "not_found", "local stack has not been submitted")
 	}
 	return state.Stack, nil
 }
 
+func (a *application) boundStackNumber(state *localstate.State, allowUnsubmitted bool) (int64, error) {
+	if state.Stack == 0 {
+		if allowUnsubmitted && a.stackFlag == "" {
+			return 0, nil
+		}
+		return 0, fail(3, "stack_unsubmitted", "this stack has not been submitted yet.\nRun `submit` first, then retry.")
+	}
+	if a.stackFlag == "" {
+		return state.Stack, nil
+	}
+	number, err := parseStack(a.stackFlag)
+	if err != nil {
+		return 0, err
+	}
+	if number != state.Stack {
+		return 0, fail(3, "stack_mismatch", "--stack S%d does not match the stack bound to this branch (S%d).\nRun the command without --stack, or check out a branch on S%d.", number, state.Stack, number)
+	}
+	return number, nil
+}
+
 func (a *application) status(ctx context.Context) error {
-	state, err := a.state()
+	state, hasState, err := a.optionalState()
 	if err != nil {
 		return err
 	}
-	var server *api.PullRequestStack
-	if state.Stack != 0 && (os.Getenv("GITEA_TOKEN") != "" || os.Getenv("GITEA_STACK_TOKEN") != "") {
-		if client, clientErr := a.client(state); clientErr == nil {
-			server, _ = client.GetStack(ctx, state.Stack)
+	if !hasState && a.stackFlag == "" {
+		return fail(8, "not_found", "no local stack; run gitea-stack init or adopt")
+	}
+	number := int64(0)
+	if state == nil || state.Stack != 0 || a.stackFlag != "" {
+		number, err = a.serverStackNumber(state)
+		if err != nil {
+			return err
 		}
 	}
+	var server *api.PullRequestStack
+	if number != 0 && (a.stackFlag != "" || os.Getenv("GITEA_TOKEN") != "" || os.Getenv("GITEA_STACK_TOKEN") != "") {
+		client, clientErr := a.client(state)
+		if clientErr != nil {
+			if a.stackFlag != "" {
+				return clientErr
+			}
+		} else {
+			server, err = client.GetStack(ctx, number)
+			if err != nil && a.stackFlag != "" {
+				return mapAPIError(err)
+			}
+		}
+	}
+	local := state
+	if a.stackFlag != "" || (local != nil && local.Stack != number) {
+		local = nil
+	}
 	if !a.jsonOutput {
+		if local == nil {
+			fmt.Fprintf(os.Stdout, "S%d on %s  rev %d  op %d\n", server.Number, server.Trunk, server.Revision, server.ActiveOperation)
+			for _, entry := range server.Entries {
+				pull := int64(0)
+				branch := ""
+				if entry.PullRequest != nil {
+					pull = entry.PullRequest.Index
+					if entry.PullRequest.Head != nil {
+						branch = entry.PullRequest.Head.Ref
+					}
+				}
+				status := "open"
+				if entry.LandedSHA != "" {
+					status = "merged " + short(entry.LandedSHA)
+				}
+				fmt.Fprintf(os.Stdout, " %d  %s  #%d  %s\n", entry.Position, branch, pull, status)
+			}
+			a.success(map[string]any{"local": nil, "server": server})
+			return nil
+		}
 		op := int64(0)
 		if server != nil {
 			op = server.ActiveOperation
 		}
-		fmt.Fprintf(os.Stdout, "S%d on %s  rev %d  op %d\n", state.Stack, state.Trunk, state.LastRevision, op)
-		for i, layer := range state.Layers {
+		fmt.Fprintf(os.Stdout, "S%d on %s  rev %d  op %d\n", local.Stack, local.Trunk, local.LastRevision, op)
+		for i, layer := range local.Layers {
 			status := "open"
 			if layer.LandedSHA != "" {
 				status = "merged " + short(layer.LandedSHA)
@@ -386,7 +499,7 @@ func (a *application) status(ctx context.Context) error {
 			fmt.Fprintf(os.Stdout, " %d  %s  #%d  %s\n", i+1, layer.Branch, layer.PullRequest, status)
 		}
 	}
-	a.success(map[string]any{"local": state, "server": server})
+	a.success(map[string]any{"local": local, "server": server})
 	return nil
 }
 
@@ -506,7 +619,7 @@ func throughIndex(state *localstate.State, value string) (int, error) {
 	return index + 1, err
 }
 
-func (a *application) pushLayers(state *localstate.State, through int) error {
+func (a *application) pushLayers(ctx context.Context, state *localstate.State, through int) error {
 	for i := range through {
 		layer := &state.Layers[i]
 		if layer.LandedSHA != "" {
@@ -516,9 +629,9 @@ func (a *application) pushLayers(state *localstate.State, through int) error {
 		if err != nil {
 			return err
 		}
-		remoteHead, err := a.repo.RemoteHead(state.Remote, layer.Branch)
+		remoteHead, err := a.repo.RemoteHeadContext(ctx, state.Remote, layer.Branch)
 		if err != nil {
-			return fail(6, "remote_failed", "%v", err)
+			return mapGitContextError("ls-remote", err)
 		}
 		if layer.RemoteSHA == "" && remoteHead != "" {
 			return fail(6, "lease_rejected", "remote branch %s exists without a recorded lease; run sync or adopt", layer.Branch)
@@ -530,7 +643,10 @@ func (a *application) pushLayers(state *localstate.State, through int) error {
 			continue
 		}
 		a.progress("pushing %s with lease %s", layer.Branch, short(layer.RemoteSHA))
-		if err := a.repo.PushLease(state.Remote, layer.Branch, layer.RemoteSHA); err != nil {
+		if err := a.repo.PushLeaseContext(ctx, state.Remote, layer.Branch, layer.RemoteSHA); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return mapGitContextError("push", err)
+			}
 			return fail(6, "lease_rejected", "%s: %v", layer.Branch, err)
 		}
 		layer.HeadSHA, layer.RemoteSHA = head, head
@@ -554,18 +670,22 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 	if err != nil {
 		return err
 	}
+	stackNumber, err := a.boundStackNumber(state, true)
+	if err != nil {
+		return err
+	}
 	through, err := throughIndex(state, *throughValue)
 	if err != nil {
 		return err
 	}
 	var client *stackclient.Client
 	var server *api.PullRequestStack
-	if synchronize && state.Stack != 0 {
+	if synchronize && stackNumber != 0 {
 		client, err = a.client(state)
 		if err != nil {
 			return err
 		}
-		server, err = client.GetStack(ctx, state.Stack)
+		server, err = client.GetStack(ctx, stackNumber)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -578,7 +698,7 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 			}
 		}
 	}
-	if err := a.pushLayers(state, through); err != nil {
+	if err := a.pushLayers(ctx, state, through); err != nil {
 		return err
 	}
 	if client != nil {
@@ -596,7 +716,7 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 			}
 			heads = append(heads, api.PullRequestStackHead{PullRequest: layer.PullRequest, HeadSHA: head, ParentSHA: layer.ParentSHA})
 		}
-		server, err = client.SynchronizeStack(ctx, state.Stack, server.Revision, heads)
+		server, err = client.SynchronizeStack(ctx, stackNumber, server.Revision, heads)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -627,6 +747,10 @@ func (a *application) submit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	stackNumber, err := a.boundStackNumber(state, true)
+	if err != nil {
+		return err
+	}
 	through, err := throughIndex(state, *throughValue)
 	if err != nil {
 		return err
@@ -638,7 +762,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 	if _, err := client.Capabilities(ctx); err != nil {
 		return mapAPIError(err)
 	}
-	if err := a.pushLayers(state, through); err != nil {
+	if err := a.pushLayers(ctx, state, through); err != nil {
 		return err
 	}
 	newPulls := make([]int64, 0)
@@ -676,7 +800,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	if state.Stack == 0 {
+	if stackNumber == 0 {
 		pulls := make([]int64, 0, through)
 		for i := range through {
 			pulls = append(pulls, state.Layers[i].PullRequest)
@@ -687,11 +811,11 @@ func (a *application) submit(ctx context.Context, args []string) error {
 		}
 		state.Stack, state.LastRevision = server.Number, server.Revision
 	} else if len(newPulls) != 0 {
-		server, err := client.GetStack(ctx, state.Stack)
+		server, err := client.GetStack(ctx, stackNumber)
 		if err != nil {
 			return mapAPIError(err)
 		}
-		server, err = client.AppendStack(ctx, state.Stack, server.Revision, newPulls)
+		server, err = client.AppendStack(ctx, stackNumber, server.Revision, newPulls)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -745,8 +869,8 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 		branches = append(branches, pull.Head.Ref)
 		parent = pull.Head.Ref
 	}
-	if err := a.repo.Fetch(remote, branches); err != nil {
-		return fail(6, "remote_failed", "%v", err)
+	if err := a.repo.FetchContext(ctx, remote, branches); err != nil {
+		return mapGitContextError("fetch", err)
 	}
 	trunkSHA, err := a.repo.Head("refs/remotes/" + remote + "/" + *trunk)
 	if err != nil {
@@ -791,16 +915,9 @@ func (a *application) sync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	number, err := a.stackNumber(state)
+	number, err := a.boundStackNumber(state, false)
 	if err != nil {
 		return err
-	}
-	branches := []string{state.Trunk}
-	for _, layer := range state.Layers {
-		branches = append(branches, layer.Branch)
-	}
-	if err := a.repo.Fetch(state.Remote, branches); err != nil {
-		return fail(6, "remote_failed", "%v", err)
 	}
 	client, err := a.client(state)
 	if err != nil {
@@ -810,43 +927,28 @@ func (a *application) sync(ctx context.Context) error {
 	if err != nil {
 		return mapAPIError(err)
 	}
+	landedPulls := make(map[int64]bool, len(server.Entries))
+	for _, entry := range server.Entries {
+		if entry.PullRequest != nil && entry.LandedSHA != "" {
+			landedPulls[entry.PullRequest.Index] = true
+		}
+	}
+	branches := []string{state.Trunk}
+	for _, layer := range state.Layers {
+		if layer.LandedSHA == "" && !landedPulls[layer.PullRequest] {
+			branches = append(branches, layer.Branch)
+		}
+	}
+	if err := a.repo.FetchContext(ctx, state.Remote, branches); err != nil {
+		return mapGitContextError("fetch", err)
+	}
 	trunkSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk)
 	if err != nil {
 		return err
 	}
-	needsRestack := make([]string, 0)
-	needsReconciliation := make([]string, 0)
-	entriesByPull := make(map[int64]*api.PullRequestStackEntry, len(server.Entries))
-	for _, entry := range server.Entries {
-		if entry.PullRequest != nil {
-			entriesByPull[entry.PullRequest.Index] = entry
-		}
-	}
-	openParent := trunkSHA
-	for i := range state.Layers {
-		layer := &state.Layers[i]
-		localHead, _ := a.repo.Head(layer.Branch)
-		remoteSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + layer.Branch)
-		entry := entriesByPull[layer.PullRequest]
-		if err == nil && remoteLeaseCanAdvance(a.repo, localHead, layer.RemoteSHA, remoteSHA, entry) {
-			layer.RemoteSHA = remoteSHA
-		}
-		if entry != nil {
-			layer.LandedSHA = entry.LandedSHA
-		}
-		if layer.LandedSHA != "" {
-			openParent = trunkSHA
-			continue
-		}
-		if remoteSHA != "" && remoteSHA != layer.RemoteSHA {
-			needsReconciliation = append(needsReconciliation, layer.Branch)
-		}
-		if layer.ParentSHA != openParent {
-			needsRestack = append(needsRestack, layer.Branch)
-		}
-		if remoteSHA != "" {
-			openParent = remoteSHA
-		}
+	needsRestack, needsReconciliation, err := a.updateSyncState(state, server, trunkSHA)
+	if err != nil {
+		return err
 	}
 	state.LastRevision, state.LastSyncedTrunkSHA = server.Revision, trunkSHA
 	if err := a.store.Save(state); err != nil {
@@ -860,6 +962,45 @@ func (a *application) sync(ctx context.Context) error {
 	}
 	a.success(map[string]any{"stack": state, "needs_restack": needsRestack, "needs_reconciliation": needsReconciliation})
 	return nil
+}
+
+func (a *application) updateSyncState(state *localstate.State, server *api.PullRequestStack, trunkSHA string) ([]string, []string, error) {
+	needsRestack := make([]string, 0)
+	needsReconciliation := make([]string, 0)
+	entriesByPull := make(map[int64]*api.PullRequestStackEntry, len(server.Entries))
+	for _, entry := range server.Entries {
+		if entry.PullRequest != nil {
+			entriesByPull[entry.PullRequest.Index] = entry
+		}
+	}
+	openParent := trunkSHA
+	for i := range state.Layers {
+		layer := &state.Layers[i]
+		entry := entriesByPull[layer.PullRequest]
+		if entry != nil {
+			layer.LandedSHA = entry.LandedSHA
+		}
+		if layer.LandedSHA != "" {
+			openParent = trunkSHA
+			continue
+		}
+		localHead, err := a.repo.Head(layer.Branch)
+		if err != nil {
+			return nil, nil, err
+		}
+		remoteSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + layer.Branch)
+		if err == nil && remoteLeaseCanAdvance(a.repo, localHead, layer.RemoteSHA, remoteSHA, entry) {
+			layer.RemoteSHA = remoteSHA
+		}
+		if remoteSHA != "" && remoteSHA != layer.RemoteSHA {
+			needsReconciliation = append(needsReconciliation, layer.Branch)
+		}
+		if layer.ParentSHA != openParent {
+			needsRestack = append(needsRestack, layer.Branch)
+		}
+		openParent = localHead
+	}
+	return needsRestack, needsReconciliation, nil
 }
 
 func remoteLeaseCanAdvance(repo gitx.Repo, localHead, acceptedHead, remoteHead string, entry *api.PullRequestStackEntry) bool {
@@ -880,7 +1021,7 @@ func remoteLeaseCanAdvance(repo gitx.Repo, localHead, acceptedHead, remoteHead s
 	return err == nil && acceptedTree != "" && acceptedTree == remoteTree
 }
 
-func (a *application) restack(args []string) error {
+func (a *application) restack(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("restack", flag.ContinueOnError)
 	continueFlag := flags.Bool("continue", false, "continue a conflicted restack")
 	abortFlag := flags.Bool("abort", false, "abort and restore all layers")
@@ -904,10 +1045,10 @@ func (a *application) restack(args []string) error {
 		return nil
 	}
 	if *abortFlag {
-		return a.abortRestack()
+		return a.abortRestack(ctx)
 	}
 	if *continueFlag {
-		return a.continueRestack()
+		return a.continueRestack(ctx)
 	}
 	if a.store.RestackExists() {
 		return fail(3, "restack_in_progress", "restack already in progress")
@@ -975,10 +1116,10 @@ func (a *application) restack(args []string) error {
 	if err := a.store.SaveRestack(progress); err != nil {
 		return err
 	}
-	return a.runRestack(state, progress)
+	return a.runRestack(ctx, state, progress)
 }
 
-func (a *application) runRestack(state *localstate.State, progress *localstate.Restack) error {
+func (a *application) runRestack(ctx context.Context, state *localstate.State, progress *localstate.Restack) error {
 	for progress.Current < len(progress.Layers) {
 		layer := &progress.Layers[progress.Current]
 		if progress.Current > 0 {
@@ -989,7 +1130,10 @@ func (a *application) runRestack(state *localstate.State, progress *localstate.R
 			return err
 		}
 		a.progress("restacking %s onto %s", layer.Branch, short(layer.NewBase))
-		if err := a.repo.Rebase(layer.OldBase, layer.NewBase, layer.Branch, progress.Sign); err != nil {
+		if err := a.repo.RebaseContext(ctx, layer.OldBase, layer.NewBase, layer.Branch, progress.Sign); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return mapGitContextError("rebase", err)
+			}
 			if !a.repo.RebaseActive() && len(a.repo.ConflictedFiles()) == 0 {
 				progress.Phase = "failed"
 				_ = a.store.SaveRestack(progress)
@@ -1014,14 +1158,17 @@ func (a *application) runRestack(state *localstate.State, progress *localstate.R
 	return a.finishRestack(state, progress)
 }
 
-func (a *application) continueRestack() error {
+func (a *application) continueRestack(ctx context.Context) error {
 	progress, err := a.store.LoadRestack()
 	if err != nil || (progress.Phase != "conflicted" && progress.Phase != "running" && progress.Phase != "failed") || progress.Current >= len(progress.Layers) {
 		return fail(3, "precondition", "no conflicted restack to continue")
 	}
 	layer := &progress.Layers[progress.Current]
 	if a.repo.RebaseActive() {
-		if err := a.repo.RebaseContinue(); err != nil {
+		if err := a.repo.RebaseContinueContext(ctx); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return mapGitContextError("rebase --continue", err)
+			}
 			_ = a.store.SaveRestack(progress)
 			return fail(5, "restack_conflict", "%s conflicts: %s", layer.Branch, strings.Join(a.repo.ConflictedFiles(), ", "))
 		}
@@ -1036,9 +1183,9 @@ func (a *application) continueRestack() error {
 			if stateErr != nil {
 				return stateErr
 			}
-			return a.runRestack(state, progress)
+			return a.runRestack(ctx, state, progress)
 		}
-		return a.abortRestack()
+		return a.abortRestack(ctx)
 	}
 	layer.NewHead, layer.State = newHead, "done"
 	progress.Current++
@@ -1049,16 +1196,19 @@ func (a *application) continueRestack() error {
 	if err != nil {
 		return err
 	}
-	return a.runRestack(state, progress)
+	return a.runRestack(ctx, state, progress)
 }
 
-func (a *application) abortRestack() error {
+func (a *application) abortRestack(ctx context.Context) error {
 	progress, err := a.store.LoadRestack()
 	if err != nil {
 		return fail(3, "precondition", "no restack to abort")
 	}
 	if a.repo.RebaseActive() {
-		if err := a.repo.RebaseAbort(); err != nil {
+		if err := a.repo.RebaseAbortContext(ctx); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return mapGitContextError("rebase --abort", err)
+			}
 			return err
 		}
 	}
@@ -1134,7 +1284,11 @@ func (a *application) serverRebase(ctx context.Context, args []string) error {
 	if err := flags.Parse(args); err != nil || !*serverFlag {
 		return fail(2, "usage", "rebase requires --server")
 	}
-	state, err := a.state()
+	state, _, err := a.optionalState()
+	if err != nil {
+		return err
+	}
+	number, err := a.serverStackNumber(state)
 	if err != nil {
 		return err
 	}
@@ -1144,13 +1298,13 @@ func (a *application) serverRebase(ctx context.Context, args []string) error {
 	}
 	expected := *revision
 	if expected == 0 {
-		server, err := client.GetStack(ctx, state.Stack)
+		server, err := client.GetStack(ctx, number)
 		if err != nil {
 			return mapAPIError(err)
 		}
 		expected = server.Revision
 	}
-	op, err := client.StartRebase(ctx, state.Stack, expected, *through)
+	op, err := client.StartRebase(ctx, number, expected, *through)
 	if err != nil {
 		return mapAPIError(err)
 	}
@@ -1171,6 +1325,10 @@ func (a *application) land(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	number, err := a.boundStackNumber(state, false)
+	if err != nil {
+		return err
+	}
 	through, err := throughIndex(state, *throughValue)
 	if err != nil {
 		return err
@@ -1181,7 +1339,7 @@ func (a *application) land(ctx context.Context, args []string) error {
 	}
 	expected := *revision
 	if expected == 0 {
-		server, err := client.GetStack(ctx, state.Stack)
+		server, err := client.GetStack(ctx, number)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -1190,14 +1348,14 @@ func (a *application) land(ctx context.Context, args []string) error {
 		}
 		expected = server.Revision
 	}
-	op, err := client.StartLand(ctx, state.Stack, expected, through, *mergeStyle)
+	op, err := client.StartLand(ctx, number, expected, through, *mergeStyle)
 	if err != nil {
 		return mapAPIError(err)
 	}
 	if *wait {
 		waitCtx, cancel := context.WithTimeout(ctx, *timeout)
 		defer cancel()
-		op, err = client.WaitOperation(waitCtx, state.Stack, op.Number, 3*time.Second)
+		op, err = client.WaitOperation(waitCtx, number, op.Number, 3*time.Second)
 		if err != nil {
 			return err
 		}
@@ -1212,7 +1370,11 @@ func (a *application) operation(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fail(2, "usage", "op requires list, status, wait, cancel, or retry")
 	}
-	state, err := a.state()
+	state, _, err := a.optionalState()
+	if err != nil {
+		return err
+	}
+	stackNumber, err := a.serverStackNumber(state)
 	if err != nil {
 		return err
 	}
@@ -1221,7 +1383,7 @@ func (a *application) operation(ctx context.Context, args []string) error {
 		return err
 	}
 	if args[0] == "list" {
-		ops, err := client.ListOperations(ctx, state.Stack, 1, 100)
+		ops, err := client.ListOperations(ctx, stackNumber, 1, 100)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -1243,18 +1405,18 @@ func (a *application) operation(ctx context.Context, args []string) error {
 	var op *api.PullRequestStackOperation
 	switch args[0] {
 	case "status":
-		op, err = client.GetOperation(ctx, state.Stack, number)
+		op, err = client.GetOperation(ctx, stackNumber, number)
 	case "wait":
 		waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
-		op, err = client.WaitOperation(waitCtx, state.Stack, number, 3*time.Second)
+		op, err = client.WaitOperation(waitCtx, stackNumber, number, 3*time.Second)
 	case "cancel":
-		err = client.CancelOperation(ctx, state.Stack, number)
+		err = client.CancelOperation(ctx, stackNumber, number)
 		if err == nil {
-			op, err = client.GetOperation(ctx, state.Stack, number)
+			op, err = client.GetOperation(ctx, stackNumber, number)
 		}
 	case "retry":
-		op, err = client.RetryOperation(ctx, state.Stack, number)
+		op, err = client.RetryOperation(ctx, stackNumber, number)
 	default:
 		return fail(2, "usage", "unknown op command %q", args[0])
 	}
@@ -1285,28 +1447,32 @@ func (a *application) unstack(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	number, err := a.boundStackNumber(state, false)
+	if err != nil {
+		return err
+	}
 	client, err := a.client(state)
 	if err != nil {
 		return err
 	}
 	expected := *revision
 	if expected == 0 {
-		server, err := client.GetStack(ctx, state.Stack)
+		server, err := client.GetStack(ctx, number)
 		if err != nil {
 			return mapAPIError(err)
 		}
 		expected = server.Revision
 	}
-	if err := client.Unstack(ctx, state.Stack, expected); err != nil {
+	if err := client.Unstack(ctx, number, expected); err != nil {
 		return mapAPIError(err)
 	}
 	if err := a.store.Remove(); err != nil {
 		return err
 	}
 	if !a.jsonOutput {
-		fmt.Fprintf(os.Stdout, "unstacked S%d; branches and pull requests were kept\n", state.Stack)
+		fmt.Fprintf(os.Stdout, "unstacked S%d; branches and pull requests were kept\n", number)
 	}
-	a.success(map[string]int64{"stack": state.Stack})
+	a.success(map[string]int64{"stack": number})
 	return nil
 }
 
