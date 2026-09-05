@@ -712,16 +712,6 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 
 // MergedManually mark pr as merged manually
 func MergedManually(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, baseGitRepo *git.Repository, commitID string) error {
-	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
-	if err != nil {
-		return err
-	}
-	if stack != nil && stack.ActiveOperationID != 0 {
-		return ErrPullRequestStacked
-	}
-	if err := checkStackMergeOrder(ctx, pr); err != nil {
-		return err
-	}
 	releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(pr.ID))
 	if err != nil {
 		log.Error("lock.Lock(): %v", err)
@@ -730,6 +720,22 @@ func MergedManually(ctx context.Context, pr *issues_model.PullRequest, doer *use
 	defer releaser()
 
 	err = db.WithTx(ctx, func(ctx context.Context) error {
+		stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+		if err != nil {
+			return err
+		}
+		if stack != nil {
+			if stack.ActiveOperationID != 0 {
+				return ErrPullRequestStacked
+			}
+			// The row write serializes marking a merge with operation reservation.
+			if err := issues_model.AdvanceStackRevision(ctx, stack.ID, stack.Revision); err != nil {
+				return err
+			}
+		}
+		if err := checkStackMergeOrder(ctx, pr); err != nil {
+			return err
+		}
 		if err := pr.LoadBaseRepo(ctx); err != nil {
 			return err
 		}
@@ -771,6 +777,9 @@ func MergedManually(ctx context.Context, pr *issues_model.PullRequest, doer *use
 			return err
 		} else if !merged {
 			return errors.New("SetMerged failed")
+		}
+		if stack != nil {
+			return issues_model.RecordStackManualMerge(ctx, stack.ID, stack.Revision+1, pr)
 		}
 		return nil
 	})

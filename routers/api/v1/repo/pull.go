@@ -925,6 +925,8 @@ func MergePullRequest(ctx *context.APIContext) {
 	//     "$ref": "#/responses/empty"
 	//   "409":
 	//     "$ref": "#/responses/error"
+	//   "422":
+	//     "$ref": "#/responses/error"
 	//   "423":
 	//     "$ref": "#/responses/repoArchivedError"
 
@@ -1045,6 +1047,10 @@ func MergePullRequest(ctx *context.APIContext) {
 				return
 			} else if pull_model.IsErrAlreadyScheduledToAutoMerge(err) {
 				ctx.APIError(http.StatusConflict, err.Error())
+				return
+			}
+			if message, status := util.ErrorUnwrapForUser(err); message != "" {
+				ctx.APIError(status, message)
 				return
 			}
 			ctx.APIErrorInternal(err)

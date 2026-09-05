@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 
-	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/modules/setting"
@@ -47,12 +46,12 @@ func stackServiceError(ctx *context.APIContext, stackID int64, err error) {
 		ctx.APIError(http.StatusForbidden, err.Error())
 		return
 	}
-	if message, status := util.ErrorUnwrapForUser(err); message != "" {
-		ctx.APIError(status, message)
+	if errors.Is(err, issues_model.ErrStackNotExist) || errors.Is(err, util.ErrNotExist) {
+		ctx.APIErrorNotFound()
 		return
 	}
-	if errors.Is(err, issues_model.ErrStackNotExist) || errors.Is(err, db.ErrNotExist{}) {
-		ctx.APIErrorNotFound()
+	if message, status := util.ErrorUnwrapForUser(err); message != "" {
+		ctx.APIError(status, message)
 		return
 	}
 	ctx.APIError(http.StatusUnprocessableEntity, err.Error())

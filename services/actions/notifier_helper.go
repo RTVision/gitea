@@ -801,6 +801,6 @@ func detectScopedWorkflowsForSource(
 	if err != nil {
 		return nil, nil, err
 	}
-	detected, filtered = actions_module.MatchScopedWorkflows(ctx, parsed, sourceCommitSHA, consumerGitRepo, consumerCommit, input.Event, input.Payload)
+	detected, filtered = actions_module.MatchScopedWorkflows(ctx, parsed, sourceCommitSHA, consumerGitRepo, consumerCommit, input.Event, workflowMatchPayload(input.Payload))
 	return detected, filtered, nil
 }

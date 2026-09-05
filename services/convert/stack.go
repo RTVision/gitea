@@ -13,6 +13,7 @@ import (
 	api "gitea.dev/modules/structs"
 )
 
+// ToAPIPullRequestStackRef returns the PR's current stack membership.
 func ToAPIPullRequestStackRef(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil || stack == nil {
@@ -32,6 +33,14 @@ func ToAPIPullRequestStackRef(ctx context.Context, pr *issues_model.PullRequest)
 	if position == 0 {
 		return nil, issues_model.ErrInvalidStack
 	}
+	base, err := stackTrunkBase(ctx, stack, entries, pr)
+	if err != nil {
+		return nil, err
+	}
+	return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: position, Base: base}, nil
+}
+
+func stackTrunkBase(ctx context.Context, stack *issues_model.PullRequestStack, entries []*issues_model.StackEntry, pr *issues_model.PullRequest) (*api.PullRequestStackBase, error) {
 	if err := pr.LoadBaseRepo(ctx); err != nil {
 		return nil, err
 	}
@@ -52,17 +61,10 @@ func ToAPIPullRequestStackRef(ctx context.Context, pr *issues_model.PullRequest)
 			}
 		}
 	}
-	return &api.PullRequestStackRef{
-		Number:   stack.ID,
-		Size:     len(entries),
-		Position: position,
-		Base: &api.PullRequestStackBase{
-			Ref: stack.TrunkBranch,
-			Sha: trunkSHA,
-		},
-	}, nil
+	return &api.PullRequestStackBase{Ref: stack.TrunkBranch, Sha: trunkSHA}, nil
 }
 
+// ToAPIPullRequestStack converts a stack and its per-layer pull requests.
 func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestStack, doer *user_model.User) (*api.PullRequestStack, error) {
 	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
 	if err != nil {
@@ -75,6 +77,27 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 		Revision:        stack.Revision,
 		ActiveOperation: stack.ActiveOperationID,
 		Entries:         make([]*api.PullRequestStackEntry, 0, len(entries)),
+	}
+	var base *api.PullRequestStackBase
+	positions := make(map[int64]int, len(entries))
+	for _, entry := range entries {
+		positions[entry.PullRequestID] = entry.Position
+	}
+	stackRef := func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
+		membership, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+		if err != nil || membership == nil {
+			return nil, err
+		}
+		if membership.ID != stack.ID {
+			return ToAPIPullRequestStackRef(ctx, pr)
+		}
+		if base == nil {
+			base, err = stackTrunkBase(ctx, stack, entries, pr)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: positions[pr.ID], Base: base}, nil
 	}
 	for _, entry := range entries {
 		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
@@ -94,7 +117,7 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 		}
 		converted.Entries = append(converted.Entries, &api.PullRequestStackEntry{
 			Position:          entry.Position,
-			PullRequest:       ToAPIPullRequest(ctx, pr, doer),
+			PullRequest:       toAPIPullRequest(ctx, pr, doer, stackRef),
 			ParentPullRequest: parentIndex,
 			HeadSHA:           entry.HeadSHA,
 			ParentSHA:         entry.OldParentSHA,
@@ -104,7 +127,12 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 	return converted, nil
 }
 
+// ToAPIPullRequestStackOperation converts a durable operation and its journal.
 func ToAPIPullRequestStackOperation(op *issues_model.StackOperation) *api.PullRequestStackOperation {
+	var journal []byte
+	if op.JournalJSON != "" {
+		journal = []byte(op.JournalJSON)
+	}
 	return &api.PullRequestStackOperation{
 		Number:           op.ID,
 		StackNumber:      op.StackID,
@@ -115,7 +143,7 @@ func ToAPIPullRequestStackOperation(op *issues_model.StackOperation) *api.PullRe
 		Completed:        op.Completed,
 		MergeStyle:       op.MergeStyle,
 		Error:            op.LastError,
-		Journal:          []byte(op.JournalJSON),
+		Journal:          journal,
 		Created:          op.CreatedUnix.AsTimePtr(),
 		Updated:          op.UpdatedUnix.AsTimePtr(),
 	}
