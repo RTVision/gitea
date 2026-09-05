@@ -24143,6 +24143,9 @@
           },
           "404": {
             "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Delete an issue",
