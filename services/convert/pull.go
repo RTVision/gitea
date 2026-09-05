@@ -260,6 +260,7 @@ func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 	if pr.HasMerged {
 		apiPullRequest.Merged = pr.MergedUnix.AsTimePtr()
 		apiPullRequest.MergedCommitID = &pr.MergedCommitID
+		apiPullRequest.MergedBaseCommitID = pr.MergedBaseCommitID
 		apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 	}
 
@@ -465,6 +466,7 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 		if pr.HasMerged {
 			apiPullRequest.Merged = pr.MergedUnix.AsTimePtr()
 			apiPullRequest.MergedCommitID = &pr.MergedCommitID
+			apiPullRequest.MergedBaseCommitID = pr.MergedBaseCommitID
 			apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 		}
 

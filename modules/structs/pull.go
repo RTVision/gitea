@@ -67,6 +67,8 @@ type PullRequest struct {
 	Merged *time.Time `json:"merged_at"`
 	// The SHA of the merge commit
 	MergedCommitID *string `json:"merge_commit_sha"`
+	// The base branch SHA immediately before a server-managed merge, when recorded.
+	MergedBaseCommitID string `json:"merge_base_commit_sha,omitempty"`
 	// The user who merged the pull request
 	MergedBy *User `json:"merged_by"`
 	// Whether maintainers can edit the pull request
