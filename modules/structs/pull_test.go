@@ -16,12 +16,16 @@ func TestPullRequestTrackingFieldsNullable(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"review_decision":null,"checks_state":null}`), &pullRequest))
 	assert.Nil(t, pullRequest.ReviewDecision)
 	assert.Nil(t, pullRequest.ChecksState)
+	payload, err := json.Marshal(&pullRequest)
+	require.NoError(t, err)
+	assert.NotContains(t, string(payload), `"review_decision"`)
+	assert.NotContains(t, string(payload), `"checks_state"`)
 
 	reviewDecision := PullRequestReviewApproved
 	checksState := PullRequestChecksPassing
 	pullRequest.ReviewDecision = &reviewDecision
 	pullRequest.ChecksState = &checksState
-	payload, err := json.Marshal(&pullRequest)
+	payload, err = json.Marshal(&pullRequest)
 	require.NoError(t, err)
 	assert.Contains(t, string(payload), `"review_decision":"approved"`)
 	assert.Contains(t, string(payload), `"checks_state":"passing"`)

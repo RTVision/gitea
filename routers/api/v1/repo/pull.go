@@ -164,7 +164,7 @@ func ListPullRequests(ctx *context.APIContext) {
 
 	ctx.SetLinkHeader(maxResults, listOptions.PageSize)
 	ctx.SetTotalCountHeader(maxResults)
-	ctx.JSON(http.StatusOK, &apiPrs)
+	ctx.JSON(http.StatusOK, pullRequestListResponse(ctx, apiPrs))
 }
 
 // GetPullRequest returns a single PR based on index
@@ -233,7 +233,7 @@ func GetPullRequest(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	ctx.JSON(http.StatusOK, apiPr)
+	ctx.JSON(http.StatusOK, pullRequestResponse(ctx, apiPr))
 }
 
 // GetPullRequest returns a single PR based on index
@@ -336,7 +336,7 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	ctx.JSON(http.StatusOK, apiPr)
+	ctx.JSON(http.StatusOK, pullRequestResponse(ctx, apiPr))
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch

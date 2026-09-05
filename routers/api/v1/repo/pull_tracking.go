@@ -10,6 +10,38 @@ import (
 	"gitea.dev/services/pull"
 )
 
+type pullRequestTrackingResponse struct {
+	*api.PullRequest
+	ReviewDecision *api.PullRequestReviewDecision `json:"review_decision"`
+	ChecksState    *api.PullRequestChecksState    `json:"checks_state"`
+}
+
+func newPullRequestTrackingResponse(apiPr *api.PullRequest) *pullRequestTrackingResponse {
+	return &pullRequestTrackingResponse{
+		PullRequest:    apiPr,
+		ReviewDecision: apiPr.ReviewDecision,
+		ChecksState:    apiPr.ChecksState,
+	}
+}
+
+func pullRequestResponse(ctx *context.APIContext, apiPr *api.PullRequest) any {
+	if !ctx.FormBool("include_tracking") {
+		return apiPr
+	}
+	return newPullRequestTrackingResponse(apiPr)
+}
+
+func pullRequestListResponse(ctx *context.APIContext, apiPrs []*api.PullRequest) any {
+	if !ctx.FormBool("include_tracking") {
+		return apiPrs
+	}
+	response := make([]*pullRequestTrackingResponse, 0, len(apiPrs))
+	for _, apiPr := range apiPrs {
+		response = append(response, newPullRequestTrackingResponse(apiPr))
+	}
+	return response
+}
+
 func enrichPullRequestTrackingSummaries(ctx *context.APIContext, prs issues.PullRequestList, apiPrs []*api.PullRequest) error {
 	if !ctx.FormBool("include_tracking") || len(prs) == 0 {
 		return nil
