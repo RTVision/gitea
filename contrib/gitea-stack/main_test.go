@@ -4,25 +4,22 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"gitea.dev/contrib/gitea-stack/internal/gitx"
+	"gitea.dev/contrib/gitea-stack/internal/localstate"
+	"gitea.dev/modules/json"
 	api "gitea.dev/modules/structs"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestRemoteLeaseCanAdvance(t *testing.T) {
-	serverRewrite := &api.PullRequestStackEntry{HeadSHA: "server-head"}
-	assert.True(t, remoteLeaseCanAdvance("old-local", "server-head", serverRewrite))
-	assert.True(t, remoteLeaseCanAdvance("unchanged", "unchanged", serverRewrite))
-	assert.False(t, remoteLeaseCanAdvance("old-local", "developer-head", serverRewrite))
-	assert.False(t, remoteLeaseCanAdvance("old-local", "", serverRewrite))
-}
 
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -115,4 +112,89 @@ func TestCompiledCLIReleasesLockAndContinuesConflict(t *testing.T) {
 	featureHead := trimLine(runGit(t, repo, "rev-parse", "feature"))
 	_, err := exec.Command("git", "-C", repo, "merge-base", "--is-ancestor", newTrunk, featureHead).CombinedOutput()
 	assert.NoError(t, err)
+}
+
+func TestSyncRemoteLeaseContentSafety(t *testing.T) {
+	for _, scenario := range []string{"added-content", "whitespace", "topology-only"} {
+		t.Run(scenario, func(t *testing.T) {
+			root := t.TempDir()
+			work, remote := filepath.Join(root, "work"), filepath.Join(root, "owner", "repo.git")
+			runGit(t, root, "init", "--bare", remote)
+			runGit(t, root, "init", "-b", "main", work)
+			runGit(t, work, "config", "user.name", "Stack Test")
+			runGit(t, work, "config", "user.email", "stack@example.test")
+			writeFile(t, filepath.Join(work, "base.txt"), "base\n")
+			trunk := commitGit(t, work, "trunk")
+			writeFile(t, filepath.Join(work, "parent.txt"), "parent\n")
+			parent := commitGit(t, work, "parent")
+			runGit(t, work, "switch", "-c", "feature")
+			writeFile(t, filepath.Join(work, "feature.txt"), "feature\n")
+			accepted := commitGit(t, work, "feature")
+			runGit(t, work, "remote", "add", "origin", "file://localhost"+filepath.ToSlash(remote))
+			runGit(t, work, "push", "origin", "main", "feature")
+			writeFile(t, filepath.Join(work, "local.txt"), "unpublished\n")
+			local := commitGit(t, work, "unpublished local change")
+
+			var serverHead string
+			if scenario == "topology-only" {
+				newTrunk := trimLine(runGit(t, work, "commit-tree", parent+"^{tree}", "-p", trunk, "-m", "squashed parent"))
+				serverHead = trimLine(runGit(t, work, "commit-tree", accepted+"^{tree}", "-p", newTrunk, "-m", "server rebase"))
+				runGit(t, work, "push", "origin", newTrunk+":refs/heads/main", "--force")
+			} else {
+				runGit(t, work, "switch", "--detach", accepted)
+				if scenario == "whitespace" {
+					writeFile(t, filepath.Join(work, "feature.txt"), "feature \n")
+				} else {
+					writeFile(t, filepath.Join(work, "other.txt"), "other developer\n")
+				}
+				serverHead = commitGit(t, work, "other developer change")
+				runGit(t, work, "switch", "feature")
+			}
+			runGit(t, work, "push", "origin", serverHead+":refs/heads/feature", "--force")
+			entry := &api.PullRequestStackEntry{HeadSHA: serverHead, PullRequest: &api.PullRequest{Index: 1}}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/repos/owner/repo/stacks/1" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Revision: 2, Entries: []*api.PullRequestStackEntry{entry}})
+			}))
+			defer server.Close()
+			t.Setenv("GITEA_URL", server.URL)
+			t.Setenv("GITEA_TOKEN", "test-token")
+			repo := gitx.Repo{Dir: work}
+			store, err := localstate.Open(repo)
+			require.NoError(t, err)
+			state := &localstate.State{Stack: 1, Remote: "origin", Trunk: "main", Layers: []localstate.Layer{{Branch: "feature", PullRequest: 1, HeadSHA: accepted, RemoteSHA: accepted, ParentSHA: parent}}}
+			require.NoError(t, store.Save(state))
+			app := &application{repo: repo, store: store, jsonOutput: true, quiet: true}
+			require.NoError(t, app.sync(t.Context()))
+			state, err = store.Load()
+			require.NoError(t, err)
+			assert.Equal(t, local, trimLine(runGit(t, work, "rev-parse", "feature")), "sync preserves unpublished local commits")
+			if scenario != "topology-only" {
+				assert.Equal(t, accepted, state.Layers[0].RemoteSHA)
+				err := app.pushLayers(state, 1)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "remote branch feature moved")
+				assert.Equal(t, serverHead, trimLine(runGit(t, remote, "rev-parse", "feature")))
+				return
+			}
+			assert.Equal(t, serverHead, state.Layers[0].RemoteSHA)
+			assert.False(t, remoteLeaseCanAdvance(repo, local, "", serverHead, entry))
+			assert.False(t, remoteLeaseCanAdvance(repo, local, "missing-object", serverHead, entry))
+			assert.False(t, remoteLeaseCanAdvance(repo, local, accepted, serverHead, nil))
+			assert.False(t, remoteLeaseCanAdvance(repo, local, accepted, "missing-object", &api.PullRequestStackEntry{HeadSHA: "missing-object"}))
+			assert.True(t, remoteLeaseCanAdvance(repo, serverHead, "", serverHead, nil))
+			require.NoError(t, app.restack([]string{"--no-sign"}))
+			state, err = store.Load()
+			require.NoError(t, err)
+			require.NoError(t, app.pushLayers(state, 1))
+			assert.Equal(t, "unpublished\n", runGit(t, remote, "show", "feature:local.txt"))
+			assert.Equal(t, "feature\n", runGit(t, remote, "show", "feature:feature.txt"))
+			assert.Equal(t, "parent\n", runGit(t, remote, "show", "feature:parent.txt"))
+			assert.Equal(t, "2", trimLine(runGit(t, remote, "rev-list", "--count", "main..feature")), "only feature and unpublished commits are replayed")
+		})
+	}
 }

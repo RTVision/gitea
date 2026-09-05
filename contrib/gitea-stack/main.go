@@ -815,6 +815,7 @@ func (a *application) sync(ctx context.Context) error {
 		return err
 	}
 	needsRestack := make([]string, 0)
+	needsReconciliation := make([]string, 0)
 	entriesByPull := make(map[int64]*api.PullRequestStackEntry, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil {
@@ -827,7 +828,7 @@ func (a *application) sync(ctx context.Context) error {
 		localHead, _ := a.repo.Head(layer.Branch)
 		remoteSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + layer.Branch)
 		entry := entriesByPull[layer.PullRequest]
-		if err == nil && remoteLeaseCanAdvance(localHead, remoteSHA, entry) {
+		if err == nil && remoteLeaseCanAdvance(a.repo, localHead, layer.RemoteSHA, remoteSHA, entry) {
 			layer.RemoteSHA = remoteSHA
 		}
 		if entry != nil {
@@ -836,6 +837,9 @@ func (a *application) sync(ctx context.Context) error {
 		if layer.LandedSHA != "" {
 			openParent = trunkSHA
 			continue
+		}
+		if remoteSHA != "" && remoteSHA != layer.RemoteSHA {
+			needsReconciliation = append(needsReconciliation, layer.Branch)
 		}
 		if layer.ParentSHA != openParent {
 			needsRestack = append(needsRestack, layer.Branch)
@@ -850,13 +854,30 @@ func (a *application) sync(ctx context.Context) error {
 	}
 	if !a.jsonOutput {
 		fmt.Fprintf(os.Stdout, "S%d rev %d; restack: %s\n", number, server.Revision, strings.Join(needsRestack, ", "))
+		if len(needsReconciliation) != 0 {
+			fmt.Fprintf(os.Stdout, "Reconcile remote changes before pushing: %s; previous leases retained\n", strings.Join(needsReconciliation, ", "))
+		}
 	}
-	a.success(map[string]any{"stack": state, "needs_restack": needsRestack})
+	a.success(map[string]any{"stack": state, "needs_restack": needsRestack, "needs_reconciliation": needsReconciliation})
 	return nil
 }
 
-func remoteLeaseCanAdvance(localHead, remoteHead string, entry *api.PullRequestStackEntry) bool {
-	return remoteHead != "" && (remoteHead == localHead || entry != nil && remoteHead == entry.HeadSHA)
+func remoteLeaseCanAdvance(repo gitx.Repo, localHead, acceptedHead, remoteHead string, entry *api.PullRequestStackEntry) bool {
+	if remoteHead == "" {
+		return false
+	}
+	if remoteHead == localHead {
+		return true
+	}
+	if acceptedHead == "" || entry == nil || remoteHead != entry.HeadSHA {
+		return false
+	}
+	acceptedTree, err := repo.Run(nil, "rev-parse", "--verify", "--end-of-options", acceptedHead+"^{tree}")
+	if err != nil {
+		return false
+	}
+	remoteTree, err := repo.Run(nil, "rev-parse", "--verify", "--end-of-options", remoteHead+"^{tree}")
+	return err == nil && acceptedTree != "" && acceptedTree == remoteTree
 }
 
 func (a *application) restack(args []string) error {

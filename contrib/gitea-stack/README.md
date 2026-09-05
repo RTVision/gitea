@@ -28,7 +28,7 @@ gitea-stack list
 gitea-stack adopt --trunk main --prs '#41,#42'
 ```
 
-`sync` fetches named stack refs and refreshes server state. It never rewrites branches. It adopts a changed remote head as a new push lease only when the local branch already matches it or the server's stack snapshot records that exact head, such as after a durable landing operation rewrites the open suffix. Another user's unrecorded push still requires explicit reconciliation.
+`sync` fetches named stack refs and refreshes server state. It never rewrites branches. It adopts a changed remote head as a new push lease only when the local branch already matches it, or when the server records that exact head and its complete Git tree equals the tree of the previously accepted remote head. This permits topology-only server rewrites while preserving unpublished local commits. A server-recorded head alone is not trusted: changed content (including whitespace), an unknown prior lease, or unavailable objects retain the old lease and require explicit Git reconciliation before pushing. JSON output lists affected open branches in `needs_reconciliation`.
 
 ```sh
 gitea-stack sync
