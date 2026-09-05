@@ -44,6 +44,7 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,
 		DefaultMaxBlobSize:     setting.API.DefaultMaxBlobSize,
 		DefaultMaxResponseSize: setting.API.DefaultMaxResponseSize,
+		Features:               []string{"pull-review-edit", "pull-review-reactions"},
 	})
 }
 

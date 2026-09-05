@@ -41,6 +41,8 @@ type GeneralAPISettings struct {
 	DefaultMaxBlobSize int64 `json:"default_max_blob_size"`
 	// DefaultMaxResponseSize is the default maximum response size
 	DefaultMaxResponseSize int64 `json:"default_max_response_size"`
+	// Features lists additive API capabilities supported by this server.
+	Features []string `json:"features"`
 }
 
 // GeneralAttachmentSettings contains global Attachment settings exposed by API

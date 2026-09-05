@@ -154,6 +154,251 @@ func GetPullReview(ctx *context.APIContext) {
 	ctx.JSON(http.StatusOK, apiReview)
 }
 
+// EditPullReview edits a pull request review summary.
+func EditPullReview(ctx *context.APIContext) {
+	// swagger:operation PATCH /repos/{owner}/{repo}/pulls/{index}/reviews/{id} repository repoEditPullReview
+	// ---
+	// summary: Edit a pull request review summary
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: id
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: body
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/EditPullReviewOption"
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/PullReview"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	review, _, statusSet := prepareSingleReview(ctx)
+	if statusSet {
+		return
+	}
+	if review.ReviewerID != ctx.Doer.ID || review.Dismissed || review.Type == issues_model.ReviewTypeRequest {
+		ctx.Status(http.StatusForbidden)
+		return
+	}
+
+	opts := web.GetForm[*api.EditPullReviewOption](ctx)
+	if err := issues_model.UpdateReviewContent(ctx, review, opts.Body); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	apiReview, err := convert.ToPullReview(ctx, review, ctx.Doer)
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, apiReview)
+}
+
+func pullReviewReactions(ctx *context.APIContext, review *issues_model.Review) {
+	reactions, count, err := issues_model.FindReviewReactions(ctx, review.IssueID, review.ID, utils.GetListOptions(ctx))
+	if err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	if _, err = reactions.LoadUsers(ctx, ctx.Repo.Repository); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	result := make([]api.Reaction, 0, len(reactions))
+	for _, reaction := range reactions {
+		result = append(result, api.Reaction{
+			User:     convert.ToUser(ctx, reaction.User, ctx.Doer),
+			Reaction: reaction.Type,
+			Created:  reaction.CreatedUnix.AsTime(),
+		})
+	}
+	ctx.SetTotalCountHeader(count)
+	ctx.JSON(http.StatusOK, result)
+}
+
+// GetPullReviewReactions lists reactions on a pull request review summary.
+func GetPullReviewReactions(ctx *context.APIContext) {
+	// swagger:operation GET /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/reactions repository repoGetPullReviewReactions
+	// ---
+	// summary: Get reactions on a pull request review summary
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: id
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: page
+	//   in: query
+	//   type: integer
+	// - name: limit
+	//   in: query
+	//   type: integer
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/ReactionList"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	review, _, statusSet := prepareSingleReview(ctx)
+	if !statusSet {
+		pullReviewReactions(ctx, review)
+	}
+}
+
+func changePullReviewReaction(ctx *context.APIContext, isCreate bool) {
+	review, _, statusSet := prepareSingleReview(ctx)
+	if statusSet {
+		return
+	}
+	if review.Issue.IsLocked && !ctx.Repo.Permission.CanWriteIssuesOrPulls(true) {
+		ctx.APIError(http.StatusForbidden, "no permission to change reaction")
+		return
+	}
+
+	form := web.GetForm[*api.EditReactionOption](ctx)
+	if isCreate {
+		reaction, err := issue_service.CreateReviewReaction(ctx, ctx.Doer, review, form.Reaction)
+		if err != nil {
+			if issues_model.IsErrForbiddenIssueReaction(err) || errors.Is(err, user_model.ErrBlockedUser) {
+				ctx.APIError(http.StatusForbidden, err.Error())
+			} else if issues_model.IsErrReactionAlreadyExist(err) {
+				ctx.JSON(http.StatusOK, api.Reaction{
+					User:     convert.ToUser(ctx, ctx.Doer, ctx.Doer),
+					Reaction: reaction.Type,
+					Created:  reaction.CreatedUnix.AsTime(),
+				})
+			} else {
+				ctx.APIErrorInternal(err)
+			}
+			return
+		}
+		ctx.JSON(http.StatusCreated, api.Reaction{
+			User:     convert.ToUser(ctx, ctx.Doer, ctx.Doer),
+			Reaction: reaction.Type,
+			Created:  reaction.CreatedUnix.AsTime(),
+		})
+		return
+	}
+	if err := issues_model.DeleteReviewReaction(ctx, ctx.Doer.ID, review.IssueID, review.ID, form.Reaction); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}
+
+// PostPullReviewReaction adds a reaction to a pull request review summary.
+func PostPullReviewReaction(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/reactions repository repoPostPullReviewReaction
+	// ---
+	// summary: Add a reaction to a pull request review summary
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: id
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: content
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/EditReactionOption"
+	// responses:
+	//   "201":
+	//     "$ref": "#/responses/Reaction"
+	//   "403":
+	//     "$ref": "#/responses/forbidden"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	changePullReviewReaction(ctx, true)
+}
+
+// DeletePullReviewReaction removes a reaction from a pull request review summary.
+func DeletePullReviewReaction(ctx *context.APIContext) {
+	// swagger:operation DELETE /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/reactions repository repoDeletePullReviewReaction
+	// ---
+	// summary: Remove a reaction from a pull request review summary
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: id
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: content
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/EditReactionOption"
+	// responses:
+	//   "204":
+	//     "$ref": "#/responses/empty"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+
+	changePullReviewReaction(ctx, false)
+}
+
 // GetPullReviewComments lists all comments of a pull request review
 func GetPullReviewComments(ctx *context.APIContext) {
 	// swagger:operation GET /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments repository repoGetPullReviewComments
@@ -214,6 +459,27 @@ func CreatePullReviewCommentReply(ctx *context.APIContext) {
 	// - application/json
 	// produces:
 	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: repo
+	//   in: path
+	//   type: string
+	//   required: true
+	// - name: index
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: id
+	//   in: path
+	//   type: integer
+	//   required: true
+	// - name: content
+	//   in: body
+	//   schema:
+	//     "$ref": "#/definitions/EditReactionOption"
 	// parameters:
 	// - name: owner
 	//   in: path
