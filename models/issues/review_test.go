@@ -439,4 +439,20 @@ func TestRecalculateReviewsOfficial(t *testing.T) {
 	assert.NoError(t, issues_model.RecalculateReviewsOfficial(t.Context(), issue))
 	review = unittest.AssertExistsAndLoadBean(t, &issues_model.Review{ID: review.ID})
 	assert.True(t, review.Official)
+
+	stack := &issues_model.PullRequestStack{RepoID: issue.RepoID, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
+	assert.NoError(t, db.Insert(t.Context(), stack))
+	assert.NoError(t, issue.LoadPullRequest(t.Context()))
+	assert.NoError(t, db.Insert(t.Context(), &issues_model.StackBranchClaim{
+		StackID: stack.ID, PullRequestID: issue.PullRequest.ID,
+		BranchKey: issues_model.StackBranchKey(issue.RepoID, issue.PullRequest.HeadBranch),
+	}))
+	assert.NoError(t, db.Insert(t.Context(), &git_model.ProtectedBranch{
+		RepoID: issue.RepoID, RuleName: "release", EnableApprovalsWhitelist: true,
+		ApprovalsWhitelistUserIDs: []int64{2}, RequiredApprovals: 1,
+	}))
+	assert.NoError(t, issues_model.RecalculateReviewsOfficial(t.Context(), issue))
+	review = unittest.AssertExistsAndLoadBean(t, &issues_model.Review{ID: review.ID})
+	assert.False(t, review.Official, "the immediate parent's approval whitelist cannot satisfy trunk policy")
+	assert.Equal(t, "master", issue.PullRequest.BaseBranch)
 }
