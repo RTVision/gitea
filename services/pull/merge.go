@@ -753,7 +753,7 @@ func SetMerged(ctx context.Context, pr *issues_model.PullRequest, mergedCommitID
 		// We need to save all of the data used to compute this merge as it may have already been changed by checkPullRequestBranchMergeable. FIXME: need to set some state to prevent checkPullRequestBranchMergeable from running whilst we are merging.
 		if cnt, err := db.GetEngine(ctx).Where("id = ?", pr.ID).
 			And("has_merged = ?", false).
-			Cols("has_merged, status, merge_base, merged_commit_id, merger_id, merged_unix, conflicted_files").
+			Cols("has_merged, status, merge_base, merged_commit_id, merged_base_commit_id, merger_id, merged_unix, conflicted_files").
 			Update(pr); err != nil {
 			return false, fmt.Errorf("failed to update pr[%d]: %w", pr.ID, err)
 		} else if cnt != 1 {

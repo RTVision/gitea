@@ -1513,6 +1513,7 @@ func Routes() *web.Router {
 							Patch(reqToken(), bind(api.EditPullRequestOption{}), repo.EditPullRequest)
 						m.Get(".{diffType:diff|patch}", repo.DownloadPullDiffOrPatch)
 						m.Post("/update", reqToken(), repo.UpdatePullRequest)
+						m.Post("/revert", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), context.ReferencesGitRepo(), repo.RevertPullRequest)
 						m.Get("/commits", repo.GetPullRequestCommits)
 						m.Get("/files", repo.GetPullRequestFiles)
 						m.Combo("/merge").Get(repo.IsPullRequestMerged).
