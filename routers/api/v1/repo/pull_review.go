@@ -462,27 +462,6 @@ func CreatePullReviewCommentReply(ctx *context.APIContext) {
 	// parameters:
 	// - name: owner
 	//   in: path
-	//   type: string
-	//   required: true
-	// - name: repo
-	//   in: path
-	//   type: string
-	//   required: true
-	// - name: index
-	//   in: path
-	//   type: integer
-	//   required: true
-	// - name: id
-	//   in: path
-	//   type: integer
-	//   required: true
-	// - name: content
-	//   in: body
-	//   schema:
-	//     "$ref": "#/definitions/EditReactionOption"
-	// parameters:
-	// - name: owner
-	//   in: path
 	//   description: owner of the repo
 	//   type: string
 	//   required: true
