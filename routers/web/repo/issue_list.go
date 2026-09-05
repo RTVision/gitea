@@ -315,6 +315,10 @@ func BatchDeleteIssues(ctx *context.Context) {
 	}
 	for _, issue := range issues {
 		if err := issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+			if errors.Is(err, issues_model.ErrStackRevision) {
+				ctx.JSONError(ctx.Tr("repo.pulls.stack_delete_blocked"))
+				return
+			}
 			ctx.ServerError("DeleteIssue", err)
 			return
 		}

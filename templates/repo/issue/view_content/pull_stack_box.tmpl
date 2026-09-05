@@ -1,0 +1,12 @@
+{{$data := $.PullStackData}}
+{{if $data}}
+<div class="timeline-item comment">
+	<div class="timeline-avatar">{{svg "octicon-stack" 40}}</div>
+	<div class="content"><div class="ui segment fitted avatar-content-left-arrow"><div class="merge-section flex-divided-list items-px-default">
+		<div class="item flex-left-right"><h3>{{ctx.Locale.Tr "repo.pulls.part_of_stack" $data.Stack.ID}}</h3>
+			<a href="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a></div>
+		<div class="item"><ol class="tw-pl-5">{{range $data.Entries}}<li class="flex-left-right {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}><a href="{{.Pull.Issue.Link}}">#{{.Pull.Index}} {{.Pull.Issue.Title}}</a><span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span></li>{{end}}</ol></div>
+		{{if $data.Operation}}{{template "repo/stack/status" $}}{{end}}
+	</div></div></div>
+</div>
+{{end}}

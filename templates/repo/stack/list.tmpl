@@ -1,0 +1,30 @@
+{{template "base/head" .}}
+<div role="main" class="page-content repository issue-list">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<div class="list-header flex-text-block">
+			<h1 class="tw-text-xl tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stacks"}}</h1>
+			{{if .CanCreateStack}}<a class="ui small primary button" href="{{.RepoLink}}/pulls/stacks/new">{{ctx.Locale.Tr "repo.pulls.new_stack"}}</a>{{end}}
+		</div>
+		{{if .Stacks}}
+			<div class="issue-list">
+			{{range .Stacks}}
+				<div class="issue-item">
+					<div class="issue-item-icon">{{svg "octicon-stack"}}</div>
+					<div class="issue-item-main">
+						<div class="issue-item-top-row"><a class="title" href="{{$.RepoLink}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" .Stack.ID}}</a>
+							<span class="ui label">{{len .Entries}} {{ctx.Locale.Tr "repo.pulls.stack_entries"}}</span></div>
+						<div class="desc">{{ctx.Locale.Tr "repo.pulls.stack_base" .Stack.TrunkBranch}}</div>
+					</div>
+					{{if .Operation}}<span class="ui basic label">{{ctx.Locale.Tr "repo.pulls.stack_operation" .Operation.State}}</span>{{end}}
+				</div>
+			{{end}}
+			</div>
+			{{template "base/paginate" .}}
+		{{else}}
+			<div class="ui placeholder segment"><div class="ui icon header">{{svg "octicon-stack" 32}}<div class="content">{{ctx.Locale.Tr "repo.pulls.no_stacks"}}<div class="sub header">{{ctx.Locale.Tr "repo.pulls.no_stacks_desc"}}</div></div></div>{{if .CanCreateStack}}<a class="ui primary button" href="{{.RepoLink}}/pulls/stacks/new">{{ctx.Locale.Tr "repo.pulls.new_stack"}}</a>{{end}}</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}
