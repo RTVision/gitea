@@ -688,7 +688,8 @@ func retargetBranchPulls(ctx context.Context, doer *user_model.User, repoID int6
 	for _, pr := range prs {
 		stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 		if err != nil {
-			return err
+			errs = append(errs, err)
+			continue
 		}
 		if stack != nil {
 			continue
