@@ -294,6 +294,164 @@ func TestStatusHeaderDistinguishesUnavailableServer(t *testing.T) {
 	assert.Equal(t, "S12 on main rev 7 op 0", statusHeader(local, &api.PullRequestStack{}))
 }
 
+func TestSubmitRetriesPersistedPullMissingFromStack(t *testing.T) {
+	root := t.TempDir()
+	work := filepath.Join(root, "work")
+	remote := filepath.Join(root, "owner", "repo.git")
+	require.NoError(t, os.MkdirAll(filepath.Dir(remote), 0o700))
+	runGit(t, root, "init", "--bare", remote)
+	runGit(t, root, "init", "-b", "main", work)
+	runGit(t, work, "config", "user.name", "Stack Test")
+	runGit(t, work, "config", "user.email", "stack@example.test")
+	writeFile(t, filepath.Join(work, "base"), "base\n")
+	trunk := commitGit(t, work, "base")
+	runGit(t, work, "switch", "-c", "layer-1")
+	writeFile(t, filepath.Join(work, "lower"), "lower\n")
+	lower := commitGit(t, work, "lower")
+	runGit(t, work, "switch", "-c", "layer-2")
+	writeFile(t, filepath.Join(work, "upper"), "upper\n")
+	upper := commitGit(t, work, "upper")
+	runGit(t, work, "remote", "add", "origin", "file://localhost"+filepath.ToSlash(remote))
+	runGit(t, work, "push", "origin", "main", "layer-1", "layer-2")
+
+	stack := func(revision int64, pulls ...int64) *api.PullRequestStack {
+		entries := make([]*api.PullRequestStackEntry, 0, len(pulls))
+		for i, pull := range pulls {
+			entries = append(entries, &api.PullRequestStackEntry{Position: i + 1, PullRequest: &api.PullRequest{Index: pull}})
+		}
+		return &api.PullRequestStack{Number: 1, Trunk: "main", State: "open", Revision: revision, Entries: entries}
+	}
+	gets, creates, appends := 0, 0, 0
+	serverRevision := int64(4)
+	serverPulls := []int64{1}
+	appendRevisions := make([]int64, 0, 2)
+	appendPulls := make([][]int64, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/capabilities":
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStackCapabilities{Enabled: true})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/1":
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 1, Base: &api.PRBranchInfo{Ref: "main"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/2":
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 2, Base: &api.PRBranchInfo{Ref: "layer-1"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/repos/owner/repo/pulls":
+			creates++
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 2, Base: &api.PRBranchInfo{Ref: "layer-1"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/1":
+			gets++
+			_ = json.NewEncoder(w).Encode(stack(serverRevision, serverPulls...))
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/repos/owner/repo/stacks/1":
+			appends++
+			var option api.EditPullRequestStackOption
+			if err := json.NewDecoder(r.Body).Decode(&option); err != nil {
+				t.Errorf("decode append: %v", err)
+				return
+			}
+			appendRevisions = append(appendRevisions, option.Revision)
+			appendPulls = append(appendPulls, option.PullRequests)
+			if appends == 1 {
+				serverRevision++
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]int64{"revision": serverRevision})
+				return
+			}
+			serverRevision++
+			serverPulls = []int64{1, 2}
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "response lost after append"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("GITEA_URL", server.URL)
+	t.Setenv("GITEA_TOKEN", "test-token")
+	repo := gitx.Repo{Dir: work}
+	store, err := localstate.Open(repo)
+	require.NoError(t, err)
+	require.NoError(t, store.Save(&localstate.State{Remote: "origin", Trunk: "main", Stack: 1, LastRevision: 3, Layers: []localstate.Layer{
+		{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, RemoteSHA: lower, ParentSHA: trunk},
+		{Branch: "layer-2", HeadSHA: upper, RemoteSHA: upper, ParentSHA: lower},
+	}}))
+	app := &application{repo: repo, store: store, quiet: true}
+
+	err = app.submit(t.Context(), nil)
+	var commandErr commandError
+	require.ErrorAs(t, err, &commandErr)
+	assert.Equal(t, "revision_conflict", commandErr.kind)
+	state, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), state.Layers[1].PullRequest, "created pull is persisted before append")
+
+	err = app.submit(t.Context(), nil)
+	require.Error(t, err, "the server applied the append but its response was lost")
+	assert.Equal(t, []int64{1, 2}, serverPulls)
+	assert.Equal(t, 2, appends)
+
+	require.NoError(t, app.submit(t.Context(), nil))
+	state, err = store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, int64(6), state.LastRevision)
+	assert.Equal(t, 1, creates, "retry must reuse the persisted pull")
+	assert.Equal(t, 2, appends, "the verified no-op retry must not duplicate the applied append")
+	assert.GreaterOrEqual(t, gets, 3, "each explicit attempt validates the server stack")
+	assert.Equal(t, []int64{4, 5}, appendRevisions)
+	assert.Equal(t, [][]int64{{2}, {2}}, appendPulls)
+}
+
+func TestSubmitStackValidationRejectsDrift(t *testing.T) {
+	state := &localstate.State{Stack: 1, Trunk: "main", Layers: []localstate.Layer{{PullRequest: 1}, {PullRequest: 2}, {PullRequest: 3}}}
+	stack := func(pulls ...int64) *api.PullRequestStack {
+		entries := make([]*api.PullRequestStackEntry, 0, len(pulls))
+		for i, pull := range pulls {
+			entries = append(entries, &api.PullRequestStackEntry{Position: i + 1, PullRequest: &api.PullRequest{Index: pull}})
+		}
+		return &api.PullRequestStack{Number: 1, Trunk: "main", State: "open", Entries: entries}
+	}
+	invalid := map[string]*api.PullRequestStack{
+		"trunk":     {Number: 1, Trunk: "release", State: "open"},
+		"closed":    {Number: 1, Trunk: "main", State: "complete"},
+		"active":    {Number: 1, Trunk: "main", State: "open", ActiveOperation: 9},
+		"too-long":  stack(1, 2, 3, 4),
+		"nil-entry": {Number: 1, Trunk: "main", State: "open", Entries: []*api.PullRequestStackEntry{nil}},
+		"duplicate": stack(1, 1),
+		"mismatch":  stack(1, 3),
+	}
+	for name, server := range invalid {
+		t.Run(name, func(t *testing.T) {
+			var commandErr commandError
+			require.ErrorAs(t, validateSubmitStack(state, server), &commandErr)
+			expectedCode := 3
+			if name == "closed" {
+				assert.Equal(t, "precondition", commandErr.kind)
+			} else if name == "active" {
+				expectedCode = 6
+				assert.Equal(t, "operation_active", commandErr.kind)
+			} else {
+				assert.Equal(t, "stack_drift", commandErr.kind)
+			}
+			assert.Equal(t, expectedCode, commandErr.code)
+		})
+	}
+	unsubmitted := &localstate.State{Trunk: "main", Layers: []localstate.Layer{{PullRequest: 1}, {}}}
+	err := validateSubmitStack(unsubmitted, stack(1, 2))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "local layer is unsubmitted")
+
+	missing, err := missingSubmitPulls(state, 3, stack(1))
+	require.NoError(t, err)
+	assert.Equal(t, []int64{2, 3}, missing)
+	missing, err = missingSubmitPulls(state, 1, stack(1, 2, 3))
+	require.NoError(t, err)
+	assert.Empty(t, missing, "a narrower --through is a no-op when the matching server prefix is already longer")
+	landedPrefix := stack(1, 2)
+	landedPrefix.Entries[0].LandedSHA = "landed"
+	missing, err = missingSubmitPulls(state, 3, landedPrefix)
+	require.NoError(t, err)
+	assert.Equal(t, []int64{3}, missing, "landed historical entries remain part of the ordered prefix")
+}
+
 func TestSyncDetectsUpperLayerAfterLowerLocalHeadMoves(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "work")
 	runGit(t, filepath.Dir(dir), "init", "-b", "main", dir)

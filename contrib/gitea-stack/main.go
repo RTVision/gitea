@@ -787,10 +787,18 @@ func (a *application) submit(ctx context.Context, args []string) error {
 	if _, err := client.Capabilities(ctx); err != nil {
 		return mapAPIError(err)
 	}
+	if stackNumber != 0 {
+		server, err := client.GetStack(ctx, stackNumber)
+		if err != nil {
+			return mapAPIError(err)
+		}
+		if err := validateSubmitStack(state, server); err != nil {
+			return err
+		}
+	}
 	if err := a.pushLayers(ctx, state, through); err != nil {
 		return err
 	}
-	newPulls := make([]int64, 0)
 	for i := range through {
 		layer := &state.Layers[i]
 		parent := state.Trunk
@@ -820,7 +828,6 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			return mapAPIError(err)
 		}
 		layer.PullRequest = pull.Index
-		newPulls = append(newPulls, pull.Index)
 		if err := a.store.Save(state); err != nil {
 			return err
 		}
@@ -835,14 +842,20 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			return mapAPIError(err)
 		}
 		state.Stack, state.LastRevision = server.Number, server.Revision
-	} else if len(newPulls) != 0 {
+	} else {
 		server, err := client.GetStack(ctx, stackNumber)
 		if err != nil {
 			return mapAPIError(err)
 		}
-		server, err = client.AppendStack(ctx, stackNumber, server.Revision, newPulls)
+		missingPulls, err := missingSubmitPulls(state, through, server)
 		if err != nil {
-			return mapAPIError(err)
+			return err
+		}
+		if len(missingPulls) != 0 {
+			server, err = client.AppendStack(ctx, stackNumber, server.Revision, missingPulls)
+			if err != nil {
+				return mapAPIError(err)
+			}
 		}
 		state.LastRevision = server.Revision
 	}
@@ -854,6 +867,78 @@ func (a *application) submit(ctx context.Context, args []string) error {
 	}
 	a.success(state)
 	return nil
+}
+
+func validateSubmitStack(state *localstate.State, server *api.PullRequestStack) error {
+	drift := func(format string, args ...any) error {
+		return fail(3, "stack_drift", "S%d %s; unstack and restructure explicitly", server.Number, fmt.Sprintf(format, args...))
+	}
+	if server.State != "open" {
+		return fail(3, "precondition", "S%d is %s; submit requires an open stack", server.Number, server.State)
+	}
+	if server.ActiveOperation != 0 {
+		return fail(6, "operation_active", "S%d has an operation in progress; retry when it completes", server.Number)
+	}
+	if server.Trunk != state.Trunk {
+		return drift("trunk is %s but local stack targets %s", server.Trunk, state.Trunk)
+	}
+	if len(server.Entries) > len(state.Layers) {
+		return drift("has %d entries but local stack has %d", len(server.Entries), len(state.Layers))
+	}
+	localPulls := make(map[int64]struct{}, len(state.Layers))
+	missingSeen := false
+	for i, layer := range state.Layers {
+		if layer.PullRequest == 0 {
+			missingSeen = true
+			continue
+		}
+		if missingSeen {
+			return drift("has local pull request #%d after an unsubmitted layer at position %d", layer.PullRequest, i+1)
+		}
+		if _, duplicate := localPulls[layer.PullRequest]; duplicate {
+			return drift("has duplicate local pull request #%d", layer.PullRequest)
+		}
+		localPulls[layer.PullRequest] = struct{}{}
+	}
+	serverPulls := make(map[int64]struct{}, len(server.Entries))
+	for i, entry := range server.Entries {
+		if entry == nil || entry.PullRequest == nil || entry.Position != i+1 {
+			return drift("has malformed membership at position %d", i+1)
+		}
+		pull := entry.PullRequest.Index
+		if pull <= 0 {
+			return drift("has malformed membership at position %d", i+1)
+		}
+		if _, duplicate := serverPulls[pull]; duplicate {
+			return drift("contains duplicate pull request #%d", pull)
+		}
+		serverPulls[pull] = struct{}{}
+		localPull := state.Layers[i].PullRequest
+		if localPull == 0 {
+			return drift("has #%d at layer %d but local layer is unsubmitted", pull, i+1)
+		}
+		if localPull != pull {
+			return drift("has #%d at layer %d but local layer is #%d", pull, i+1, localPull)
+		}
+	}
+	return nil
+}
+
+func missingSubmitPulls(state *localstate.State, through int, server *api.PullRequestStack) ([]int64, error) {
+	if err := validateSubmitStack(state, server); err != nil {
+		return nil, err
+	}
+	if len(server.Entries) >= through {
+		return nil, nil
+	}
+	missing := make([]int64, 0, through-len(server.Entries))
+	for i := len(server.Entries); i < through; i++ {
+		if state.Layers[i].PullRequest == 0 {
+			return nil, fail(3, "stack_drift", "S%d has no pull request for local layer %d; unstack and restructure explicitly", server.Number, i+1)
+		}
+		missing = append(missing, state.Layers[i].PullRequest)
+	}
+	return missing, nil
 }
 
 func (a *application) adopt(ctx context.Context, args []string) error {
