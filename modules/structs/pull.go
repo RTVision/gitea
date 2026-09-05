@@ -7,6 +7,34 @@ import (
 	"time"
 )
 
+// PullRequestReviewDecision is the review policy result for a pull request.
+//
+// swagger:enum PullRequestReviewDecision
+type PullRequestReviewDecision string
+
+const (
+	// PullRequestReviewApproved indicates that all enabled review gates pass.
+	PullRequestReviewApproved PullRequestReviewDecision = "approved"
+	// PullRequestReviewChangesRequested indicates an active official rejection.
+	PullRequestReviewChangesRequested PullRequestReviewDecision = "changes-requested"
+	// PullRequestReviewRequired indicates that an enabled review gate is unsatisfied.
+	PullRequestReviewRequired PullRequestReviewDecision = "review-required"
+)
+
+// PullRequestChecksState is the combined state of the pull request's latest checks.
+//
+// swagger:enum PullRequestChecksState
+type PullRequestChecksState string
+
+const (
+	// PullRequestChecksPassing indicates that at least one check passed and none failed or remain pending.
+	PullRequestChecksPassing PullRequestChecksState = "passing"
+	// PullRequestChecksFailing indicates that a check failed, errored, or warned.
+	PullRequestChecksFailing PullRequestChecksState = "failing"
+	// PullRequestChecksPending indicates that a check is still running or has an unknown state.
+	PullRequestChecksPending PullRequestChecksState = "pending"
+)
+
 // PullRequest represents a pull request
 type PullRequest struct {
 	// The unique identifier of the pull request
@@ -37,6 +65,10 @@ type PullRequest struct {
 	State StateType `json:"state"`
 	// Whether the pull request is a draft
 	Draft bool `json:"draft"`
+	// The review policy result when pull tracking summaries are enabled
+	ReviewDecision *PullRequestReviewDecision `json:"review_decision,omitempty"`
+	// The combined state of the pull request's latest checks when pull tracking summaries are enabled
+	ChecksState *PullRequestChecksState `json:"checks_state,omitempty"`
 	// Whether the pull request is scheduled to merge when checks succeed
 	AutoMergeEnabled bool `json:"auto_merge_enabled"`
 	// The merge method scheduled for auto-merge

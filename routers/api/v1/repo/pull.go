@@ -106,6 +106,11 @@ func ListPullRequests(ctx *context.APIContext) {
 	//   description: Page size of results
 	//   type: integer
 	//   minimum: 0
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestList"
@@ -152,10 +157,14 @@ func ListPullRequests(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
+	if err := enrichPullRequestTrackingSummaries(ctx, prs, apiPrs); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 
 	ctx.SetLinkHeader(maxResults, listOptions.PageSize)
 	ctx.SetTotalCountHeader(maxResults)
-	ctx.JSON(http.StatusOK, &apiPrs)
+	ctx.JSON(http.StatusOK, pullRequestListResponse(ctx, apiPrs))
 }
 
 // GetPullRequest returns a single PR based on index
@@ -182,6 +191,11 @@ func GetPullRequest(ctx *context.APIContext) {
 	//   type: integer
 	//   format: int64
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
@@ -215,7 +229,11 @@ func GetPullRequest(ctx *context.APIContext) {
 		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
 		return
 	}
-	ctx.JSON(http.StatusOK, apiPr)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, pullRequestResponse(ctx, apiPr))
 }
 
 // GetPullRequest returns a single PR based on index
@@ -246,6 +264,11 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	//   description: head of the pull request to get
 	//   type: string
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
@@ -309,7 +332,11 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 		ctx.APIErrorInternal(errors.New("failed to convert pull request"))
 		return
 	}
-	ctx.JSON(http.StatusOK, apiPr)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, pullRequestResponse(ctx, apiPr))
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch
