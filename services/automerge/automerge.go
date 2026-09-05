@@ -69,6 +69,24 @@ func populateRecentAutoMergeItems(ctx context.Context) {
 
 // ScheduleAutoMerge if schedule is false and no error, pull can be merged directly
 func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pull *issues_model.PullRequest, style repo_model.MergeStyle, message string, deleteBranchAfterMerge bool) (scheduled bool, err error) {
+	stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
+	if err != nil {
+		return false, err
+	}
+	if stack != nil {
+		entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+		if err != nil {
+			return false, err
+		}
+		for _, entry := range entries {
+			if entry.PullRequestID == pull.ID {
+				_, err := pull_service.StartStackOperation(ctx, doer, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: entry.Position, Kind: "land", MergeStyle: style})
+				return err == nil, err
+			}
+		}
+		return false, issues_model.ErrInvalidStack
+	}
+
 	err = db.WithTx(ctx, func(ctx context.Context) error {
 		if err := pull_model.ScheduleAutoMerge(ctx, doer, pull.ID, style, message, deleteBranchAfterMerge); err != nil {
 			return err
@@ -129,6 +147,14 @@ func handleAutoMergeItem(item automergequeue.AutoMergeItem) {
 
 // handlePullRequestAutoMerge merge the pull request if all checks are successful
 func handlePullRequestAutoMerge(ctx context.Context, pr *issues_model.PullRequest, expectedHeadCommitID string) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil {
+		return err
+	}
+	if stack != nil {
+		return errSkipAutoMerge
+	}
+
 	_ = pr.LoadIssue(ctx)
 	if (pr.Issue != nil && pr.Issue.IsClosed) || pr.HasMerged {
 		// if the PR has been closed or merged, delete the automerge record and skip

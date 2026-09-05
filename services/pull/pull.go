@@ -223,6 +223,30 @@ func (err ErrPullRequestHasMerged) Error() string {
 
 // ChangeTargetBranch changes the target branch of this pull request, as the given user.
 func ChangeTargetBranch(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, targetBranch string) (err error) {
+	if err := checkOrdinaryStackMutation(ctx, pr); err != nil {
+		return err
+	}
+	return changeTargetBranchForStack(ctx, pr, doer, targetBranch, 0)
+}
+
+func changeTargetBranchForStack(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, targetBranch string, operationID int64) (err error) {
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		return err
+	}
+	if err := pr.LoadHeadRepo(ctx); err != nil {
+		return err
+	}
+	if err := pr.LoadIssue(ctx); err != nil {
+		return err
+	}
+	if err := pr.Issue.LoadRepo(ctx); err != nil {
+		return err
+	}
+	if operationID != 0 {
+		if err := validateStackOperation(ctx, pr, operationID, doer.ID); err != nil {
+			return err
+		}
+	}
 	releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(pr.ID))
 	if err != nil {
 		log.Error("lock.Lock(): %v", err)
@@ -461,7 +485,7 @@ func AddTestPullRequestTask(opts TestPullRequestOptions) {
 							}
 
 							// dismiss all approval reviews if protected branch rule item enabled.
-							pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+							pb, err := getPullProtectedBranch(ctx, pr)
 							if err != nil {
 								log.Error("GetFirstMatchProtectedBranchRule: %v", err)
 							}
@@ -662,6 +686,13 @@ func retargetBranchPulls(ctx context.Context, doer *user_model.User, repoID int6
 
 	var errs []error
 	for _, pr := range prs {
+		stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+		if err != nil {
+			return err
+		}
+		if stack != nil {
+			continue
+		}
 		if err = pr.Issue.LoadRepo(ctx); err != nil {
 			errs = append(errs, err)
 		} else if err = ChangeTargetBranch(ctx, pr, doer, targetBranch); err != nil &&

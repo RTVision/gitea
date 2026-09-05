@@ -140,6 +140,9 @@ const (
 //     signing ability is checked.
 func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *access_model.Permission, pr *issues_model.PullRequest, mergeCheckType MergeCheckType, mergeStyle repo_model.MergeStyle, forceMerge bool) error {
 	return db.WithTx(stdCtx, func(ctx context.Context) error {
+		if err := checkStackMergeOrder(ctx, pr); err != nil {
+			return err
+		}
 		if pr.HasMerged {
 			return ErrHasMerged
 		}
@@ -191,7 +194,7 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 			// * if the doer tries to "Force Merge", check whether it is really allowed
 			if forceMerge {
 				isRepoAdmin := access_model.IsUserRepoAdmin(ctx, pr.BaseRepo, doer)
-				protectedBranchRule, errForceMerge := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+				protectedBranchRule, errForceMerge := getPullProtectedBranch(ctx, pr)
 				if errForceMerge != nil {
 					return fmt.Errorf("GetFirstMatchProtectedBranchRule failed, repo: %v, base branch: %v, err: %w", pr.BaseRepoID, pr.BaseBranch, errForceMerge)
 				}
@@ -234,7 +237,7 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 //   - merge, rebase, rebase-merge and squash produce a Gitea-signed commit, so
 //     Gitea must be configured to sign it.
 func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle) error {
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+	pb, err := getPullProtectedBranch(ctx, pr)
 	if err != nil {
 		return err
 	}
@@ -387,6 +390,13 @@ func getMergerForManuallyMergedPullRequest(ctx context.Context, pr *issues_model
 // manuallyMerged checks if a pull request got manually merged
 // When a pull request got manually merged mark the pull request as merged
 func manuallyMerged(ctx context.Context, pr *issues_model.PullRequest) bool {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || (stack != nil && stack.ActiveOperationID != 0) {
+		return false
+	}
+	if err := checkStackMergeOrder(ctx, pr); err != nil {
+		return false
+	}
 	if err := pr.LoadBaseRepo(ctx); err != nil {
 		log.Error("%-v LoadBaseRepo: %v", pr, err)
 		return false
@@ -460,7 +470,7 @@ func checkPullRequestMergeable(id int64) {
 		log.Error("lock.Lock(): %v", err)
 		return
 	}
-	defer releaser()
+	defer func() { releaser(); WakeStackOperationForPull(ctx, id) }()
 
 	ctx, _, finished := process.GetManager().AddContext(ctx, fmt.Sprintf("Test PR[%d] from patch checking queue", id))
 	defer finished()
@@ -478,6 +488,11 @@ func checkPullRequestMergeable(id int64) {
 
 	if pr.HasMerged {
 		log.Trace("%-v is already merged (status: %s, merge commit: %s)", pr, pr.Status, pr.MergedCommitID)
+		return
+	}
+
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		log.Error("LoadBaseRepo for pull %d: %v", pr.ID, err)
 		return
 	}
 
@@ -525,5 +540,5 @@ func Init() error {
 
 	go graceful.GetManager().RunWithCancel(prPatchCheckerQueue)
 	go graceful.GetManager().RunWithShutdownContext(InitializePullRequests)
-	return nil
+	return InitStackOperations()
 }

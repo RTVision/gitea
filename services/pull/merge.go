@@ -255,7 +255,15 @@ func addTestPullRequestTaskAfterWebOperation(pr *issues_model.PullRequest, doer 
 // Merge merges pull request to base repository.
 // Caller should check PR is ready to be merged (review and status checks)
 func Merge(pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, wasAutoMerged bool) error {
+	return mergeWithStackOperation(pr, doer, mergeStyle, expectedHeadCommitID, message, wasAutoMerged, 0)
+}
+
+func mergeWithStackOperation(pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, wasAutoMerged bool, operationID int64, publication ...*stackMergePublication) error {
 	ctx := graceful.GetManager().HammerContext() // don't abort the git operation even if the user's request is canceled
+
+	if len(publication) > 0 {
+		ctx = context.WithValue(ctx, stackMergeContextKey{}, publication[0])
+	}
 
 	if err := pr.LoadBaseRepo(ctx); err != nil {
 		log.Error("Unable to load base repo: %v", err)
@@ -278,6 +286,30 @@ func Merge(pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_
 	}
 
 	err = globallock.LockAndDo(ctx, getPullWorkingLockKey(pr.ID), func(ctx context.Context) error {
+		if operationID == 0 {
+			if err := checkOrdinaryStackMutation(ctx, pr); err != nil {
+				return err
+			}
+		} else {
+			freshActor, err := user_model.GetUserByID(ctx, doer.ID)
+			if err != nil {
+				return err
+			}
+			doer = freshActor
+			if err := validateStackOperation(ctx, pr, operationID, doer.ID); err != nil {
+				return err
+			}
+			if err := checkStackMergeOrder(ctx, pr); err != nil {
+				return err
+			}
+			perm, err := access_model.GetDoerRepoPermission(ctx, pr.BaseRepo, doer)
+			if err != nil {
+				return err
+			}
+			if err := CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeGeneral, mergeStyle, false); err != nil {
+				return err
+			}
+		}
 		_, err := doMergeAndPush(ctx, pr, doer, mergeStyle, expectedHeadCommitID, message, repo_module.PushTriggerPRMergeToBase)
 		return err
 	})
@@ -400,6 +432,12 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 		return "", fmt.Errorf("Failed to get full commit id for the new merge: %w", err)
 	}
 
+	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
+		if err := publication.prepare(ctx, mergeCtx, mergeBaseSHA, mergeHeadSHA); err != nil {
+			return "", err
+		}
+	}
+
 	// Now it's questionable about where this should go - either after or before the push
 	// I think in the interests of data safety - failures to push to the lfs should prevent
 	// the merge as you can always remerge.
@@ -433,6 +471,9 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 
 	mergeCtx.env = append(mergeCtx.env, repo_module.EnvPushTrigger+"="+string(pushTrigger))
 	pushCmd := gitcmd.NewCommand("push", "origin").AddDynamicArguments(tmpRepoBaseBranch + ":" + git.BranchPrefix + pr.BaseBranch)
+	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
+		pushCmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.BaseBranch+":"+publication.layer.LandingBaseSHA)
+	}
 
 	// Push back to upstream.
 	// This cause an api call to "/api/internal/hook/post-receive/...",
@@ -571,7 +612,11 @@ var escapedSymbols = regexp.MustCompile(`([*[?! \\])`)
 
 // IsUserAllowedToMerge check if user is allowed to merge PR with given permissions and branch protections
 func IsUserAllowedToMerge(ctx context.Context, pr *issues_model.PullRequest, p access_model.Permission, user *user_model.User) (bool, error) {
-	return isUserAllowedToMergeInRepoBranch(ctx, pr.BaseRepoID, pr.BaseBranch, p, user)
+	branch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+	if err != nil {
+		return false, err
+	}
+	return isUserAllowedToMergeInRepoBranch(ctx, pr.BaseRepoID, branch, p, user)
 }
 
 func isUserAllowedToMergeInRepoBranch(ctx context.Context, repoID int64, branch string, p access_model.Permission, user *user_model.User) (bool, error) {
@@ -597,7 +642,7 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return fmt.Errorf("LoadBaseRepo: %w", err)
 	}
 
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, pr.BaseBranch)
+	pb, err := getPullProtectedBranch(ctx, pr)
 	if err != nil {
 		return fmt.Errorf("LoadProtectedBranch: %v", err)
 	}
@@ -635,6 +680,29 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return nil
 	}
 
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil {
+		return err
+	}
+	if stack != nil {
+		repository, closer, err := git.RepositoryFromContextOrOpen(ctx, pr.BaseRepo)
+		if err != nil {
+			return err
+		}
+		defer closer.Close()
+		boundary, err := git.MergeBase(ctx, pr.BaseRepo, git.BranchPrefix+pr.BaseBranch, pr.GetGitHeadRefName())
+		if err != nil {
+			return err
+		}
+		files, err := CheckFileProtection(ctx, repository, pr.HeadBranch, boundary, pr.GetGitHeadRefName(), pb.GetProtectedFilePatterns(), 10, os.Environ())
+		if err != nil && !IsErrFilePathProtected(err) {
+			return err
+		}
+		if pb.MergeBlockedByProtectedFiles(files) {
+			return util.ErrorWrap(ErrNotReadyToMerge, "Changed protected files")
+		}
+		return nil
+	}
 	if pb.MergeBlockedByProtectedFiles(pr.ChangedProtectedFiles) {
 		return util.ErrorWrap(ErrNotReadyToMerge, "Changed protected files")
 	}
@@ -644,6 +712,16 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 
 // MergedManually mark pr as merged manually
 func MergedManually(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, baseGitRepo *git.Repository, commitID string) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil {
+		return err
+	}
+	if stack != nil && stack.ActiveOperationID != 0 {
+		return ErrPullRequestStacked
+	}
+	if err := checkStackMergeOrder(ctx, pr); err != nil {
+		return err
+	}
 	releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(pr.ID))
 	if err != nil {
 		log.Error("lock.Lock(): %v", err)

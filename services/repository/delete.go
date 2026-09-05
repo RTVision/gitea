@@ -201,6 +201,9 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 	}
 
 	// Delete Pulls and related objects
+	if err := issues_model.DeleteStacksByRepoID(ctx, repoID); err != nil {
+		return err
+	}
 	if err := issues_model.DeletePullsByBaseRepoID(ctx, repoID); err != nil {
 		return err
 	}

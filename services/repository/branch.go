@@ -406,6 +406,12 @@ func RenameBranch(ctx context.Context, repo *repo_model.Repository, doer *user_m
 	if from == to {
 		return "target_exist", nil
 	}
+	if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, from); err != nil {
+		return "", err
+	}
+	if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, to); err != nil {
+		return "", err
+	}
 
 	if exist, _ := git_model.IsBranchExist(ctx, repo.ID, to); exist {
 		return "target_exist", nil
@@ -545,6 +551,9 @@ func UpdateBranch(ctx context.Context, repo *repo_model.Repository, gitRepo *git
 var ErrBranchIsDefault = util.ErrorWrap(util.ErrPermissionDenied, "branch is default or pull request target")
 
 func CanDeleteBranch(ctx context.Context, repo *repo_model.Repository, branchName string, doer *user_model.User) error {
+	if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, branchName); err != nil {
+		return err
+	}
 	unitPRConfig := repo.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
 	if branchName == repo.DefaultBranch || branchName == unitPRConfig.DefaultTargetBranch {
 		return ErrBranchIsDefault
