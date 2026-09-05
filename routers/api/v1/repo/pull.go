@@ -152,6 +152,10 @@ func ListPullRequests(ctx *context.APIContext) {
 		ctx.APIErrorInternal(err)
 		return
 	}
+	if err := enrichPullRequestTrackingSummaries(ctx, prs, apiPrs); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
 
 	ctx.SetLinkHeader(maxResults, listOptions.PageSize)
 	ctx.SetTotalCountHeader(maxResults)
@@ -210,7 +214,12 @@ func GetPullRequest(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // GetPullRequest returns a single PR based on index
@@ -299,7 +308,12 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	// Consider API access a view for delayed checking.
 	pull_service.StartPullRequestCheckOnView(ctx, pr)
 
-	ctx.JSON(http.StatusOK, convert.ToAPIPullRequest(ctx, pr, ctx.Doer))
+	apiPr := convert.ToAPIPullRequest(ctx, pr, ctx.Doer)
+	if err := enrichPullRequestTrackingSummaries(ctx, issues_model.PullRequestList{pr}, []*api.PullRequest{apiPr}); err != nil {
+		ctx.APIErrorInternal(err)
+		return
+	}
+	ctx.JSON(http.StatusOK, apiPr)
 }
 
 // DownloadPullDiffOrPatch render a pull's raw diff or patch
