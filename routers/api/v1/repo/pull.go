@@ -106,6 +106,11 @@ func ListPullRequests(ctx *context.APIContext) {
 	//   description: Page size of results
 	//   type: integer
 	//   minimum: 0
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestList"
@@ -186,6 +191,11 @@ func GetPullRequest(ctx *context.APIContext) {
 	//   type: integer
 	//   format: int64
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
@@ -250,6 +260,11 @@ func GetPullRequestByBaseHead(ctx *context.APIContext) {
 	//   description: head of the pull request to get
 	//   type: string
 	//   required: true
+	// - name: include_tracking
+	//   in: query
+	//   description: Include review decision and check state summaries
+	//   type: boolean
+	//   default: false
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"

@@ -38,12 +38,8 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/GeneralAPISettings"
-	var features []string
-	if setting.API.EnablePullTrackingSummary {
-		features = append(features, "pull-tracking-summary")
-	}
 	ctx.JSON(http.StatusOK, api.GeneralAPISettings{
-		Features:               features,
+		Features:               []string{"pull-tracking-summary"},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,

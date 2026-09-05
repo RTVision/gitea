@@ -5,14 +5,13 @@ package repo
 
 import (
 	"gitea.dev/models/issues"
-	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/services/context"
 	"gitea.dev/services/pull"
 )
 
 func enrichPullRequestTrackingSummaries(ctx *context.APIContext, prs issues.PullRequestList, apiPrs []*api.PullRequest) error {
-	if !setting.API.EnablePullTrackingSummary || len(prs) == 0 {
+	if !ctx.FormBool("include_tracking") || len(prs) == 0 {
 		return nil
 	}
 
