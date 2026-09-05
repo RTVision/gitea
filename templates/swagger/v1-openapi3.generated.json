@@ -2361,6 +2361,11 @@
             "type": "string",
             "x-go-name": "LogsURL"
           },
+          "needs_approval": {
+            "description": "NeedsApproval is true only for the current attempt waiting for approval.",
+            "type": "boolean",
+            "x-go-name": "NeedsApproval"
+          },
           "path": {
             "type": "string",
             "x-go-name": "Path"
@@ -2370,6 +2375,11 @@
             "format": "uri",
             "type": "string",
             "x-go-name": "PreviousAttemptURL"
+          },
+          "pull_request_head_sha": {
+            "description": "PullRequestHeadSHA identifies the contributor commit recorded when a PR run was triggered.",
+            "type": "string",
+            "x-go-name": "PullRequestHeadSHA"
           },
           "pull_requests": {
             "items": {
