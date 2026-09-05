@@ -204,7 +204,7 @@ func TestToActionWorkflowRun_NeedsApproval(t *testing.T) {
 	assert.Equal(t, "contributor-head", prRun.PullRequestHeadSHA)
 	assert.Equal(t, run.CommitSHA, prRun.HeadSha)
 	run.NeedApproval = true
-	oldAttempt := &actions_model.ActionRunAttempt{ID: -1, RunID: run.ID, Attempt: 1, TriggerUserID: run.TriggerUserID}
+	oldAttempt := &actions_model.ActionRunAttempt{ID: -1, RunID: run.ID, Attempt: 1, TriggerUserID: run.TriggerUserID, Status: run.Status}
 	apiRun, err := ToActionWorkflowRun(t.Context(), run, oldAttempt, true)
 	require.NoError(t, err)
 	assert.False(t, apiRun.NeedsApproval)
