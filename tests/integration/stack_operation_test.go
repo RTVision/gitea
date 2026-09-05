@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
@@ -64,6 +66,14 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 				upper := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: repo.ID, HeadBranch: "stack-upper"})
 				stack, err := pull_service.CreateStack(t.Context(), actor, repo, pull_service.CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{lower.ID, upper.ID}})
 				require.NoError(t, err)
+				token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+				req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/user2/repo1/pulls/%d/merge", lower.Index), map[string]any{"do": string(style), "merge_when_checks_succeed": true, "merge_message_field": "preserve this message", "delete_branch_after_merge": true}).AddTokenAuth(token)
+				response := MakeRequest(t, req, http.StatusUnprocessableEntity)
+				assert.Contains(t, response.Body.String(), "Use Land on the stack page")
+				operations, err := issues_model.GetStackOperations(t.Context(), stack.ID)
+				require.NoError(t, err)
+				assert.Empty(t, operations)
+
 				require.ErrorIs(t, pull_service.Merge(upper, actor, style, "", "", false), pull_service.ErrPullRequestStacked)
 				if style == repo_model.MergeStyleMerge {
 					_, err := db.GetEngine(t.Context()).Insert(&git_model.ProtectedBranch{RepoID: repo.ID, RuleName: "release", EnableStatusCheck: true, StatusCheckContexts: []string{"stack-ci"}})

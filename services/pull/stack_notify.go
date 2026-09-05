@@ -13,7 +13,7 @@ import (
 	notify_service "gitea.dev/services/notify"
 )
 
-func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int64) {
+func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int64, changes map[int64][2]string) {
 	entries, err := issues_model.GetStackEntries(ctx, stackID)
 	if err != nil {
 		log.Error("GetStackEntries[%d]: %v", stackID, err)
@@ -25,7 +25,22 @@ func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int6
 			log.Error("GetPullRequestByID[%d]: %v", entry.PullRequestID, err)
 			continue
 		}
-		if pr.HasMerged || pr.LoadIssue(ctx) != nil || pr.Issue.IsClosed || pr.LoadHeadRepo(ctx) != nil {
+		if pr.HasMerged {
+			continue
+		}
+		if err := pr.LoadIssue(ctx); err != nil {
+			log.Error("LoadIssue[%d]: %v", pr.ID, err)
+			continue
+		}
+		if pr.Issue.IsClosed {
+			continue
+		}
+		if err := pr.LoadHeadRepo(ctx); err != nil {
+			log.Error("LoadHeadRepo[%d]: %v", pr.ID, err)
+			continue
+		}
+		if heads, ok := changes[pr.ID]; ok {
+			notify_service.PullRequestSynchronized(ctx, doer, pr, heads[0], heads[1])
 			continue
 		}
 		headSHA, err := git.GetFullCommitID(ctx, pr.HeadRepo, git.BranchPrefix+pr.HeadBranch)

@@ -4,6 +4,7 @@
 package pull
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,8 @@ import (
 	"gitea.dev/modules/git/gitrepo"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
+	"gitea.dev/modules/util"
+	notify_service "gitea.dev/services/notify"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +39,7 @@ func TestStackLifecycle(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = work
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_NAME=Stack Test", "GIT_AUTHOR_EMAIL=stack@example.com", "GIT_COMMITTER_NAME=Stack Test", "GIT_COMMITTER_EMAIL=stack@example.com")
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_AUTHOR_NAME=Stack Test", "GIT_AUTHOR_EMAIL=stack@example.com", "GIT_COMMITTER_NAME=Stack Test", "GIT_COMMITTER_EMAIL=stack@example.com")
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "%s", out)
 		return strings.TrimSpace(string(out))
@@ -53,7 +56,7 @@ func TestStackLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	opts := CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{2}}
 	_, err = CreateStack(ctx, outsider, repo, opts)
-	require.Error(t, err)
+	require.ErrorIs(t, err, util.ErrPermissionDenied)
 	_, err = CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{5, 2}})
 	require.ErrorIs(t, err, issues_model.ErrInvalidStack)
 	_, err = CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{2, 2}})
@@ -86,23 +89,28 @@ func TestStackLifecycle(t *testing.T) {
 	}
 	run("push", "--force-with-lease=refs/heads/branch2:"+entries[0].HeadSHA, "--force-with-lease=refs/heads/pr-to-update:"+entries[1].HeadSHA, gitrepo.RepoLocalPath(repo), "branch2", "pr-to-update")
 	_, err = SynchronizeStack(ctx, outsider, stack.ID, 2, expected)
-	require.Error(t, err)
+	require.ErrorIs(t, err, util.ErrPermissionDenied)
 	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, expected[:1])
 	require.ErrorIs(t, err, issues_model.ErrInvalidStack)
 	wrong := append([]StackHeadExpectation(nil), expected...)
 	wrong[1].ParentSHA = entries[1].OldParentSHA
 	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, wrong)
 	require.ErrorIs(t, err, issues_model.ErrStackRevision)
+	collector := &stackSyncCollector{heads: make(map[int64][2]string)}
+	notify_service.RegisterNotifier(collector)
+	t.Cleanup(func() { collector.heads = nil })
 	stack, err = SynchronizeStack(ctx, owner, stack.ID, 2, expected)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, stack.Revision)
+	assert.Equal(t, [2]string{entries[0].HeadSHA, expected[0].HeadSHA}, collector.heads[2])
+	assert.Equal(t, [2]string{entries[1].HeadSHA, expected[1].HeadSHA}, collector.heads[5])
 	synced, err := issues_model.GetStackEntries(ctx, stack.ID)
 	require.NoError(t, err)
 	assert.Equal(t, newParent, synced[1].OldParentSHA)
 	assert.Equal(t, expected[1].HeadSHA, synced[1].HeadSHA)
 	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, expected)
 	require.ErrorIs(t, err, issues_model.ErrStackRevision)
-	require.Error(t, Unstack(ctx, outsider, stack.ID, 3))
+	require.ErrorIs(t, Unstack(ctx, outsider, stack.ID, 3), util.ErrPermissionDenied)
 	require.NoError(t, Unstack(ctx, owner, stack.ID, 3))
 	membership, err := issues_model.GetPullRequestStack(ctx, 5)
 	require.NoError(t, err)
@@ -123,4 +131,15 @@ func TestStackLifecycle(t *testing.T) {
 	membership, err = issues_model.GetPullRequestStack(ctx, 5)
 	require.NoError(t, err)
 	assert.Nil(t, membership)
+}
+
+type stackSyncCollector struct {
+	notify_service.NullNotifier
+	heads map[int64][2]string
+}
+
+func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_model.User, pr *issues_model.PullRequest, before, after string) {
+	if n.heads != nil {
+		n.heads[pr.ID] = [2]string{before, after}
+	}
 }

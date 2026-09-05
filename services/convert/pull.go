@@ -26,6 +26,10 @@ import (
 // Required - Issue
 // Optional - Merger
 func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User) *api.PullRequest {
+	return toAPIPullRequest(ctx, pr, doer, ToAPIPullRequestStackRef)
+}
+
+func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, stackRef func(context.Context, *issues_model.PullRequest) (*api.PullRequestStackRef, error)) *api.PullRequest {
 	var (
 		baseBranch string
 		headBranch string
@@ -263,7 +267,7 @@ func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 		apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 	}
 
-	apiPullRequest.Stack, err = ToAPIPullRequestStackRef(ctx, pr)
+	apiPullRequest.Stack, err = stackRef(ctx, pr)
 	if err != nil {
 		log.Error("ToAPIPullRequestStackRef[%d]: %v", pr.ID, err)
 	}

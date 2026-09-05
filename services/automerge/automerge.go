@@ -24,6 +24,7 @@ import (
 	"gitea.dev/modules/process"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/timeutil"
+	"gitea.dev/modules/util"
 	"gitea.dev/services/automergequeue"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
@@ -67,6 +68,8 @@ func populateRecentAutoMergeItems(ctx context.Context) {
 	}
 }
 
+var ErrStackAutoMergeUnsupported = util.ErrorWrap(util.ErrUnprocessableContent, "Auto-merge isn't available for stacked pull requests. Use Land on the stack page to merge when checks pass. Custom merge messages and branch deletion aren't applied to stacked pull requests.")
+
 // ScheduleAutoMerge if schedule is false and no error, pull can be merged directly
 func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pull *issues_model.PullRequest, style repo_model.MergeStyle, message string, deleteBranchAfterMerge bool) (scheduled bool, err error) {
 	stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
@@ -74,17 +77,7 @@ func ScheduleAutoMerge(ctx context.Context, doer *user_model.User, pull *issues_
 		return false, err
 	}
 	if stack != nil {
-		entries, err := issues_model.GetStackEntries(ctx, stack.ID)
-		if err != nil {
-			return false, err
-		}
-		for _, entry := range entries {
-			if entry.PullRequestID == pull.ID {
-				_, err := pull_service.StartStackOperation(ctx, doer, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: entry.Position, Kind: "land", MergeStyle: style})
-				return err == nil, err
-			}
-		}
-		return false, issues_model.ErrInvalidStack
+		return false, ErrStackAutoMergeUnsupported
 	}
 
 	err = db.WithTx(ctx, func(ctx context.Context) error {
