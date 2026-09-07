@@ -80,6 +80,23 @@ func GetScheduledMergeByPullID(ctx context.Context, pullID int64) (bool, *AutoMe
 	return true, scheduledPRM, err
 }
 
+// GetScheduledMergesByPullIDs gets scheduled merges keyed by pull request ID.
+func GetScheduledMergesByPullIDs(ctx context.Context, pullIDs []int64) (map[int64]*AutoMerge, error) {
+	scheduledMerges := make(map[int64]*AutoMerge, len(pullIDs))
+	if len(pullIDs) == 0 {
+		return scheduledMerges, nil
+	}
+
+	rows := make([]*AutoMerge, 0, len(pullIDs))
+	if err := db.GetEngine(ctx).In("pull_id", pullIDs).Find(&rows); err != nil {
+		return nil, err
+	}
+	for _, scheduledMerge := range rows {
+		scheduledMerges[scheduledMerge.PullID] = scheduledMerge
+	}
+	return scheduledMerges, nil
+}
+
 func GetScheduledMergePullIDsSince(ctx context.Context, since timeutil.TimeStamp) ([]int64, error) {
 	var pullIDs []int64
 	err := db.GetEngine(ctx).Table(&AutoMerge{}).Where("created_unix >= ?", since).Cols("pull_id").Find(&pullIDs)

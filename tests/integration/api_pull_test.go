@@ -16,6 +16,7 @@ import (
 	auth_model "gitea.dev/models/auth"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/perm"
+	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	unit_model "gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
@@ -162,6 +163,74 @@ func TestAPIViewPullsByBaseHead(t *testing.T) {
 	req = NewRequestf(t, "GET", "/api/v1/repos/%s/%s/pulls/master/branch-not-exist", owner.Name, repo.Name).
 		AddTokenAuth(ctx.Token)
 	ctx.Session.MakeRequest(t, req, http.StatusNotFound)
+}
+
+func TestAPIPullAutoMergeState(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+
+	exists, _, err := pull_model.GetScheduledMergeByPullID(t.Context(), pr.ID)
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.NoError(t, pull_model.ScheduleAutoMerge(t.Context(), owner, pr.ID, repo_model.MergeStyleSquash, "scheduled", false))
+
+	ctx := NewAPITestContext(t, owner.Name, repo.Name, auth_model.AccessTokenScopeReadRepository)
+	pullURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner.Name, repo.Name, pr.Index)
+	resp := ctx.Session.MakeRequest(t, NewRequest(t, http.MethodGet, pullURL).AddTokenAuth(ctx.Token), http.StatusOK)
+	apiPull := DecodeJSON(t, resp, &api.PullRequest{})
+	assert.True(t, apiPull.AutoMergeEnabled)
+	assert.Equal(t, string(repo_model.MergeStyleSquash), apiPull.AutoMergeMethod)
+
+	req := NewRequestf(t, http.MethodGet, "/api/v1/repos/%s/%s/pulls?state=all", owner.Name, repo.Name).AddTokenAuth(ctx.Token)
+	resp = ctx.Session.MakeRequest(t, req, http.StatusOK)
+	apiPulls := DecodeJSON(t, resp, []*api.PullRequest{})
+	found := false
+	for _, listedPull := range apiPulls {
+		if listedPull.ID == pr.ID {
+			found = true
+			assert.True(t, listedPull.AutoMergeEnabled)
+			assert.Equal(t, string(repo_model.MergeStyleSquash), listedPull.AutoMergeMethod)
+			break
+		}
+	}
+	assert.True(t, found)
+
+	require.NoError(t, pull_model.DeleteScheduledAutoMerge(t.Context(), pr.ID))
+	resp = ctx.Session.MakeRequest(t, NewRequest(t, http.MethodGet, pullURL).AddTokenAuth(ctx.Token), http.StatusOK)
+	apiPull = DecodeJSON(t, resp, &api.PullRequest{})
+	assert.False(t, apiPull.AutoMergeEnabled)
+	assert.Empty(t, apiPull.AutoMergeMethod)
+}
+
+func TestAPIEditPullDraftPermissions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 3})
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID})
+	author := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: issue.PosterID})
+	pullURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", repo.OwnerName, repo.Name, pr.Index)
+
+	authorSession := loginUser(t, author.Name)
+	authorToken := getTokenForLoggedInUser(t, authorSession, auth_model.AccessTokenScopeWriteRepository)
+	req := NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+		Draft: new(true),
+	}).AddTokenAuth(authorToken)
+	resp := MakeRequest(t, req, http.StatusCreated)
+	apiPull := DecodeJSON(t, resp, &api.PullRequest{})
+	assert.True(t, apiPull.Draft)
+
+	unauthorizedSession := loginUser(t, "user5")
+	unauthorizedToken := getTokenForLoggedInUser(t, unauthorizedSession, auth_model.AccessTokenScopeWriteRepository)
+	req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+		Draft: new(false),
+	}).AddTokenAuth(unauthorizedToken)
+	MakeRequest(t, req, http.StatusForbidden)
+
+	resp = MakeRequest(t, NewRequest(t, http.MethodGet, pullURL).AddTokenAuth(authorToken), http.StatusOK)
+	apiPull = DecodeJSON(t, resp, &api.PullRequest{})
+	assert.True(t, apiPull.Draft)
 }
 
 // TestAPIMergePullWIP ensures that we can't merge a WIP pull request
@@ -467,6 +536,66 @@ func TestAPIEditPull(t *testing.T) {
 	resp = MakeRequest(t, req, http.StatusCreated)
 	apiPull = DecodeJSON(t, resp, &api.PullRequest{})
 	assert.Equal(t, "feature/1", apiPull.Base.Name)
+	pullURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner10.Name, repo10.Name, apiPull.Index)
+
+	t.Run("DraftLifecycle", func(t *testing.T) {
+		oldPrefixes := setting.Repository.PullRequest.WorkInProgressPrefixes
+		setting.Repository.PullRequest.WorkInProgressPrefixes = []string{"", "DRAFT:", "[DRAFT]"}
+		defer func() {
+			setting.Repository.PullRequest.WorkInProgressPrefixes = oldPrefixes
+		}()
+
+		req := NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Draft: new(true),
+		}).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusCreated)
+		draftPull := DecodeJSON(t, resp, &api.PullRequest{})
+		assert.True(t, draftPull.Draft)
+		assert.Equal(t, "DRAFT: "+newTitle, draftPull.Title)
+
+		req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Title: "replacement title",
+			Draft: new(true),
+		}).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusCreated)
+		draftPull = DecodeJSON(t, resp, &api.PullRequest{})
+		assert.True(t, draftPull.Draft)
+		assert.Equal(t, "DRAFT: replacement title", draftPull.Title)
+
+		repeatedTitle := "DRAFT: [DRAFT] replacement title"
+		req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Title: repeatedTitle,
+		}).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusCreated)
+		draftPull = DecodeJSON(t, resp, &api.PullRequest{})
+		assert.True(t, draftPull.Draft)
+		assert.Equal(t, repeatedTitle, draftPull.Title)
+
+		req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Draft: new(false),
+		}).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusCreated)
+		readyPull := DecodeJSON(t, resp, &api.PullRequest{})
+		assert.False(t, readyPull.Draft)
+		assert.Equal(t, "replacement title", readyPull.Title)
+
+		req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Draft:          new(true),
+			ContentVersion: new(readyPull.ContentVersion + 1),
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusConflict)
+
+		setting.Repository.PullRequest.WorkInProgressPrefixes = []string{""}
+		req = NewRequestWithJSON(t, http.MethodPatch, pullURL, &api.EditPullRequestOption{
+			Draft: new(true),
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusUnprocessableEntity)
+
+		resp = MakeRequest(t, NewRequest(t, http.MethodGet, pullURL).AddTokenAuth(token), http.StatusOK)
+		readyPull = DecodeJSON(t, resp, &api.PullRequest{})
+		assert.False(t, readyPull.Draft)
+		assert.Equal(t, "replacement title", readyPull.Title)
+	})
 
 	// check comment history
 	pull := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: apiPull.ID})

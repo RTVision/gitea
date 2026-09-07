@@ -38,6 +38,7 @@ func TestPullRequest(t *testing.T) {
 	t.Run("PullRequest_UpdateCols", testPullRequestUpdateCols)
 	t.Run("PullRequest_IsWorkInProgress", testPullRequestIsWorkInProgress)
 	t.Run("PullRequest_GetWorkInProgressPrefixWorkInProgress", testPullRequestGetWorkInProgressPrefixWorkInProgress)
+	t.Run("TitleForWorkInProgressState", testTitleForWorkInProgressState)
 	t.Run("DeleteOrphanedObjects", testDeleteOrphanedObjects)
 	t.Run("ParseCodeOwnersLine", testParseCodeOwnersLine)
 	t.Run("CodeOwnerAbsolutePathPatterns", testCodeOwnerAbsolutePathPatterns)
@@ -304,6 +305,39 @@ func testPullRequestGetWorkInProgressPrefixWorkInProgress(t *testing.T) {
 
 	pr.Issue.Title = "[wip] " + original
 	assert.Equal(t, "[wip]", pr.GetWorkInProgressPrefix(t.Context()))
+}
+
+func testTitleForWorkInProgressState(t *testing.T) {
+	originalPrefixes := setting.Repository.PullRequest.WorkInProgressPrefixes
+	t.Cleanup(func() {
+		setting.Repository.PullRequest.WorkInProgressPrefixes = originalPrefixes
+	})
+
+	setting.Repository.PullRequest.WorkInProgressPrefixes = []string{"", "WIP:", "[WIP]"}
+
+	title, ok := issues_model.TitleForWorkInProgressState("feature", true)
+	require.True(t, ok)
+	assert.Equal(t, "WIP: feature", title)
+	assert.True(t, issues_model.HasWorkInProgressPrefix(title))
+
+	title, ok = issues_model.TitleForWorkInProgressState("WIP: [WIP] feature", false)
+	require.True(t, ok)
+	assert.Equal(t, "feature", title)
+	assert.False(t, issues_model.HasWorkInProgressPrefix(title))
+
+	title, ok = issues_model.TitleForWorkInProgressState("WIP: [WIP]", false)
+	assert.False(t, ok)
+	assert.Empty(t, title)
+
+	for _, invalidTitle := range []string{"", "   ", "WIP:", "WIP:   ", "WIP: [WIP]   "} {
+		_, ok = issues_model.TitleForWorkInProgressState(invalidTitle, true)
+		assert.False(t, ok, invalidTitle)
+	}
+
+	setting.Repository.PullRequest.WorkInProgressPrefixes = []string{"", " "}
+	title, ok = issues_model.TitleForWorkInProgressState("feature", true)
+	assert.False(t, ok)
+	assert.Equal(t, "feature", title)
 }
 
 func testDeleteOrphanedObjects(t *testing.T) {
