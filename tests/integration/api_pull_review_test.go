@@ -129,6 +129,35 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	assert.EqualValues(t, 6, review.ID)
 	assert.EqualValues(t, "APPROVED", review.State)
 	assert.Equal(t, 3, review.CodeCommentsCount)
+	reviewID := review.ID
+
+	// test EditPullReview preserves review state and code comments
+	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d", repo.OwnerName, repo.Name, pullIssue.Index, review.ID), &api.EditPullReviewOption{Body: "edited summary"}).AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusOK)
+	review = DecodeJSON(t, resp, &api.PullReview{})
+	assert.Equal(t, "edited summary", review.Body)
+	assert.EqualValues(t, "APPROVED", review.State)
+	assert.Equal(t, 3, review.CodeCommentsCount)
+	otherUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	otherSession := loginUser(t, otherUser.LoginName)
+	otherToken := getTokenForLoggedInUser(t, otherSession, auth_model.AccessTokenScopeWriteRepository)
+	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d", repo.OwnerName, repo.Name, pullIssue.Index, review.ID), &api.EditPullReviewOption{Body: "not allowed"}).AddTokenAuth(otherToken)
+	MakeRequest(t, req, http.StatusForbidden)
+
+	// test pull review reactions
+	reactionsURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/reactions", repo.OwnerName, repo.Name, pullIssue.Index, review.ID)
+	req = NewRequestWithJSON(t, http.MethodPost, reactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusCreated)
+	req = NewRequest(t, http.MethodGet, reactionsURL).AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusOK)
+	reactions := DecodeJSON(t, resp, []*api.Reaction{})
+	require.Len(t, reactions, 1)
+	assert.Equal(t, "heart", reactions[0].Reaction)
+	req = NewRequestWithJSON(t, http.MethodDelete, reactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusNoContent)
+	req = NewRequest(t, http.MethodGet, reactionsURL).AddTokenAuth(token)
+	resp = MakeRequest(t, req, http.StatusOK)
+	assert.Empty(t, DecodeJSON(t, resp, []*api.Reaction{}))
 
 	// test dismiss review
 	req = NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/dismissals", repo.OwnerName, repo.Name, pullIssue.Index, review.ID), &api.DismissPullReviewOptions{
@@ -138,6 +167,8 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	review = DecodeJSON(t, resp, &api.PullReview{})
 	assert.EqualValues(t, 6, review.ID)
 	assert.True(t, review.Dismissed)
+	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d", repo.OwnerName, repo.Name, pullIssue.Index, review.ID), &api.EditPullReviewOption{Body: "not allowed"}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusForbidden)
 
 	// test dismiss review
 	req = NewRequest(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/undismissals", repo.OwnerName, repo.Name, pullIssue.Index, review.ID)).
@@ -156,9 +187,14 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	review = DecodeJSON(t, resp, &api.PullReview{})
 	assert.EqualValues(t, "COMMENT", review.State)
 	assert.Equal(t, 0, review.CodeCommentsCount)
+	req = NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/reactions", repo.OwnerName, repo.Name, pullIssue.Index, review.ID), &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusCreated)
 	req = NewRequestf(t, http.MethodDelete, "/api/v1/repos/%s/%s/pulls/%d/reviews/%d", repo.OwnerName, repo.Name, pullIssue.Index, review.ID).
 		AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusNoContent)
+	storedReactions, _, err := issues_model.FindReviewReactions(t.Context(), pullIssue.ID, review.ID, db.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, storedReactions)
 
 	// test CreatePullReview Comment without body but with comments
 	req = NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews", repo.OwnerName, repo.Name, pullIssue.Index), &api.CreatePullReviewOptions{
@@ -228,6 +264,10 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	assert.False(t, reviews[0].Stale)
 	assert.True(t, reviews[0].Official)
 	assert.Equal(t, "test_team", reviews[0].ReviewerTeam.Name)
+
+	// review IDs cannot be read through another pull request's route
+	req = NewRequest(t, http.MethodGet, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/reactions", repo3.OwnerName, repo3.Name, pullIssue12.Index, reviewID)).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusNotFound)
 
 	assert.EqualValues(t, 12, reviews[1].ID)
 	assert.EqualValues(t, "REQUEST_REVIEW", reviews[1].State)

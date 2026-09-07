@@ -1525,10 +1525,15 @@ func Routes() *web.Router {
 							m.Group("/{id}", func() {
 								m.Combo("").
 									Get(repo.GetPullReview).
+									Patch(reqToken(), mustNotBeArchived, bind(api.EditPullReviewOption{}), repo.EditPullReview).
 									Delete(reqToken(), repo.DeletePullReview).
 									Post(reqToken(), bind(api.SubmitPullReviewOptions{}), repo.SubmitPullReview)
 								m.Combo("/comments").
 									Get(repo.GetPullReviewComments)
+								m.Combo("/reactions").
+									Get(repo.GetPullReviewReactions).
+									Post(reqToken(), bind(api.EditReactionOption{}), repo.PostPullReviewReaction).
+									Delete(reqToken(), bind(api.EditReactionOption{}), repo.DeletePullReviewReaction)
 								m.Post("/dismissals", reqToken(), bind(api.DismissPullReviewOptions{}), repo.DismissPullReview)
 								m.Post("/undismissals", reqToken(), repo.UnDismissPullReview)
 							})
