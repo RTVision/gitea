@@ -100,6 +100,7 @@ func reconcileStackMerge(ctx context.Context, layer *stackLayerJournal, pr *issu
 		}
 		return false, err
 	}
+	pr.MergedBaseCommitID = layer.LandingBaseSHA
 	merged, err := SetMerged(ctx, pr, layer.MergeCandidateSHA, timeutil.TimeStampNow(), actor, pr.Status)
 	if err != nil {
 		return false, err

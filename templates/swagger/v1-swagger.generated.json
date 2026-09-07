@@ -17419,6 +17419,57 @@
         }
       }
     },
+    "/repos/{owner}/{repo}/pulls/{index}/revert": {
+      "post": {
+        "description": "Requires repository code write access. Creates a new branch; never modifies the target branch. Conflicts or an unknown historical merge range return 409.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Open a pull request reverting a merged pull request",
+        "operationId": "repoRevertPullRequest",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "index",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/PullRequest"
+          },
+          "403": {
+            "$ref": "#/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/error"
+          },
+          "423": {
+            "$ref": "#/responses/repoArchivedError"
+          }
+        }
+      }
+    },
     "/repos/{owner}/{repo}/pulls/{index}/reviews": {
       "get": {
         "produces": [
@@ -32871,6 +32922,11 @@
           "description": "The merge base commit SHA",
           "type": "string",
           "x-go-name": "MergeBase"
+        },
+        "merge_base_commit_sha": {
+          "description": "The base branch SHA immediately before a server-managed merge, when recorded.",
+          "type": "string",
+          "x-go-name": "MergedBaseCommitID"
         },
         "merge_commit_sha": {
           "description": "The SHA of the merge commit",

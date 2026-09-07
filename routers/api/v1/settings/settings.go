@@ -46,6 +46,7 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 			"pull-review-reactions",
 			"actions-run-approve",
 			"pull-tracking-summary",
+			"pull-revert",
 		},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,

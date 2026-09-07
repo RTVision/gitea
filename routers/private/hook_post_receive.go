@@ -238,6 +238,11 @@ func hookPostReceiveHandlePullRequestMerging(ctx *gitea_context.PrivateContext, 
 		return false
 	}
 
+	update := updates[len(updates)-1]
+	if update.RefFullName == git.RefNameFromBranch(pr.BaseBranch) && update.IsUpdateRef() {
+		pr.MergedBaseCommitID = update.OldCommitID
+	}
+
 	// FIXME: Maybe we need a `PullRequestStatusMerged` status for PRs that are merged, currently we use the previous status
 	// here to keep it as before, that maybe PullRequestStatusMergeable
 	_, err = pull_service.SetMerged(ctx, pr, updates[len(updates)-1].NewCommitID, timeutil.TimeStampNow(), ctx.Doer, pr.Status)
