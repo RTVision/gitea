@@ -29,6 +29,7 @@ func NewNotifier() notify_service.Notifier {
 }
 
 func (n *automergeNotifier) PullRequestReview(ctx context.Context, pr *issues_model.PullRequest, review *issues_model.Review, comment *issues_model.Comment, mentions []*user_model.User) {
+	pull_service.WakeStackOperationForPull(ctx, pr.ID)
 	// as a missing / blocking reviews could have blocked a pending automerge let's recheck
 	if review.Type == issues_model.ReviewTypeApprove {
 		automergequeue.StartAutoMergeCheckByPullHead(ctx, pr)
@@ -45,6 +46,7 @@ func (n *automergeNotifier) PullReviewDismiss(ctx context.Context, doer *user_mo
 		return
 	}
 	// as reviews could have blocked a pending automerge let's recheck
+	pull_service.WakeStackOperationForPull(ctx, review.Issue.PullRequest.ID)
 	automergequeue.StartAutoMergeCheckByPullHead(ctx, review.Issue.PullRequest)
 }
 
@@ -59,6 +61,7 @@ func (n *automergeNotifier) CreateCommitStatus(ctx context.Context, repo *repo_m
 		return
 	}
 	for _, pr := range pulls {
+		pull_service.WakeStackOperationForPull(ctx, pr.ID)
 		automergequeue.StartAutoMergeCheckByPullHead(ctx, pr)
 	}
 }
