@@ -65,9 +65,13 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 		return nil, err
 	}
 
+	policyBranches, err := issues_model.ResolvePullRequestPolicyBranches(ctx, prs)
+	if err != nil {
+		return nil, err
+	}
 	for _, pr := range prs {
 		var summary RequestTrackingSummary
-		pb := rulesByRepo[pr.BaseRepoID].GetFirstMatched(pr.BaseBranch)
+		pb := rulesByRepo[pr.BaseRepoID].GetFirstMatched(policyBranches[pr.ID])
 		if decision := pullRequestReviewDecision(ctx, pb, pr, reviewsByIssue[pr.IssueID]); decision != nil {
 			summary.ReviewDecision = decision
 		}

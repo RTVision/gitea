@@ -1632,6 +1632,13 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 	m.Group("/{username}/{reponame}", func() {
 		m.Get("/{type:pulls}", repo.Issues)
+		m.Group("/pulls/stacks", func() {
+			m.Combo("/new").Get(repo.PullStackNew).Post(reqSignIn, repo.PullStackNewPost)
+			m.Get("", repo.PullStacks)
+			m.Get("/{id}", repo.PullStack)
+			m.Get("/{id}/status", repo.PullStackStatus)
+			m.Post("/{id}/{action}", reqSignIn, repo.PullStackAction)
+		})
 		m.Group("/{type:pulls}/{index}", func() {
 			m.Get("", repo.SetEditorconfigIfExists, repo.SetWhitespaceBehavior, repo.GetPullDiffStats, repo.ViewIssue)
 			m.Get(".diff", repo.DownloadPullDiff)

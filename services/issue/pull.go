@@ -52,7 +52,11 @@ func getCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *issues_mod
 		return nil, nil
 	}
 
-	commit, err := repo.GetBranchCommit(ctx, pr.BaseBranch)
+	policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+	if err != nil {
+		return nil, err
+	}
+	commit, err := repo.GetBranchCommit(ctx, policyBranch)
 	if err != nil {
 		return nil, err
 	}

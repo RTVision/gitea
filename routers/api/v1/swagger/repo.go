@@ -147,6 +147,50 @@ type swaggerResponsePullRequestList struct {
 	Body []api.PullRequest `json:"body"`
 }
 
+// PullRequestStack
+// swagger:response PullRequestStack
+type swaggerResponsePullRequestStack struct {
+	// in:body
+	Body api.PullRequestStack `json:"body"`
+}
+
+// PullRequestStackList
+// swagger:response PullRequestStackList
+type swaggerResponsePullRequestStackList struct {
+	// in:body
+	Body []api.PullRequestStack `json:"body"`
+}
+
+// PullRequestStackOperation
+// swagger:response PullRequestStackOperation
+type swaggerResponsePullRequestStackOperation struct {
+	// in:body
+	Body api.PullRequestStackOperation `json:"body"`
+}
+
+// PullRequestStackOperationList
+// swagger:response PullRequestStackOperationList
+type swaggerResponsePullRequestStackOperationList struct {
+	// in:body
+	Body []api.PullRequestStackOperation `json:"body"`
+}
+
+// PullRequestStackCapabilities
+// swagger:response PullRequestStackCapabilities
+type swaggerResponsePullRequestStackCapabilities struct {
+	// in:body
+	Body api.PullRequestStackCapabilities `json:"body"`
+}
+
+// StackRevisionConflict
+// swagger:response StackRevisionConflict
+type swaggerResponseStackRevisionConflict struct {
+	// in:body
+	Body struct {
+		Revision int64 `json:"revision"`
+	} `json:"body"`
+}
+
 // PullReview
 // swagger:response PullReview
 type swaggerResponsePullReview struct {
