@@ -1,0 +1,17 @@
+{{template "base/head" .}}
+<div role="main" class="page-content repository">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/new">
+			<h1>{{ctx.Locale.Tr "repo.pulls.new_stack"}}</h1>
+			<fieldset><legend>{{ctx.Locale.Tr "repo.pulls.stack_start"}}</legend>
+				<div class="field"><label for="stack-pulls">{{ctx.Locale.Tr "repo.pulls.stack_pulls"}}</label><textarea id="stack-pulls" name="pulls" required placeholder="#12, #13, #14">{{.Pulls}}</textarea><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_pulls_desc"}}</p></div>
+				<div class="field"><label for="stack-trunk">{{ctx.Locale.Tr "repo.pulls.stack_base_label"}}</label><input id="stack-trunk" name="trunk" required value="{{.DefaultBranch}}"><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_base_desc"}}</p></div>
+			</fieldset>
+			<button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.create_stack"}}</button>
+			<a class="ui button" href="{{.RepoLink}}/pulls/stacks">{{ctx.Locale.Tr "cancel"}}</a>
+		</form>
+	</div>
+</div>
+{{template "base/footer" .}}

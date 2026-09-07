@@ -357,6 +357,37 @@ func TestGenerateGiteaContextPullRequestTarget(t *testing.T) {
 	assert.Equal(t, "main", giteaCtx["ref_name"])
 }
 
+func TestGenerateGiteaContextStackedPullRequestTarget(t *testing.T) {
+	payload := api.PullRequestPayload{
+		PullRequest: &api.PullRequest{
+			Base:  &api.PRBranchInfo{Ref: "feature-parent", Sha: "parent-sha"},
+			Head:  &api.PRBranchInfo{Ref: "feature-layer", Sha: "head-sha"},
+			Stack: &api.PullRequestStackRef{Number: 7, Size: 3, Position: 2, Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}},
+		},
+	}
+	payloadBytes, err := json.Marshal(payload)
+	require.NoError(t, err)
+	run := &actions_model.ActionRun{
+		Event:        webhook_module.HookEventPullRequest,
+		TriggerEvent: string(actions_module.GithubEventPullRequestTarget),
+		EventPayload: string(payloadBytes),
+		TriggerUser:  &user_model.User{Name: "test-user"},
+		Repo:         &repo_model.Repository{Name: "test-repo", OwnerName: "test-owner"},
+	}
+
+	giteaCtx := GenerateGiteaContext(t.Context(), run, nil, nil)
+	assert.Equal(t, "release", giteaCtx["base_ref"])
+	assert.Equal(t, "refs/heads/release", giteaCtx["ref"])
+	assert.Equal(t, "trunk-sha", giteaCtx["sha"])
+	event, ok := giteaCtx["event"].(map[string]any)
+	require.True(t, ok)
+	pullRequest, ok := event["pull_request"].(map[string]any)
+	require.True(t, ok)
+	base, ok := pullRequest["base"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "feature-parent", base["ref"])
+}
+
 func TestGenerateGiteaContextRefProtected(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 

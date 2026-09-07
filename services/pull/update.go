@@ -24,6 +24,9 @@ import (
 // Update updates pull request with base branch.
 func Update(pr *issues_model.PullRequest, doer *user_model.User, message string, rebase bool) error {
 	ctx := graceful.GetManager().HammerContext() // don't abort the git operation even if the user's request is canceled
+	if err := checkOrdinaryStackMutation(ctx, pr); err != nil {
+		return err
+	}
 	if pr.Flow == issues_model.PullRequestFlowAGit {
 		// TODO: update of agit flow pull request's head branch is unsupported
 		return errors.New("update of agit flow pull request's head branch is unsupported")

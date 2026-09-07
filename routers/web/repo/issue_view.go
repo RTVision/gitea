@@ -384,6 +384,13 @@ func ViewIssue(ctx *context.Context) {
 			return
 		}
 	}
+	if issue.IsPull {
+		attachPullStackData(ctx, issue)
+		if ctx.Written() {
+			return
+		}
+		ctx.Data["CanCreateStack"] = setting.Repository.PullRequest.EnableStacks && canManagePullStack(ctx) && ctx.Data["PullStackData"] == nil
+	}
 
 	// Get more information if it's a pull request.
 	if issue.IsPull {
@@ -1008,7 +1015,12 @@ func (prInfo *pullRequestViewInfo) preparePullUpdateActions(ctx *context.Context
 }
 
 func (prInfo *pullRequestViewInfo) prepareMergeBoxProtectionChecks(ctx *context.Context) {
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, ctx.Repo.Repository.ID, prInfo.issue.PullRequest.BaseBranch)
+	policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, prInfo.issue.PullRequest)
+	if err != nil {
+		ctx.ServerError("ResolvePullRequestPolicyBranch", err)
+		return
+	}
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, ctx.Repo.Repository.ID, policyBranch)
 	if err != nil {
 		ctx.ServerError("GetFirstMatchProtectedBranchRule", err)
 		return

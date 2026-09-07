@@ -67,6 +67,7 @@ import {initGlobalShortcut} from './modules/shortcut.ts';
 import {initDevtest} from './modules/devtest.ts';
 import {initRepoWatch} from './features/repo-watch.ts';
 import {initPackagesView} from './features/packages.ts';
+import {initRepoStackStatus} from './features/repo-stack.ts';
 
 const initStartTime = performance.now();
 const initPerformanceTracer = callInitFunctions([
@@ -135,6 +136,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoProjectsView,
   initRepoPullRequestReview,
   initRepoReleaseNew,
+  initRepoStackStatus,
   initRepoTopicBar,
   initRepoViewFileTree,
   initRepoWiki,

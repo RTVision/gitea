@@ -84,6 +84,16 @@ type swaggerParameterBodies struct {
 	// in:body
 	EditPullRequestOption api.EditPullRequestOption
 	// in:body
+	CreatePullRequestStackOption api.CreatePullRequestStackOption
+	// in:body
+	EditPullRequestStackOption api.EditPullRequestStackOption
+	// in:body
+	PullRequestStackRevisionOption api.PullRequestStackRevisionOption
+	// in:body
+	PullRequestStackOperationOption api.PullRequestStackOperationOption
+	// in:body
+	SynchronizePullRequestStackOption api.SynchronizePullRequestStackOption
+	// in:body
 	MergePullRequestOption forms.MergePullRequestForm
 
 	// in:body
@@ -149,7 +159,9 @@ type swaggerParameterBodies struct {
 	RepoTopicOptions api.RepoTopicOptions
 
 	// in:body
-	EditReactionOption   api.EditReactionOption
+	EditReactionOption api.EditReactionOption
+
+	// in:body
 	EditPullReviewOption api.EditPullReviewOption
 
 	// in:body
