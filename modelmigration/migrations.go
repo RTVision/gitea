@@ -426,7 +426,8 @@ func prepareMigrationTasks() []*migration {
 		newMigration(350, "Add published_unix column to release", v28.AddPublishedUnixToRelease),
 		newMigration(351, "Track transfer recipient access grants", v28.AddRecipientAccessGrantedToRepoTransfer),
 		newMigration(352, "Add token columns to deploy_key", v28.AddTokenToDeployKey),
-		newMigration(353, "Add review ID to reaction", v28.AddReviewIDToReaction),
+		newMigration(353, "Add native pull request stacks", v28.AddPullRequestStacks),
+		newMigration(354, "Add review ID to reaction", v28.AddReviewIDToReaction),
 	}
 	return preparedMigrations
 }

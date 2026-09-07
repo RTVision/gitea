@@ -29,7 +29,7 @@ func TestAPIExposedSettings(t *testing.T) {
 
 	apiSettings := DecodeJSON(t, resp, &api.GeneralAPISettings{})
 	assert.Equal(t, &api.GeneralAPISettings{
-		Features:               []string{"pull-auto-merge-state", "pull-draft", "pull-review-edit", "pull-review-reactions"},
+		Features:               []string{"pull-auto-merge-state", "pull-draft", "pull-review-edit", "pull-review-reactions", "actions-run-approve"},
 		MaxResponseItems:       setting.API.MaxResponseItems,
 		DefaultPagingNum:       setting.API.DefaultPagingNum,
 		DefaultGitTreesPerPage: setting.API.DefaultGitTreesPerPage,

@@ -1,0 +1,30 @@
+{{template "base/head" .}}
+{{$data := .PullStackData}}
+<div role="main" class="page-content repository">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<div class="flex-text-block tw-mb-4"><h1 class="tw-text-xl tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stack_number" $data.Stack.ID}}</h1>
+			<span class="ui label">{{$data.Stack.State}}</span><span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</span></div>
+		<div class="ui stackable grid tw-max-w-full">
+			<div class="eleven wide column tw-min-w-0">
+				<ol class="ui segments tw-pl-0" aria-label="{{ctx.Locale.Tr "repo.pulls.stack_entries"}}">
+				{{range $data.Entries}}<li class="ui segment flex-left-right tw-flex-wrap tw-max-w-full"><div class="flex-text-block tw-min-w-0"><span>{{.Entry.Position}}.</span>{{if .Pull.HasMerged}}{{svg "octicon-git-merge" 16 "tw-text-purple"}}{{else}}{{svg "octicon-git-pull-request" 16}}{{end}}<div class="tw-min-w-0"><a class="tw-break-anywhere" href="{{.Pull.Issue.Link}}">#{{.Pull.Index}} {{.Pull.Issue.Title}}</a><div class="tw-text-text-light tw-text-12">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</div></div></div><div class="flex-text-block">{{if .Readiness}}<span class="ui basic red label">{{ctx.Locale.Tr "repo.pulls.stack_blocked"}}</span><span class="tw-text-red tw-break-anywhere">{{.Readiness}}</span>{{end}}<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span></div></li>{{end}}
+				</ol><div class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</div>
+			</div>
+			<div class="five wide column tw-min-w-0">
+				{{template "repo/stack/status" .}}
+				{{if $data.Operations}}<div class="ui segment"><h3>{{ctx.Locale.Tr "repo.pulls.stack_history"}}</h3>
+					<ul class="tw-pl-5">{{range $data.Operations}}<li>{{ctx.Locale.Tr "repo.pulls.stack_operation" .State}} {{if gt .Completed 0}}({{ctx.Locale.Tr "repo.pulls.stack_landed" .Completed}}){{end}}</li>{{end}}</ul></div>{{end}}
+				{{if .CanManageStack}}
+				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/land"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_land"}}</h3>
+					<div class="field"><label for="stack-through">{{ctx.Locale.Tr "repo.pulls.stack_land_through"}}</label><select id="stack-through" name="through">{{range $data.Entries}}{{if not .Pull.HasMerged}}<option value="{{.Entry.Position}}">#{{.Pull.Index}}</option>{{end}}{{end}}</select></div><div class="field"><label for="stack-style">{{ctx.Locale.Tr "repo.pulls.stack_merge_style"}}</label><select id="stack-style" name="merge_style"><option value="merge">{{ctx.Locale.Tr "repo.pulls.stack_merge_commit"}}</option><option value="squash">{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</option><option value="rebase">{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}</option></select></div><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_land_desc"}}</p><button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.stack_land"}}</button></form>
+				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/rebase"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_update"}}</h3>
+					<button class="ui button">{{ctx.Locale.Tr "repo.pulls.stack_rebase"}}</button></form>
+				<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/unstack"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><button class="ui basic red button">{{ctx.Locale.Tr "repo.pulls.unstack"}}</button></form>
+				{{end}}
+			</div>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	git_model "gitea.dev/models/git"
+	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
@@ -367,6 +368,9 @@ func RenameBranchPost(ctx *context.Context) {
 			ctx.Redirect(ctx.Repo.RepoLink + "/branches")
 		case errors.Is(err, git_model.ErrBranchIsProtected):
 			ctx.Flash.Error(ctx.Tr("repo.branch.rename_protected_branch_failed"))
+			ctx.Redirect(ctx.Repo.RepoLink + "/branches")
+		case errors.Is(err, issues_model.ErrBranchInStack):
+			ctx.Flash.Error(ctx.Tr("repo.pulls.stack_branch_mutation_blocked"))
 			ctx.Redirect(ctx.Repo.RepoLink + "/branches")
 		default:
 			ctx.ServerError("RenameBranch", err)

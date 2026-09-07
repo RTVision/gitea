@@ -317,7 +317,11 @@ Loop:
 				return false, nil, nil, &ErrWontSign{twofa}
 			}
 		case approved:
-			protectedBranch, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repo.ID, pr.BaseBranch)
+			policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+			if err != nil {
+				return false, nil, nil, err
+			}
+			protectedBranch, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repo.ID, policyBranch)
 			if err != nil {
 				return false, nil, nil, err
 			}
