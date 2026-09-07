@@ -105,8 +105,12 @@ type ActionArtifact struct {
 
 // ActionWorkflowRun represents a WorkflowRun
 type ActionWorkflowRun struct {
-	ID  int64  `json:"id"`
-	URL string `json:"url"`
+	// NeedsApproval is true only for the current attempt waiting for approval.
+	NeedsApproval bool `json:"needs_approval"`
+	// PullRequestHeadSHA identifies the contributor commit recorded when a PR run was triggered.
+	PullRequestHeadSHA string `json:"pull_request_head_sha,omitempty"`
+	ID                 int64  `json:"id"`
+	URL                string `json:"url"`
 	// PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. ".../actions/runs/{run_id}/attempts/{attempt-1}".
 	// It is set only when the current attempt is > 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.
 	PreviousAttemptURL *string `json:"previous_attempt_url"`

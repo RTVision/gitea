@@ -306,8 +306,14 @@ func ToActionWorkflowRun(ctx context.Context, run *actions_model.ActionRun, atte
 		}
 	}
 
+	var pullRequestHeadSHA string
+	if payload, err := run.GetPullRequestEventPayload(); err == nil && payload.PullRequest != nil && payload.PullRequest.Head != nil {
+		pullRequestHeadSHA = payload.PullRequest.Head.Sha
+	}
 	runURL := run.APIURL(ctx)
 	return &api.ActionWorkflowRun{
+		PullRequestHeadSHA: pullRequestHeadSHA,
+		NeedsApproval:      run.NeedApproval && (attempt == nil || attempt.ID == run.LatestAttemptID),
 		ID:                 run.ID,
 		URL:                runURL,
 		PreviousAttemptURL: previousAttemptURL,
