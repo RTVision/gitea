@@ -897,6 +897,8 @@ func DeleteIssue(ctx *context.APIContext) {
 	//     "$ref": "#/responses/forbidden"
 	//   "404":
 	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/error"
 	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
 	if err != nil {
 		ctx.APIErrorAuto(err)
@@ -904,6 +906,10 @@ func DeleteIssue(ctx *context.APIContext) {
 	}
 
 	if err = issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+		if errors.Is(err, issues_model.ErrStackRevision) {
+			ctx.APIError(http.StatusConflict, "finish or cancel the active stack operation before deleting its pull request")
+			return
+		}
 		ctx.APIErrorInternal(err)
 		return
 	}

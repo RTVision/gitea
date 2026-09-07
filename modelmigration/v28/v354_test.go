@@ -7,30 +7,60 @@ import (
 	"testing"
 
 	"gitea.dev/modelmigration/migrationtest"
+	"gitea.dev/modules/timeutil"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestAddPullRequestMergedBaseCommitID(t *testing.T) {
-	type PullRequest struct {
-		ID             int64  `xorm:"pk"`
-		MergedCommitID string `xorm:"VARCHAR(64)"`
+func TestAddReviewIDToReaction(t *testing.T) {
+	type Reaction struct {
+		ID               int64              `xorm:"pk autoincr"`
+		Type             string             `xorm:"INDEX UNIQUE(s) NOT NULL"`
+		IssueID          int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
+		CommentID        int64              `xorm:"INDEX UNIQUE(s)"`
+		UserID           int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
+		OriginalAuthorID int64              `xorm:"INDEX UNIQUE(s) NOT NULL DEFAULT(0)"`
+		OriginalAuthor   string             `xorm:"INDEX UNIQUE(s)"`
+		CreatedUnix      timeutil.TimeStamp `xorm:"INDEX created"`
 	}
-	x, cleanup := migrationtest.PrepareTestEnv(t, 0, new(PullRequest))
-	defer cleanup()
+	x, deferable := migrationtest.PrepareTestEnv(t, 0, new(Reaction))
+	defer deferable()
 	if x == nil || t.Failed() {
 		return
 	}
-	_, err := x.Insert(&PullRequest{ID: 1, MergedCommitID: "historical-merge"})
+	_, err := x.Exec("INSERT INTO reaction (id, type, issue_id, comment_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 42, "heart", 1, 0, 1, 0, "migrated", 123)
 	require.NoError(t, err)
-	require.NoError(t, AddPullRequestMergedBaseCommitID(t.Context(), x))
-	var result struct {
-		MergedCommitID     string
-		MergedBaseCommitID string
+	require.NoError(t, AddPullRequestStacks(t.Context(), x))
+	require.NoError(t, AddReviewIDToReaction(t.Context(), x))
+	for _, table := range []string{"pull_request_stack", "stack_entry", "stack_branch_claim", "stack_operation"} {
+		exists, err := x.IsTableExist(table)
+		require.NoError(t, err)
+		require.True(t, exists, table)
 	}
-	found, err := x.Table("pull_request").Where("id = ?", 1).Get(&result)
+
+	type migratedReaction struct {
+		ID             int64
+		OriginalAuthor string
+		CreatedUnix    timeutil.TimeStamp
+		ReviewID       int64
+	}
+	var migrated migratedReaction
+	has, err := x.SQL("SELECT id, original_author, created_unix, review_id FROM reaction WHERE id = ?", 42).Get(&migrated)
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, "historical-merge", result.MergedCommitID)
-	require.Empty(t, result.MergedBaseCommitID)
+	require.True(t, has)
+	require.EqualValues(t, 42, migrated.ID)
+	require.Equal(t, "migrated", migrated.OriginalAuthor)
+	require.Equal(t, timeutil.TimeStamp(123), migrated.CreatedUnix)
+	require.Zero(t, migrated.ReviewID)
+
+	// The same user may react with the same emoji to an issue, a comment, and a review.
+	// A second reaction to the same review must remain prohibited by the composite key.
+	_, err = x.Exec("INSERT INTO reaction (type, issue_id, comment_id, review_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "eyes", 2, 0, 0, 2, 0, "", 200)
+	require.NoError(t, err)
+	_, err = x.Exec("INSERT INTO reaction (type, issue_id, comment_id, review_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "eyes", 2, 8, 0, 2, 0, "", 201)
+	require.NoError(t, err)
+	_, err = x.Exec("INSERT INTO reaction (type, issue_id, comment_id, review_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "eyes", 2, 0, 7, 2, 0, "", 202)
+	require.NoError(t, err)
+	_, err = x.Exec("INSERT INTO reaction (type, issue_id, comment_id, review_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "eyes", 2, 0, 7, 2, 0, "", 203)
+	require.Error(t, err)
 }

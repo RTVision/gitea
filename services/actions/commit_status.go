@@ -65,6 +65,9 @@ func CreateCommitStatusForRunJobs(ctx context.Context, run *actions_model.Action
 			log.Error("Failed to create commit status for job %d: %v", job.ID, err)
 		}
 	}
+	if payload, err := run.GetPullRequestEventPayload(); err == nil && payload.PullRequest != nil {
+		pull_service.WakeStackOperationForPull(ctx, payload.PullRequest.ID)
+	}
 }
 
 func GetRunsFromCommitStatuses(ctx context.Context, statuses []*git_model.CommitStatus) ([]*actions_model.ActionRun, error) {

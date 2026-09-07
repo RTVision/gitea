@@ -8,45 +8,54 @@ import (
 
 	"gitea.dev/modelmigration/base"
 	"gitea.dev/modules/timeutil"
-
-	"xorm.io/xorm"
 )
 
-func AddReviewIDToReaction(ctx context.Context, x base.EngineMigration) error {
-	if err := addReviewIDColumn(x); err != nil {
-		return err
+func AddPullRequestStacks(_ context.Context, x base.EngineMigration) error {
+	type PullRequestStack struct {
+		ID                int64  `xorm:"pk autoincr"`
+		RepoID            int64  `xorm:"INDEX NOT NULL"`
+		TrunkBranch       string `xorm:"NOT NULL"`
+		State             string `xorm:"VARCHAR(20) NOT NULL"`
+		Revision          int64  `xorm:"NOT NULL"`
+		ActiveOperationID int64  `xorm:"NOT NULL DEFAULT 0"`
+		CreatedByID       int64
+		CreatedUnix       timeutil.TimeStamp `xorm:"created"`
+		UpdatedUnix       timeutil.TimeStamp `xorm:"updated"`
 	}
 
-	type Reaction struct {
-		ID               int64              `xorm:"pk autoincr"`
-		Type             string             `xorm:"INDEX UNIQUE(s) NOT NULL"`
-		IssueID          int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
-		CommentID        int64              `xorm:"INDEX UNIQUE(s)"`
-		ReviewID         int64              `xorm:"INDEX UNIQUE(s) NOT NULL DEFAULT(0)"`
-		UserID           int64              `xorm:"INDEX UNIQUE(s) NOT NULL"`
-		OriginalAuthorID int64              `xorm:"INDEX UNIQUE(s) NOT NULL DEFAULT(0)"`
-		OriginalAuthor   string             `xorm:"INDEX UNIQUE(s)"`
-		CreatedUnix      timeutil.TimeStamp `xorm:"INDEX created"`
+	type StackEntry struct {
+		ID                  int64 `xorm:"pk autoincr"`
+		StackID             int64 `xorm:"UNIQUE(stack_position) INDEX NOT NULL"`
+		PullRequestID       int64 `xorm:"INDEX NOT NULL"`
+		Position            int   `xorm:"UNIQUE(stack_position) NOT NULL"`
+		ParentPullRequestID int64
+		OldParentSHA        string `xorm:"VARCHAR(64)"`
+		HeadSHA             string `xorm:"VARCHAR(64)"`
+		LandedCommitSHA     string `xorm:"VARCHAR(64)"`
 	}
 
-	sess := x.NewSession()
-	defer sess.Close()
-	if err := sess.Begin(); err != nil {
-		return err
+	type StackBranchClaim struct {
+		ID            int64  `xorm:"pk autoincr"`
+		StackID       int64  `xorm:"INDEX NOT NULL"`
+		PullRequestID int64  `xorm:"UNIQUE NOT NULL"`
+		BranchKey     string `xorm:"VARCHAR(64) UNIQUE NOT NULL"`
 	}
-	if err := base.RecreateTable(sess, new(Reaction)); err != nil {
-		return err
-	}
-	return sess.Commit()
-}
 
-func addReviewIDColumn(x base.EngineMigration) error {
-	type Reaction struct {
-		ReviewID int64 `xorm:"NOT NULL DEFAULT(0)"`
+	type StackOperation struct {
+		ID               int64 `xorm:"pk autoincr"`
+		StackID          int64 `xorm:"INDEX NOT NULL"`
+		ActorID          int64
+		ExpectedRevision int64
+		Version          int64
+		Kind             string `xorm:"VARCHAR(20)"`
+		State            string `xorm:"VARCHAR(20) INDEX"`
+		MergeStyle       string `xorm:"VARCHAR(30)"`
+		ThroughPosition  int
+		Completed        int
+		JournalJSON      string             `xorm:"LONGTEXT"`
+		LastError        string             `xorm:"TEXT"`
+		CreatedUnix      timeutil.TimeStamp `xorm:"created"`
+		UpdatedUnix      timeutil.TimeStamp `xorm:"updated"`
 	}
-	_, err := x.SyncWithOptions(xorm.SyncOptions{
-		IgnoreConstrains:  true,
-		IgnoreDropIndices: true,
-	}, new(Reaction))
-	return err
+	return x.Sync(new(PullRequestStack), new(StackEntry), new(StackBranchClaim), new(StackOperation))
 }

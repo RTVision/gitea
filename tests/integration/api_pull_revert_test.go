@@ -12,11 +12,15 @@ import (
 	"testing"
 
 	auth_model "gitea.dev/models/auth"
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
+	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
+	"gitea.dev/modules/json"
 	api "gitea.dev/modules/structs"
+	pull_service "gitea.dev/services/pull"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,6 +51,33 @@ func TestAPIPullRevert(t *testing.T) {
 				testPullMerge(t, session, "user2", "repo1", strconv.FormatInt(pr.Index, 10), MergeOptions{Style: style})
 				merged := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID})
 				assert.Equal(t, before.ID.String(), merged.MergedBaseCommitID)
+				if style == repo_model.MergeStyleSquash || style == repo_model.MergeStyleRebase {
+					actor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: merged.MergerID})
+					candidate := merged.MergedCommitID
+					merged.HasMerged = false
+					merged.MergedCommitID, merged.MergedBaseCommitID = "", ""
+					require.NoError(t, merged.UpdateCols(t.Context(), "has_merged", "merged_commit_id", "merged_base_commit_id"))
+					stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+					require.NoError(t, db.Insert(t.Context(), stack))
+					entry := &issues_model.StackEntry{StackID: stack.ID, PullRequestID: merged.ID, Position: 1, HeadSHA: pr.Head.Sha, OldParentSHA: before.ID.String()}
+					require.NoError(t, db.Insert(t.Context(), entry))
+					require.NoError(t, db.Insert(t.Context(), &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: merged.ID, BranchKey: issues_model.StackBranchKey(repo.ID, merged.HeadBranch)}))
+					journal, err := json.Marshal(map[string]any{"stage": "confirm", "layers": []map[string]any{{
+						"entry_id": entry.ID, "pull_id": merged.ID, "position": 1, "head_branch": merged.HeadBranch,
+						"expected_head": entry.HeadSHA, "old_parent": entry.OldParentSHA, "phase": "merging",
+						"landing_base_sha": before.ID.String(), "merge_candidate_sha": candidate,
+					}}})
+					require.NoError(t, err)
+					op := &issues_model.StackOperation{StackID: stack.ID, ActorID: merged.MergerID, ExpectedRevision: 1, Kind: "land", MergeStyle: string(style), ThroughPosition: 1, State: "blocked", JournalJSON: string(journal)}
+					require.NoError(t, issues_model.CreateStackOperation(t.Context(), op))
+					require.NoError(t, pull_service.ResumeStackOperation(t.Context(), actor, op.ID))
+					op = waitForStackOperation(t, op.ID, "completed", "blocked")
+					require.Equal(t, "completed", op.State, op.LastError)
+					merged = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: merged.ID})
+					require.True(t, merged.HasMerged)
+					assert.Equal(t, before.ID.String(), merged.MergedBaseCommitID)
+				}
+
 				testCreateFile(t, session, "user2", "repo1", "master", "master", "later.txt", "keep this later change\n")
 				target, err := gitRepo.GetBranchCommit(t.Context(), "master")
 				require.NoError(t, err)
