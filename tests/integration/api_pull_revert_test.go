@@ -54,7 +54,7 @@ func TestAPIPullRevert(t *testing.T) {
 				if style == repo_model.MergeStyleSquash || style == repo_model.MergeStyleRebase {
 					actor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: merged.MergerID})
 					candidate := merged.MergedCommitID
-					_, err := db.GetEngine(t.Context()).ID(merged.IssueID).Cols("is_closed").Update(&issues_model.Issue{IsClosed: false})
+					_, err := db.GetEngine(t.Context()).ID(merged.IssueID).Cols("is_closed", "closed_unix").Update(&issues_model.Issue{IsClosed: false})
 					require.NoError(t, err)
 					merged.HasMerged = false
 					merged.MergedCommitID, merged.MergedBaseCommitID = "", ""
