@@ -135,6 +135,7 @@ func ResolvePullRequestPolicyBranches(ctx context.Context, prs PullRequestList) 
 	if err := db.GetEngine(ctx).Table("stack_branch_claim").
 		Join("LEFT", "pull_request_stack", "pull_request_stack.id = stack_branch_claim.stack_id").
 		In("stack_branch_claim.pull_request_id", pullIDs).
+		And("pull_request_stack.state = ? OR pull_request_stack.id IS NULL", StackStateOpen).
 		Select("stack_branch_claim.pull_request_id, pull_request_stack.id AS stack_id, pull_request_stack.repo_id, pull_request_stack.trunk_branch").
 		Find(&memberships); err != nil {
 		return nil, err

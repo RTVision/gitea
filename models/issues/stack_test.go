@@ -36,6 +36,18 @@ func TestStackMembershipPolicyAndRevision(t *testing.T) {
 	op := &issues_model.StackOperation{StackID: stack.ID, ExpectedRevision: 2, Kind: "land", State: "queued"}
 	require.NoError(t, issues_model.CreateStackOperation(ctx, op))
 	require.ErrorIs(t, issues_model.AdvanceStackRevision(ctx, stack.ID, 2), issues_model.ErrStackRevision)
+	require.NoError(t, issues_model.ReleaseStackBranchClaims(ctx, stack.ID))
+	for _, state := range []string{issues_model.StackStateComplete, issues_model.StackStateUnstacked} {
+		_, err = db.GetEngine(ctx).ID(stack.ID).Cols("state").Update(&issues_model.PullRequestStack{State: state})
+		require.NoError(t, err)
+		branch, err = issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+		require.NoError(t, err)
+		assert.Equal(t, pr.BaseBranch, branch)
+	}
+	_, err = db.GetEngine(ctx).ID(stack.ID).Delete(new(issues_model.PullRequestStack))
+	require.NoError(t, err)
+	_, err = issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+	require.ErrorIs(t, err, issues_model.ErrStackNotExist)
 	_, err = db.GetEngine(ctx).ID(claim.ID).Delete(new(issues_model.StackBranchClaim))
 	require.NoError(t, err)
 	branch, err = issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
