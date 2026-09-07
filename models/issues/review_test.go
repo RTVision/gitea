@@ -95,6 +95,39 @@ func TestFindLatestReviews(t *testing.T) {
 	assert.Equal(t, "singular review from org6 and final review for this pr", reviews[1].Content)
 }
 
+func TestReviewPolicyPredicates(t *testing.T) {
+	protectBranch := &git_model.ProtectedBranch{
+		RequiredApprovals:             2,
+		IgnoreStaleApprovals:          true,
+		BlockOnRejectedReviews:        true,
+		BlockOnOfficialReviewRequests: true,
+	}
+	reviews := issues_model.ReviewList{
+		{ID: 1, Type: issues_model.ReviewTypeApprove, Official: true},
+		{ID: 2, Type: issues_model.ReviewTypeApprove, Official: true, Stale: true},
+		{ID: 3, Type: issues_model.ReviewTypeApprove, Official: false},
+		{ID: 4, Type: issues_model.ReviewTypeApprove, Official: true, Dismissed: true},
+		{ID: 5, Type: issues_model.ReviewTypeReject, Official: true, Dismissed: true},
+		{ID: 6, Type: issues_model.ReviewTypeReject, Official: false},
+		{ID: 7, Type: issues_model.ReviewTypeRequest, Official: true, ReviewerTeamID: 11},
+	}
+
+	assert.Equal(t, int64(1), issues_model.GetGrantedApprovalsCountFromReviews(protectBranch, reviews))
+	assert.False(t, issues_model.HasEnoughApprovalsFromReviews(protectBranch, reviews))
+	assert.False(t, issues_model.MergeBlockedByRejectedReviewFromReviews(protectBranch, reviews))
+	assert.True(t, issues_model.MergeBlockedByOfficialReviewRequestsFromReviews(protectBranch, reviews))
+
+	reviews[5].Official = true
+	assert.True(t, issues_model.MergeBlockedByRejectedReviewFromReviews(protectBranch, reviews))
+
+	protectBranch.RequiredApprovals = 0
+	protectBranch.BlockOnRejectedReviews = false
+	protectBranch.BlockOnOfficialReviewRequests = false
+	assert.True(t, issues_model.HasEnoughApprovalsFromReviews(protectBranch, reviews))
+	assert.False(t, issues_model.MergeBlockedByRejectedReviewFromReviews(protectBranch, reviews))
+	assert.False(t, issues_model.MergeBlockedByOfficialReviewRequestsFromReviews(protectBranch, reviews))
+}
+
 func TestGetCurrentReview(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 2})

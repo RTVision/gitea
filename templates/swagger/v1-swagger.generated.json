@@ -16494,6 +16494,13 @@
             "description": "Page size of results",
             "name": "limit",
             "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -16739,6 +16746,13 @@
             "name": "head",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -16783,6 +16797,13 @@
             "name": "index",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "description": "Include review decision and check state summaries",
+            "name": "include_tracking",
+            "in": "query"
           }
         ],
         "responses": {
@@ -32765,6 +32786,17 @@
           "format": "int64",
           "x-go-name": "ChangedFiles"
         },
+        "checks_state": {
+          "description": "The combined state of the pull request's latest checks when pull tracking summaries are enabled",
+          "type": "string",
+          "enum": [
+            "passing",
+            "failing",
+            "pending"
+          ],
+          "x-go-enum-desc": "passing PullRequestChecksPassing indicates that at least one check passed and none failed or remain pending.\nfailing PullRequestChecksFailing indicates that a check failed, errored, or warned.\npending PullRequestChecksPending indicates that a check is still running or has an unknown state.",
+          "x-go-name": "ChecksState"
+        },
         "closed_at": {
           "type": "string",
           "format": "date-time",
@@ -32904,6 +32936,17 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ReviewComments"
+        },
+        "review_decision": {
+          "description": "The review policy result when pull tracking summaries are enabled",
+          "type": "string",
+          "enum": [
+            "approved",
+            "changes-requested",
+            "review-required"
+          ],
+          "x-go-enum-desc": "approved PullRequestReviewApproved indicates that all enabled review gates pass.\nchanges-requested PullRequestReviewChangesRequested indicates an active official rejection.\nreview-required PullRequestReviewRequired indicates that an enabled review gate is unsatisfied.",
+          "x-go-name": "ReviewDecision"
         },
         "stack": {
           "$ref": "#/definitions/PullRequestStackRef"

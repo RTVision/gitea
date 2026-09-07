@@ -112,17 +112,48 @@ func GetPullRequestStack(ctx context.Context, pullID int64) (*PullRequestStack, 
 }
 
 func ResolvePullRequestPolicyBranch(ctx context.Context, pr *PullRequest) (string, error) {
-	stack, err := GetPullRequestStack(ctx, pr.ID)
-	if err != nil {
-		return "", err
+	branches, err := ResolvePullRequestPolicyBranches(ctx, PullRequestList{pr})
+	return branches[pr.ID], err
+}
+
+func ResolvePullRequestPolicyBranches(ctx context.Context, prs PullRequestList) (map[int64]string, error) {
+	branches := make(map[int64]string, len(prs))
+	if len(prs) == 0 {
+		return branches, nil
 	}
-	if stack == nil {
-		return pr.BaseBranch, nil
+	pullIDs := make([]int64, 0, len(prs))
+	for _, pr := range prs {
+		pullIDs = append(pullIDs, pr.ID)
+		branches[pr.ID] = pr.BaseBranch
 	}
-	if stack.RepoID != pr.BaseRepoID {
-		return "", ErrInvalidStack
+	var memberships []struct {
+		PullRequestID int64
+		StackID       int64
+		RepoID        int64
+		TrunkBranch   string
 	}
-	return stack.TrunkBranch, nil
+	if err := db.GetEngine(ctx).Table("stack_branch_claim").
+		Join("LEFT", "pull_request_stack", "pull_request_stack.id = stack_branch_claim.stack_id").
+		In("stack_branch_claim.pull_request_id", pullIDs).
+		And("pull_request_stack.state = ? OR pull_request_stack.id IS NULL", StackStateOpen).
+		Select("stack_branch_claim.pull_request_id, pull_request_stack.id AS stack_id, pull_request_stack.repo_id, pull_request_stack.trunk_branch").
+		Find(&memberships); err != nil {
+		return nil, err
+	}
+	prsByID := make(map[int64]*PullRequest, len(prs))
+	for _, pr := range prs {
+		prsByID[pr.ID] = pr
+	}
+	for _, membership := range memberships {
+		if membership.StackID == 0 {
+			return nil, ErrStackNotExist
+		}
+		if membership.RepoID != prsByID[membership.PullRequestID].BaseRepoID {
+			return nil, ErrInvalidStack
+		}
+		branches[membership.PullRequestID] = membership.TrunkBranch
+	}
+	return branches, nil
 }
 
 func ListStacks(ctx context.Context, repoID int64, opts db.ListOptions) ([]*PullRequestStack, int64, error) {

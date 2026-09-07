@@ -843,6 +843,7 @@ func MergeBlockedByOfficialReviewRequests(ctx context.Context, protectBranch *gi
 	has, err := db.GetEngine(ctx).Where("issue_id = ?", pr.IssueID).
 		And("type = ?", ReviewTypeRequest).
 		And("official = ?", true).
+		And("dismissed = ?", false).
 		Exist(new(Review))
 	if err != nil {
 		log.Error("MergeBlockedByOfficialReviewRequests: %v", err)

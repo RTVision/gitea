@@ -47,10 +47,18 @@ func TestAPIViewPulls(t *testing.T) {
 	req := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/pulls?state=all", owner.Name, repo.Name).
 		AddTokenAuth(ctx.Token)
 	resp := ctx.Session.MakeRequest(t, req, http.StatusOK)
+	assert.NotContains(t, resp.Body.String(), `"review_decision"`)
+	assert.NotContains(t, resp.Body.String(), `"checks_state"`)
 
 	pulls := DecodeJSON(t, resp, []*api.PullRequest{})
 	expectedLen := unittest.GetCount(t, &issues_model.Issue{RepoID: repo.ID}, unittest.Cond("is_pull = ?", true))
 	assert.Len(t, pulls, expectedLen)
+
+	trackingReq := NewRequestf(t, "GET", "/api/v1/repos/%s/%s/pulls?state=all&include_tracking=true", owner.Name, repo.Name).
+		AddTokenAuth(ctx.Token)
+	trackingResp := ctx.Session.MakeRequest(t, trackingReq, http.StatusOK)
+	assert.Contains(t, trackingResp.Body.String(), `"review_decision":null`)
+	assert.Contains(t, trackingResp.Body.String(), `"checks_state":null`)
 
 	assert.Len(t, pulls, 3)
 	pull := pulls[0]
