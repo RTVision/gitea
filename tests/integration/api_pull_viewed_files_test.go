@@ -66,4 +66,24 @@ func TestAPIPullRequestChangesWithInlineComments(t *testing.T) {
 	assert.Equal(t, 1, review.CodeCommentsCount)
 	options.Comments = nil
 	MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, url, options).AddTokenAuth(token), http.StatusUnprocessableEntity)
+
+	for _, hasComments := range []bool{false, true} {
+		options = api.CreatePullReviewOptions{Body: "Draft review"}
+		if hasComments {
+			options.Comments = []api.CreatePullReviewComment{{Path: "README.md", Body: "Please adjust this line.", NewLineNum: 1}}
+		}
+		pending := DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, url, options).AddTokenAuth(token), http.StatusOK), api.PullReview{})
+		require.EqualValues(t, "PENDING", pending.State)
+		submitURL := fmt.Sprintf("%s/%d", url, pending.ID)
+		submit := api.SubmitPullReviewOptions{Event: "REQUEST_CHANGES"}
+		if !hasComments {
+			MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, submitURL, submit).AddTokenAuth(token), http.StatusUnprocessableEntity)
+			MakeRequest(t, NewRequest(t, http.MethodDelete, submitURL).AddTokenAuth(token), http.StatusNoContent)
+			continue
+		}
+		submitted := DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, submitURL, submit).AddTokenAuth(token), http.StatusOK), api.PullReview{})
+		assert.EqualValues(t, "REQUEST_CHANGES", submitted.State)
+		assert.Empty(t, submitted.Body)
+		assert.Equal(t, 1, submitted.CodeCommentsCount)
+	}
 }

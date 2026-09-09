@@ -879,7 +879,7 @@ func SubmitPullReview(ctx *context.APIContext) {
 	}
 
 	// determine review type
-	reviewType, isWrong := preparePullReviewType(ctx, pr, opts.Event, opts.Body, len(review.Comments) > 0)
+	reviewType, isWrong := preparePullReviewType(ctx, pr, opts.Event, opts.Body, len(review.CodeComments) > 0)
 	if isWrong {
 		return
 	}
