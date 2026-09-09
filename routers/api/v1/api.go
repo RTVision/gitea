@@ -1512,6 +1512,9 @@ func Routes() *web.Router {
 						m.Combo("").Get(repo.GetPullRequest).
 							Patch(reqToken(), bind(api.EditPullRequestOption{}), repo.EditPullRequest)
 						m.Get(".{diffType:diff|patch}", repo.DownloadPullDiffOrPatch)
+						m.Combo("/viewed-files", reqToken(), context.ReferencesGitRepo()).
+							Get(repo.GetPullRequestViewedFiles).
+							Put(bind(api.UpdatePullRequestViewedFilesOptions{}), repo.UpdatePullRequestViewedFiles)
 						m.Post("/update", reqToken(), repo.UpdatePullRequest)
 						m.Post("/revert", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), context.ReferencesGitRepo(), repo.RevertPullRequest)
 						m.Get("/commits", repo.GetPullRequestCommits)

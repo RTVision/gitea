@@ -44,6 +44,7 @@ func GetGeneralAPISettings(ctx *context.APIContext) {
 			"pull-draft",
 			"pull-review-edit",
 			"pull-review-reactions",
+			"pull-viewed-files",
 			"actions-run-approve",
 			"pull-tracking-summary",
 			"pull-revert",
