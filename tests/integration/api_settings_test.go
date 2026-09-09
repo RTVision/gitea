@@ -34,6 +34,7 @@ func TestAPIExposedSettings(t *testing.T) {
 			"pull-draft",
 			"pull-review-edit",
 			"pull-review-reactions",
+			"pull-viewed-files",
 			"actions-run-approve",
 			"pull-tracking-summary",
 			"pull-revert",

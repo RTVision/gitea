@@ -16,6 +16,9 @@ import (
 // swagger:parameters parameterBodies
 type swaggerParameterBodies struct {
 	// in:body
+	UpdatePullRequestViewedFilesOptions api.UpdatePullRequestViewedFilesOptions
+
+	// in:body
 	AddCollaboratorOption api.AddCollaboratorOption
 
 	// in:body

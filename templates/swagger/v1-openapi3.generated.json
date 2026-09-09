@@ -1118,6 +1118,16 @@
         },
         "description": "PullRequestStackOperationList"
       },
+      "PullRequestViewedFiles": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PullRequestViewedFiles"
+            }
+          }
+        },
+        "description": "PullRequestViewedFiles"
+      },
       "PullReview": {
         "content": {
           "application/json": {
@@ -9524,6 +9534,37 @@
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
       },
+      "PullRequestViewedFile": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "x-go-name": "Path"
+          },
+          "viewed": {
+            "type": "boolean",
+            "x-go-name": "Viewed"
+          }
+        },
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
+      "PullRequestViewedFiles": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/PullRequestViewedFile"
+            },
+            "type": "array",
+            "x-go-name": "Files"
+          },
+          "head_sha": {
+            "type": "string",
+            "x-go-name": "HeadSHA"
+          }
+        },
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
       "PullReview": {
         "description": "PullReview represents a pull request review",
         "properties": {
@@ -11060,6 +11101,27 @@
         },
         "required": [
           "content"
+        ],
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
+      "UpdatePullRequestViewedFilesOptions": {
+        "properties": {
+          "files": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "x-go-name": "Files"
+          },
+          "head_sha": {
+            "type": "string",
+            "x-go-name": "HeadSHA"
+          }
+        },
+        "required": [
+          "head_sha",
+          "files"
         ],
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
@@ -31182,6 +31244,109 @@
           }
         },
         "summary": "Merge PR's baseBranch into headBranch",
+        "tags": [
+          "repository"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/pulls/{index}/viewed-files": {
+      "get": {
+        "operationId": "repoGetPullRequestViewedFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PullRequestViewedFiles"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          }
+        },
+        "summary": "Get the authenticated user's viewed files for a pull request",
+        "tags": [
+          "repository"
+        ]
+      },
+      "put": {
+        "operationId": "repoUpdatePullRequestViewedFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePullRequestViewedFilesOptions"
+              }
+            }
+          },
+          "required": true,
+          "x-originalParamName": "body"
+        },
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/empty"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "description": "The pull request head changed"
+          },
+          "422": {
+            "description": "Invalid file selection"
+          }
+        },
+        "summary": "Mark or unmark files as viewed for the authenticated user",
         "tags": [
           "repository"
         ]

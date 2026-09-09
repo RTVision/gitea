@@ -553,3 +553,10 @@ type swaggerMergeUpstreamResponse struct {
 	// in:body
 	Body api.MergeUpstreamResponse `json:"body"`
 }
+
+// PullRequestViewedFiles
+// swagger:response PullRequestViewedFiles
+type swaggerResponsePullRequestViewedFiles struct {
+	// in:body
+	Body api.PullRequestViewedFiles `json:"body"`
+}

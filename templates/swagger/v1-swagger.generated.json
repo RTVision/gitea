@@ -18208,6 +18208,100 @@
         }
       }
     },
+    "/repos/{owner}/{repo}/pulls/{index}/viewed-files": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Get the authenticated user's viewed files for a pull request",
+        "operationId": "repoGetPullRequestViewedFiles",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "index",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PullRequestViewedFiles"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          }
+        }
+      },
+      "put": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Mark or unmark files as viewed for the authenticated user",
+        "operationId": "repoUpdatePullRequestViewedFiles",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "index",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UpdatePullRequestViewedFilesOptions"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/responses/empty"
+          },
+          "404": {
+            "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "description": "The pull request head changed"
+          },
+          "422": {
+            "description": "Invalid file selection"
+          }
+        }
+      }
+    },
     "/repos/{owner}/{repo}/push_mirrors": {
       "get": {
         "produces": [
@@ -33411,6 +33505,37 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "PullRequestViewedFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "x-go-name": "Path"
+        },
+        "viewed": {
+          "type": "boolean",
+          "x-go-name": "Viewed"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestViewedFiles": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PullRequestViewedFile"
+          },
+          "x-go-name": "Files"
+        },
+        "head_sha": {
+          "type": "string",
+          "x-go-name": "HeadSHA"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "PullReview": {
       "description": "PullReview represents a pull request review",
       "type": "object",
@@ -34927,6 +35052,27 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "UpdatePullRequestViewedFilesOptions": {
+      "type": "object",
+      "required": [
+        "head_sha",
+        "files"
+      ],
+      "properties": {
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "x-go-name": "Files"
+        },
+        "head_sha": {
+          "type": "string",
+          "x-go-name": "HeadSHA"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "UpdateRepoAvatarOption": {
       "description": "UpdateRepoAvatarUserOption options when updating the repo avatar",
       "type": "object",
@@ -36118,6 +36264,12 @@
         "items": {
           "$ref": "#/definitions/PullRequestStackOperation"
         }
+      }
+    },
+    "PullRequestViewedFiles": {
+      "description": "PullRequestViewedFiles",
+      "schema": {
+        "$ref": "#/definitions/PullRequestViewedFiles"
       }
     },
     "PullReview": {

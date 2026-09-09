@@ -944,6 +944,7 @@ func preparePullReviewType(ctx *context.APIContext, pr *issues_model.PullRequest
 			return -1, true
 		}
 		reviewType = issues_model.ReviewTypeReject
+		needsBody = !hasComments
 
 	case api.ReviewStateComment:
 		reviewType = issues_model.ReviewTypeComment
