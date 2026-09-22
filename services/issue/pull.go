@@ -199,7 +199,7 @@ func hasAllRequiredCodeownerReviews(ctx context.Context, pb *git_model.Protected
 	if reviews == nil {
 		var err error
 		reviews, err = issues_model.FindLatestReviews(ctx, issues_model.FindReviewOptions{
-			Types:        []issues_model.ReviewType{issues_model.ReviewTypeApprove, issues_model.ReviewTypeReject},
+			Types:        []issues_model.ReviewType{issues_model.ReviewTypeApprove, issues_model.ReviewTypeReject, issues_model.ReviewTypeRequest},
 			IssueID:      pr.IssueID,
 			OfficialOnly: false,
 			Dismissed:    optional.Some(false),
@@ -276,7 +276,7 @@ func latestCodeownerReviews(reviews issues_model.ReviewList) issues_model.Review
 		if review == nil {
 			continue
 		}
-		if review.Dismissed || (review.Type != issues_model.ReviewTypeApprove && review.Type != issues_model.ReviewTypeReject) {
+		if review.Dismissed || (review.Type != issues_model.ReviewTypeApprove && review.Type != issues_model.ReviewTypeReject && review.Type != issues_model.ReviewTypeRequest) {
 			continue
 		}
 		if existing := latest[review.ReviewerID]; existing == nil || existing.ID < review.ID {

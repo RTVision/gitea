@@ -6467,6 +6467,14 @@
             "type": "integer",
             "x-go-name": "SourceID"
           },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserTypeString"
+              }
+            ],
+            "description": "The user type"
+          },
           "visibility": {
             "allOf": [
               {
@@ -11283,6 +11291,14 @@
             "type": "integer",
             "x-go-name": "StarredRepos"
           },
+          "type": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserTypeString"
+              }
+            ],
+            "description": "the user type"
+          },
           "visibility": {
             "allOf": [
               {
@@ -11438,6 +11454,14 @@
         },
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
+      },
+      "UserTypeString": {
+        "enum": [
+          "User",
+          "Organization",
+          "Bot"
+        ],
+        "type": "string"
       },
       "VisibilityString": {
         "enum": [
@@ -12619,6 +12643,9 @@
           "403": {
             "$ref": "#/components/responses/forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
           "422": {
             "$ref": "#/components/responses/validationError"
           }
@@ -12702,6 +12729,9 @@
           },
           "403": {
             "$ref": "#/components/responses/forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           },
           "422": {
             "$ref": "#/components/responses/validationError"
@@ -27719,6 +27749,9 @@
           },
           "404": {
             "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Merge a branch from upstream",
@@ -34443,6 +34476,9 @@
           },
           "422": {
             "$ref": "#/components/responses/invalidTopicsError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Replace list of topics for a repository",
@@ -34492,6 +34528,9 @@
           },
           "422": {
             "$ref": "#/components/responses/invalidTopicsError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a topic from a repository",
@@ -34539,6 +34578,9 @@
           },
           "422": {
             "$ref": "#/components/responses/invalidTopicsError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Add a topic to a repository",
@@ -36681,6 +36723,12 @@
         "responses": {
           "201": {
             "$ref": "#/components/responses/EmailList"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           },
           "422": {
             "$ref": "#/components/responses/validationError"

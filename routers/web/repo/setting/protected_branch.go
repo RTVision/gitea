@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	audit_model "gitea.dev/models/audit"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
@@ -25,6 +26,7 @@ import (
 	"gitea.dev/modules/templates"
 	"gitea.dev/modules/web"
 	"gitea.dev/routers/web/repo"
+	"gitea.dev/services/audit"
 	"gitea.dev/services/context"
 	"gitea.dev/services/forms"
 	pull_service "gitea.dev/services/pull"
@@ -150,8 +152,10 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 			return
 		}
 	}
+	isNewProtectedBranch := false
 	if protectBranch == nil {
 		// No options found, create defaults.
+		isNewProtectedBranch = true
 		protectBranch = &git_model.ProtectedBranch{
 			RepoID:   ctx.Repo.Repository.ID,
 			RuleName: f.RuleName,
@@ -292,6 +296,12 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 		return
 	}
 
+	if isNewProtectedBranch {
+		audit.Record(ctx, audit_model.RepositoryBranchProtectionAdd, ctx.Repo.Repository, "rule", protectBranch.RuleName)
+	} else {
+		audit.Record(ctx, audit_model.RepositoryBranchProtectionUpdate, ctx.Repo.Repository, "rule", protectBranch.RuleName)
+	}
+
 	ctx.Flash.Success(ctx.Tr("repo.settings.update_protect_branch_success", protectBranch.RuleName))
 	ctx.Redirect(fmt.Sprintf("%s/settings/branches?rule_name=%s", ctx.Repo.RepoLink, protectBranch.RuleName))
 }
@@ -323,6 +333,8 @@ func DeleteProtectedBranchRulePost(ctx *context.Context) {
 		ctx.JSONRedirect(ctx.Repo.RepoLink + "/settings/branches")
 		return
 	}
+
+	audit.Record(ctx, audit_model.RepositoryBranchProtectionRemove, ctx.Repo.Repository, "rule", rule.RuleName)
 
 	ctx.Flash.Success(ctx.Tr("repo.settings.remove_protected_branch_success", rule.RuleName))
 	ctx.JSONRedirect(ctx.Repo.RepoLink + "/settings/branches")
