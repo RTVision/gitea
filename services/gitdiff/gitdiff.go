@@ -1534,17 +1534,17 @@ func GetDiffShortStat(ctx context.Context, gitRepo *git.Repository, opts *DiffCo
 // SyncUserSpecificDiff inserts user-specific data such as which files the user has already viewed on the given diff
 // Additionally, the database is updated asynchronously if files have changed since the last review
 func SyncUserSpecificDiff(ctx context.Context, userID int64, pull *issues_model.PullRequest, gitRepo *git.Repository, diff *Diff, opts *DiffOptions) (*pull_model.ReviewState, error) {
-	latestCommit := opts.AfterCommitID
-	if latestCommit == "" {
-		latestCommit = pull.HeadBranch // opts.AfterCommitID is preferred because it handles PRs from forks correctly and the branch name doesn't
-	}
-
-	review, err := pull_model.GetNewestReviewState(ctx, userID, pull.ID, latestCommit)
+	review, err := pull_model.GetNewestReviewState(ctx, userID, pull.ID)
 	if err != nil {
 		return nil, err
 	}
 	if review == nil || len(review.UpdatedFiles) == 0 {
 		return review, nil
+	}
+
+	latestCommit := opts.AfterCommitID
+	if latestCommit == "" {
+		latestCommit = pull.HeadBranch // opts.AfterCommitID is preferred because it handles PRs from forks correctly and the branch name doesn't
 	}
 
 	changedFiles, errIgnored := gitRepo.GetFilesChangedBetween(ctx, review.CommitSHA, latestCommit)

@@ -100,15 +100,22 @@ func UpdateReviewState(ctx context.Context, userID, pullID int64, commitSHA stri
 		review.UpdatedFiles = updatedFiles
 	}
 
+	// updated_unix is what picks the newest review, so it must move past every earlier write, even one in the same second
+	var latest int64
+	if _, err := db.GetEngine(ctx).SQL("SELECT COALESCE(MAX(updated_unix), 0) FROM review_state WHERE user_id = ? AND pull_id = ?", userID, pullID).Get(&latest); err != nil {
+		return nil, err
+	}
+	review.UpdatedUnix = max(timeutil.TimeStampNow(), timeutil.TimeStamp(latest)+1)
+
 	// Insert or Update review
-	engine := db.GetEngine(ctx)
+	engine := db.GetEngine(ctx).NoAutoTime()
 	if !exists {
 		log.Trace("Inserting new review for user %d, repo %d, commit %s with the updated files %v.", userID, pullID, commitSHA, review.UpdatedFiles)
 		_, err := engine.Insert(review)
 		return nil, err
 	}
 	log.Trace("Updating already existing review with ID %d (user %d, repo %d, commit %s) with the updated files %v.", review.ID, userID, pullID, commitSHA, review.UpdatedFiles)
-	_, err = engine.ID(review.ID).Cols("updated_files").Update(review)
+	_, err = engine.ID(review.ID).Cols("updated_files", "updated_unix").Update(review)
 	return review, err
 }
 
@@ -126,31 +133,21 @@ func mergeFiles(oldFiles, newFiles map[string]ViewedState) map[string]ViewedStat
 }
 
 // GetNewestReviewState gets the newest review of the current user in the current PR.
-// A tie goes to the review at headCommitID, which a mark writes after syncing the previous newest review.
 // The returned PR Review will be nil if the user has not yet reviewed this PR.
-func GetNewestReviewState(ctx context.Context, userID, pullID int64, headCommitID string) (*ReviewState, error) {
+func GetNewestReviewState(ctx context.Context, userID, pullID int64) (*ReviewState, error) {
 	var review ReviewState
-	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Get(&review)
+	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC").Get(&review)
 	if err != nil || !has {
 		return nil, err
 	}
-	if review.CommitSHA != headCommitID { // updated_unix has second resolution
-		head, has, err := db.Get[ReviewState](ctx, builder.Eq{"user_id": userID, "pull_id": pullID, "commit_sha": headCommitID, "updated_unix": review.UpdatedUnix})
-		if err != nil {
-			return nil, err
-		}
-		if has {
-			return head, nil
-		}
-	}
-	return &review, nil
+	return &review, err
 }
 
 // getNewestReviewStateApartFrom is like GetNewestReview, except that the second newest review will be returned if the newest review points at the given commit.
 // The returned PR Review will be nil if the user has not yet reviewed this PR.
 func getNewestReviewStateApartFrom(ctx context.Context, userID, pullID int64, commitSHA string) (*ReviewState, error) {
 	var reviews []ReviewState
-	err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Limit(2).Find(&reviews)
+	err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC").Limit(2).Find(&reviews)
 	// It would also be possible to use ".And("commit_sha != ?", commitSHA)" instead of the error handling below
 	// However, benchmarks show drastically improved performance by not doing that
 
