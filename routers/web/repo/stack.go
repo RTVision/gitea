@@ -233,7 +233,7 @@ func PullStackNew(ctx *context.Context) {
 		return
 	}
 	top := ctx.FormInt64("pull")
-	chain, trunk := pull_service.SuggestStackChain(candidates, top)
+	chain, trunk := pull_service.SuggestStackChain(candidates, top, ctx.Repo.Repository.DefaultBranch)
 	if trunk == "" {
 		trunk = ctx.Repo.Repository.DefaultBranch
 	}

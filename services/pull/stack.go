@@ -116,21 +116,30 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 }
 
 // SuggestStackChain follows base branches down from the top pull request, returning the chain bottom first and its trunk.
-func SuggestStackChain(candidates []*issues_model.PullRequest, top int64) ([]*issues_model.PullRequest, string) {
+func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) ([]*issues_model.PullRequest, string) {
 	byHead := make(map[string]*issues_model.PullRequest, len(candidates))
+	bases := make(map[string]int, len(candidates))
 	var current *issues_model.PullRequest
 	for _, pr := range candidates {
 		byHead[pr.HeadBranch] = pr
+		bases[pr.BaseBranch]++
 		if pr.Index == top {
 			current = pr
 		}
 	}
 	var chain []*issues_model.PullRequest
+	heads := make(map[string]bool)
 	trunk := ""
-	for current != nil && !slices.Contains(chain, current) {
+	for current != nil {
 		chain = append(chain, current)
+		heads[current.HeadBranch] = true
 		trunk = current.BaseBranch
-		current = byHead[current.BaseBranch]
+		next := byHead[trunk]
+		// A branch several pull requests build on, like develop, is a trunk rather than a layer.
+		if next == nil || trunk == defaultBranch || bases[trunk] > 1 || heads[next.BaseBranch] {
+			break
+		}
+		current = next
 	}
 	slices.Reverse(chain)
 	return chain, trunk
