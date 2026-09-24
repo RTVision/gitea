@@ -173,17 +173,51 @@ func (r Repo) RemoteHeadContext(ctx context.Context, remote, branch string) (str
 	return strings.Fields(out)[0], nil
 }
 
+func signArgs(signingKey string) []string {
+	switch signingKey {
+	case "":
+		return nil
+	case "default":
+		return []string{"--gpg-sign"}
+	default:
+		return []string{"--gpg-sign=" + signingKey}
+	}
+}
+
 func (r Repo) RebaseContext(ctx context.Context, oldBase, newBase, branch, signingKey string) error {
 	args := []string{"rebase", "--no-fork-point", "--reapply-cherry-picks", "--empty=keep", "--onto", newBase, oldBase, branch}
-	if signingKey != "" {
-		if signingKey == "default" {
-			args = append(args, "--gpg-sign")
-		} else {
-			args = append(args, "--gpg-sign="+signingKey)
-		}
+	_, err := r.RunContext(ctx, nil, append(args, signArgs(signingKey)...)...)
+	return err
+}
+
+// MergeContext merges parent into the checked-out branch; keepTree records parent without taking its content.
+func (r Repo) MergeContext(ctx context.Context, parent, message, signingKey string, keepTree bool) error {
+	args := []string{"merge", "--no-ff", "--no-edit", "-m", message}
+	if keepTree {
+		args = append(args, "--strategy=ours")
 	}
+	args = append(append(args, signArgs(signingKey)...), "--end-of-options", parent)
 	_, err := r.RunContext(ctx, nil, args...)
 	return err
+}
+
+func (r Repo) MergeCommitContext(ctx context.Context, signingKey string) error {
+	_, err := r.RunContext(ctx, []string{"GIT_EDITOR=true"}, append([]string{"commit"}, signArgs(signingKey)...)...) // the editor path strips the conflict comments from MERGE_MSG
+	return err
+}
+
+func (r Repo) MergeAbortContext(ctx context.Context) error {
+	_, err := r.RunContext(ctx, nil, "merge", "--abort")
+	return err
+}
+
+func (r Repo) MergeActive() bool {
+	path, err := r.GitPath("MERGE_HEAD")
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
 }
 
 func (r Repo) WorktreesForBranch(branch string) ([]string, error) {

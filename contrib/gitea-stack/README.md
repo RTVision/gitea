@@ -41,6 +41,18 @@ Local restack uses the saved parent boundary for every layer. It snapshots heads
 
 After a local restack, `push` publishes every open layer with its previously accepted lease and calls the stack synchronization API with the exact new heads and parent boundaries. A server revision conflict is final: refresh with `sync`, inspect the changes, and choose the next action. Backup refs remain available through `snapshots list` and `snapshots restore <timestamp> <branch>`.
 
+### Merge mode
+
+`init`, `submit` and `adopt` take `--mode rebase|merge` (default `rebase`). The mode is fixed when the server stack is created; `adopt` of pull requests that already belong to a stack binds that stack and reads its mode, and an explicit `--mode` must match it. See [Stack modes](../../docs/stacked-pull-requests.md#stack-modes).
+
+Merge mode never force-pushes:
+
+* `restack` merges each open layer's parent into it bottom-up (`git merge --no-ff`, message `Merge branch '<parent>' into <layer>`), skipping layers that already contain their parent. When a lower layer was squash-landed, the lowest open layer first records the squash commit with `git merge -s ours`, keeping its files, as the server update does. Backup refs, `--continue` (which commits the resolved merge) and `--abort` work as in rebase mode.
+* `push` and `submit` publish fast-forwards only. They refuse, before pushing anything, when a remote layer head is not an ancestor of the local head; run `sync` and merge the remote changes first. Each push leases the remote head seen by that check, so a branch rewound in the meantime is rejected rather than re-advanced. The leased update is still a fast-forward, so branches that disallow force-push accept it.
+* `sync` fast-forwards local layer branches to remote heads that descend from them and lists diverged layers in `needs_reconciliation` without rewriting them.
+* `rebase --server` starts a server update, which merges each parent into its layer.
+* `land` accepts `merge`, `squash` or `fast-forward-only`.
+
 Landing and server rebase use durable operations:
 
 ```sh
@@ -53,7 +65,7 @@ gitea-stack op cancel 17
 gitea-stack op retry 17
 ```
 
-Global `--stack S12` selects a server stack for `status`, server `rebase`, and `op` commands; without it, those commands use the locally bound stack. For local mutations (`push`, `submit`, `sync`, `land`, and `unstack`), an explicit selector must match the local binding. The first `submit` remains valid before a local stack has a server id.
+Global `--stack S12` selects a server stack for `status`, server `rebase` (an update for merge-mode stacks), and `op` commands; without it, those commands use the locally bound stack. For local mutations (`push`, `submit`, `sync`, `land`, and `unstack`), an explicit selector must match the local binding. The first `submit` remains valid before a local stack has a server id.
 
 `land --through` is required. Ordered landing can finish a prefix and block on a later layer; the operation's `completed` value records what already landed. Run `sync`, restack the remaining open suffix, and push it with synchronized boundaries. `unstack` removes active membership while retaining PRs, branches, and local Git backup refs.
 

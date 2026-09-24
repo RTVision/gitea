@@ -23,6 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) {
+	_ = os.Setenv("GIT_CONFIG_NOSYSTEM", "1") // host configs may force commit signing
+	_ = os.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	os.Exit(m.Run())
+}
+
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -497,4 +503,229 @@ func TestSyncStateDoesNotRequireLandedLocalBranch(t *testing.T) {
 	assert.Empty(t, needsRestack)
 	assert.Empty(t, needsReconciliation)
 	assert.Equal(t, "landed", state.Layers[0].LandedSHA)
+}
+
+func gitLine(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	return trimLine(runGit(t, dir, args...))
+}
+
+func requireCommandError(t *testing.T, err error, code int, kind string) {
+	t.Helper()
+	var commandErr commandError
+	require.ErrorAs(t, err, &commandErr)
+	assert.Equal(t, code, commandErr.code, err.Error())
+	assert.Equal(t, kind, commandErr.kind)
+}
+
+// newMergeStackRepo builds main <- layer-1 <- layer-2 in work, published to a bare owner/repo.git remote.
+func newMergeStackRepo(t *testing.T) (work, remote, trunk, lower, upper string) {
+	t.Helper()
+	root := t.TempDir()
+	work, remote = filepath.Join(root, "work"), filepath.Join(root, "owner", "repo.git")
+	runGit(t, root, "init", "--bare", remote)
+	runGit(t, remote, "config", "receive.denyNonFastForwards", "true")
+	runGit(t, root, "init", "-b", "main", work)
+	runGit(t, work, "config", "user.name", "Stack Test")
+	runGit(t, work, "config", "user.email", "stack@example.test")
+	writeFile(t, filepath.Join(work, "content"), "base\n")
+	trunk = commitGit(t, work, "base")
+	runGit(t, work, "switch", "-c", "layer-1")
+	writeFile(t, filepath.Join(work, "content"), "lower\n")
+	lower = commitGit(t, work, "lower")
+	runGit(t, work, "switch", "-c", "layer-2")
+	writeFile(t, filepath.Join(work, "upper"), "upper\n")
+	upper = commitGit(t, work, "upper")
+	runGit(t, work, "remote", "add", "origin", "file://localhost"+filepath.ToSlash(remote))
+	runGit(t, work, "push", "origin", "main", "layer-1", "layer-2")
+	return work, remote, trunk, lower, upper
+}
+
+func mergeModeApp(t *testing.T, work string, state *localstate.State) (*application, *localstate.Store) {
+	t.Helper()
+	repo := gitx.Repo{Dir: work}
+	store, err := localstate.Open(repo)
+	require.NoError(t, err)
+	require.NoError(t, store.Save(state))
+	return &application{repo: repo, store: store, quiet: true}, store
+}
+
+func TestMergeModeRestackConflictAbortContinue(t *testing.T) {
+	work, _, trunk, lower, upper := newMergeStackRepo(t)
+	runGit(t, work, "switch", "main")
+	writeFile(t, filepath.Join(work, "content"), "trunk\n")
+	newTrunk := commitGit(t, work, "trunk")
+	runGit(t, work, "update-ref", "refs/remotes/origin/main", newTrunk)
+	runGit(t, work, "switch", "layer-2")
+	app, store := mergeModeApp(t, work, &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeMerge, Layers: []localstate.Layer{
+		{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, ParentSHA: trunk},
+		{Branch: "layer-2", PullRequest: 2, HeadSHA: upper, ParentSHA: lower},
+	}})
+
+	requireCommandError(t, app.restack(t.Context(), []string{"--no-sign"}), 5, "restack_conflict")
+	require.NoError(t, app.restack(t.Context(), []string{"--abort"}))
+	assert.Equal(t, lower, gitLine(t, work, "rev-parse", "layer-1"))
+	assert.Equal(t, upper, gitLine(t, work, "rev-parse", "layer-2"))
+	assert.Equal(t, "layer-2", gitLine(t, work, "branch", "--show-current"))
+	assert.False(t, store.RestackExists())
+
+	requireCommandError(t, app.restack(t.Context(), []string{"--no-sign"}), 5, "restack_conflict")
+	writeFile(t, filepath.Join(work, "content"), "resolved\n")
+	runGit(t, work, "add", "content")
+	require.NoError(t, app.restack(t.Context(), []string{"--continue"}))
+	merged := gitLine(t, work, "rev-parse", "layer-1")
+	assert.Equal(t, lower+" "+newTrunk, gitLine(t, work, "log", "-1", "--format=%P", merged))
+	assert.Equal(t, "Merge branch 'main' into layer-1", gitLine(t, work, "log", "-1", "--format=%B", merged))
+	upperMerge := gitLine(t, work, "rev-parse", "layer-2")
+	assert.Equal(t, upper+" "+merged, gitLine(t, work, "log", "-1", "--format=%P", upperMerge))
+	assert.Equal(t, "Merge branch 'layer-1' into layer-2", gitLine(t, work, "log", "-1", "--format=%B", upperMerge))
+	assert.Contains(t, runGit(t, work, "for-each-ref", "refs/gitea-stack/backup/"), upper)
+	state, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, [2]string{merged, newTrunk}, [2]string{state.Layers[0].HeadSHA, state.Layers[0].ParentSHA})
+
+	require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
+	assert.Equal(t, upperMerge, gitLine(t, work, "rev-parse", "layer-2"), "layers that contain their parent are skipped")
+}
+
+func TestMergeModeRestackRecordsSquashedLayer(t *testing.T) {
+	work, _, trunk, lower, upper := newMergeStackRepo(t)
+	squash := gitLine(t, work, "commit-tree", lower+"^{tree}", "-p", trunk, "-m", "squashed layer-1")
+	runGit(t, work, "switch", "-C", "main", squash)
+	writeFile(t, filepath.Join(work, "later"), "later\n")
+	newTrunk := commitGit(t, work, "later trunk change")
+	runGit(t, work, "update-ref", "refs/remotes/origin/main", newTrunk)
+	runGit(t, work, "switch", "layer-2")
+	app, _ := mergeModeApp(t, work, &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeMerge, Layers: []localstate.Layer{
+		{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, ParentSHA: trunk, LandedSHA: squash},
+		{Branch: "layer-2", PullRequest: 2, HeadSHA: upper, ParentSHA: lower},
+	}})
+
+	require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
+	head := gitLine(t, work, "rev-parse", "layer-2")
+	absorbed := gitLine(t, work, "rev-parse", head+"^1")
+	assert.Equal(t, absorbed+" "+newTrunk, gitLine(t, work, "log", "-1", "--format=%P", head))
+	assert.Equal(t, upper+" "+squash, gitLine(t, work, "log", "-1", "--format=%P", absorbed))
+	assert.Equal(t, gitLine(t, work, "rev-parse", upper+"^{tree}"), gitLine(t, work, "rev-parse", absorbed+"^{tree}"), "recording the squash keeps the layer's files")
+	assert.Equal(t, "Merge branch 'main' into layer-2", gitLine(t, work, "log", "-1", "--format=%B", absorbed))
+	assert.Equal(t, "upper", gitLine(t, work, "diff", "--name-only", newTrunk, head))
+}
+
+func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
+	work, remote, trunk, lower, upper := newMergeStackRepo(t)
+	other := filepath.Join(filepath.Dir(work), "other")
+	runGit(t, work, "clone", "--branch", "layer-2", remote, other)
+	writeFile(t, filepath.Join(other, "other"), "other\n")
+	runGit(t, other, "add", "other")
+	runGit(t, other, "-c", "user.name=Other", "-c", "user.email=other@example.test", "commit", "-m", "other developer")
+	runGit(t, other, "push", "origin", "layer-2")
+	otherHead := gitLine(t, other, "rev-parse", "HEAD")
+	runGit(t, work, "switch", "layer-1")
+	writeFile(t, filepath.Join(work, "local"), "local\n")
+	localLower := commitGit(t, work, "local lower change")
+	runGit(t, work, "switch", "layer-2")
+
+	var synced []api.PullRequestStackHead
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/1":
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Trunk: "main", Mode: api.StackModeMerge, State: "open", Revision: 3, Entries: []*api.PullRequestStackEntry{
+				{Position: 1, PullRequest: &api.PullRequest{Index: 1}, HeadSHA: lower},
+				{Position: 2, PullRequest: &api.PullRequest{Index: 2}, HeadSHA: otherHead},
+			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/repos/owner/repo/stacks/1/sync":
+			var option api.SynchronizePullRequestStackOption
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&option))
+			synced = option.Heads
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Revision: 4})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("GITEA_URL", server.URL)
+	t.Setenv("GITEA_TOKEN", "test-token")
+	app, store := mergeModeApp(t, work, &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeMerge, Stack: 1, LastRevision: 3, Layers: []localstate.Layer{
+		{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, RemoteSHA: lower, ParentSHA: trunk},
+		{Branch: "layer-2", PullRequest: 2, HeadSHA: upper, RemoteSHA: upper, ParentSHA: lower},
+	}})
+
+	requireCommandError(t, app.push(t.Context(), nil, true), 6, "non_fast_forward")
+	assert.Equal(t, lower, gitLine(t, remote, "rev-parse", "layer-1"), "nothing is pushed while any layer would be rewritten")
+
+	require.NoError(t, app.sync(t.Context()))
+	assert.Equal(t, otherHead, gitLine(t, work, "rev-parse", "layer-2"), "sync fast-forwards the checked-out layer")
+	assert.FileExists(t, filepath.Join(work, "other"))
+	assert.Equal(t, localLower, gitLine(t, work, "rev-parse", "layer-1"))
+
+	require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
+	require.NoError(t, app.push(t.Context(), nil, true))
+	upperMerge := gitLine(t, work, "rev-parse", "layer-2")
+	assert.Equal(t, localLower, gitLine(t, remote, "rev-parse", "layer-1"))
+	assert.Equal(t, upperMerge, gitLine(t, remote, "rev-parse", "layer-2"))
+	assert.Equal(t, []api.PullRequestStackHead{
+		{PullRequest: 1, HeadSHA: localLower, ParentSHA: trunk},
+		{PullRequest: 2, HeadSHA: upperMerge, ParentSHA: localLower},
+	}, synced)
+
+	state, err := store.Load()
+	require.NoError(t, err)
+	diverged := gitLine(t, work, "commit-tree", trunk+"^{tree}", "-p", lower, "-m", "diverged")
+	runGit(t, work, "update-ref", "refs/remotes/origin/layer-1", diverged)
+	_, needsReconciliation, err := app.updateSyncState(state, &api.PullRequestStack{}, trunk)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"layer-1"}, needsReconciliation)
+	assert.Equal(t, localLower, gitLine(t, work, "rev-parse", "layer-1"))
+}
+
+func TestMergeModeFlagsAndAdopt(t *testing.T) {
+	requireCommandError(t, (&application{}).init([]string{"--trunk", "main", "--mode", "squash"}), 2, "usage")
+	work, _, trunk, lower, _ := newMergeStackRepo(t)
+	squash := gitLine(t, work, "commit-tree", lower+"^{tree}", "-p", trunk, "-m", "squashed layer-1")
+	createdModes := make([]api.StackMode, 0, 1)
+	updates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/2":
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 2, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}, Stack: &api.PullRequestStackRef{Number: 5, Mode: api.StackModeMerge}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/3":
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 3, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/5":
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 5, Trunk: "main", Mode: api.StackModeMerge, State: "open", Revision: 7, Entries: []*api.PullRequestStackEntry{
+				{Position: 1, PullRequest: &api.PullRequest{Index: 1, Head: &api.PRBranchInfo{Ref: "layer-1"}}, HeadSHA: lower, LandedSHA: squash},
+				{Position: 2, PullRequest: &api.PullRequest{Index: 2}},
+			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/repos/owner/repo/stacks":
+			var option api.CreatePullRequestStackOption
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&option))
+			createdModes = append(createdModes, option.Mode)
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 6, Revision: 1, Mode: option.Mode})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/repos/owner/repo/stacks/5/update":
+			updates++
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStackOperation{Number: 9, Kind: "update", State: "queued"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("GITEA_URL", server.URL)
+	t.Setenv("GITEA_TOKEN", "test-token")
+	app, store := mergeModeApp(t, work, &localstate.State{})
+
+	requireCommandError(t, app.adopt(t.Context(), []string{"--prs", "2", "--trunk", "main", "--mode", "rebase"}), 3, "mode_mismatch")
+	require.NoError(t, app.adopt(t.Context(), []string{"--prs", "2", "--trunk", "main"}))
+	state, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), state.Stack)
+	assert.Equal(t, api.StackModeMerge, state.Mode)
+	require.Len(t, state.Layers, 2, "landed layers keep local positions equal to server positions")
+	assert.Equal(t, localstate.Layer{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, LandedSHA: squash}, state.Layers[0])
+	requireCommandError(t, app.land(t.Context(), []string{"--through", "2", "--merge-style", "rebase"}), 2, "usage")
+	require.NoError(t, app.serverRebase(t.Context(), []string{"--server"}))
+	assert.Equal(t, 1, updates)
+
+	require.NoError(t, app.adopt(t.Context(), []string{"--prs", "3", "--trunk", "main", "--mode", "merge"}))
+	assert.Equal(t, []api.StackMode{api.StackModeMerge}, createdModes)
 }
