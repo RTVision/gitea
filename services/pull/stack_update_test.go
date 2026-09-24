@@ -5,6 +5,7 @@ package pull
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -83,7 +84,7 @@ func TestStackMergeLayer(t *testing.T) {
 	var conflict StackMergeConflict
 	require.ErrorAs(t, err, &conflict)
 	assert.Equal(t, []string{"trunk.txt"}, conflict.Files)
-	assert.Contains(t, conflict.Error(), "merge release into conflict locally, push, then retry")
+	assert.Contains(t, conflict.Error(), "locally merge release into conflict, push, then retry")
 	assert.Equal(t, conflicting, run("rev-parse", "conflict"))
 }
 
@@ -187,4 +188,34 @@ func TestStackMergeModeUpdate(t *testing.T) {
 	diverged := &stackLayerJournal{EntryID: entries[0].ID, PullID: 2, HeadBranch: "branch2", ExpectedHead: lower, NewHead: side}
 	require.Error(t, publishStackLayer(ctx, op, diverged, owner, issues_model.StackModeMerge))
 	assert.Equal(t, lower, bareRun("rev-parse", "branch2"), "merge mode never forces a non-fast-forward")
+	op.State = "cancelled"
+	require.NoError(t, issues_model.FinishStackOperation(ctx, op))
+
+	// A trunk change that conflicts only with the upper layer is resolved locally, pushed normally and retried.
+	run("checkout", "release")
+	require.NoError(t, os.WriteFile(filepath.Join(work, "upper"), []byte("trunk\n"), 0o600))
+	run("add", "upper")
+	run("commit", "-m", "conflicting trunk")
+	run("push", bare, "release")
+	stack = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequestStack{ID: stack.ID})
+	op, err = StartStackOperation(ctx, owner, StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, Kind: "update"})
+	require.NoError(t, err)
+	runStackOperation(ctx, op.ID)
+	op = unittest.AssertExistsAndLoadBean(t, &issues_model.StackOperation{ID: op.ID})
+	require.Equal(t, "blocked", op.State)
+	assert.Contains(t, op.LastError, "locally merge release into branch2, then branch2 into pr-to-update, push, then retry")
+	run("fetch", bare, "branch2:branch2", "pr-to-update:pr-to-update")
+	run("checkout", "branch2")
+	run("merge", "--no-edit", "release")
+	run("checkout", "pr-to-update")
+	require.Error(t, exec.Command("git", "-C", work, "merge", "--no-edit", "branch2").Run())
+	require.NoError(t, os.WriteFile(filepath.Join(work, "upper"), []byte("resolved\n"), 0o600))
+	run("add", "upper")
+	run("commit", "--no-edit")
+	run("push", bare, "branch2", "pr-to-update")
+	require.NoError(t, ResumeStackOperation(ctx, owner, op.ID))
+	runStackOperation(ctx, op.ID)
+	op = unittest.AssertExistsAndLoadBean(t, &issues_model.StackOperation{ID: op.ID})
+	assert.Equal(t, "completed", op.State, op.LastError)
+	assert.Equal(t, run("rev-parse", "pr-to-update"), bareRun("rev-parse", "pr-to-update"), "retry adopts the locally resolved heads")
 }

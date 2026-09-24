@@ -167,14 +167,18 @@ func publishStackLayer(ctx context.Context, op *issues_model.StackOperation, lay
 	if !push || (!force && !merge) {
 		return ErrNoPermissionToMerge
 	}
+	if merge {
+		if forward, err := stackAncestor(ctx, pr.HeadRepo, layer.ExpectedHead, layer.NewHead); err != nil {
+			return err
+		} else if !forward {
+			return fmt.Errorf("layer %d update does not fast-forward its branch", layer.Position)
+		}
+	}
 	if err := pr.HeadRepo.LoadOwner(ctx); err != nil {
 		return err
 	}
-	cmd := gitcmd.NewCommand("push")
-	// A merge candidate fast-forwards ExpectedHead, so git's non-fast-forward rejection is the lease.
-	if !merge {
-		cmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.HeadBranch+":"+layer.ExpectedHead)
-	}
-	cmd.AddDashesAndList(gitrepo.RepoLocalPath(pr.HeadRepo.CodeStorageRepo()), layer.NewHead+":"+git.BranchPrefix+pr.HeadBranch)
+	// The lease makes this push forced, so merge mode relies on the ancestry check above to stay a fast-forward.
+	cmd := gitcmd.NewCommand("push").AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.HeadBranch+":"+layer.ExpectedHead).
+		AddDashesAndList(gitrepo.RepoLocalPath(pr.HeadRepo.CodeStorageRepo()), layer.NewHead+":"+git.BranchPrefix+pr.HeadBranch)
 	return cmd.WithRepo(pr.HeadRepo).WithEnv(repo_module.FullPushingEnvironment(pr.HeadRepo.Owner, doer, pr.HeadRepo, pr.HeadRepo.Name, 0, 0)).Run(ctx)
 }
