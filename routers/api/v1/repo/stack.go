@@ -98,11 +98,11 @@ func StackCapabilities(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStackCapabilities"
-	modes := []string{issues_model.StackModeRebase, issues_model.StackModeMerge}
+	modes := []api.StackMode{api.StackModeRebase, api.StackModeMerge}
 	styles := make(map[string][]string, len(modes))
 	for _, mode := range modes {
-		for _, style := range pull_service.StackLandingStyles(mode) {
-			styles[mode] = append(styles[mode], string(style))
+		for _, style := range pull_service.StackLandingStyles(string(mode)) {
+			styles[string(mode)] = append(styles[string(mode)], string(style))
 		}
 	}
 	ctx.JSON(http.StatusOK, &api.PullRequestStackCapabilities{

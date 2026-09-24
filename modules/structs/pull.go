@@ -291,7 +291,7 @@ type PullRequestStackCapabilities struct {
 	// Supported durable operation kinds
 	Operations []string `json:"operations"`
 	// Supported stack modes
-	Modes []string `json:"modes"`
+	Modes []StackMode `json:"modes"`
 	// Supported merge styles for stack landing in rebase mode
 	MergeStyles []string `json:"merge_styles"`
 	// Supported merge styles for stack landing, by stack mode

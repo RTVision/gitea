@@ -5,6 +5,7 @@ package pull
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,13 +18,16 @@ import (
 
 type StackMergeConflict struct {
 	Position int
-	Branch   string
-	Parent   string
 	Files    []string
+	Merges   []string // unpublished lower candidates exist only on the server, so the user repeats their merges too
 }
 
 func (e StackMergeConflict) Error() string {
-	return fmt.Sprintf("stack layer %d has merge conflicts: %s; merge %s into %s locally, push, then retry", e.Position, strings.Join(e.Files, ", "), e.Parent, e.Branch)
+	return fmt.Sprintf("stack layer %d has merge conflicts: %s; locally merge %s, push, then retry", e.Position, strings.Join(e.Files, ", "), strings.Join(e.Merges, ", then "))
+}
+
+func stackMergeStep(parentBranch, branch string) string {
+	return parentBranch + " into " + branch
 }
 
 func stackUpdateMessage(parentBranch, branch string) string {
@@ -43,7 +47,7 @@ func mergeStackLayer(ctx context.Context, repo git.RepositoryFacade, env []strin
 	if err := cmd.AddDynamicArguments(parent).WithRepo(repo).WithEnv(env).RunWithStderr(ctx); err != nil {
 		files, _, _ := gitcmd.NewCommand("diff", "--name-only", "--diff-filter=U", "-z").WithRepo(repo).RunStdString(ctx)
 		if files != "" {
-			return "", StackMergeConflict{Position: position, Branch: branch, Parent: parentBranch, Files: strings.Split(strings.TrimSuffix(files, "\x00"), "\x00")}
+			return "", StackMergeConflict{Position: position, Files: strings.Split(strings.TrimSuffix(files, "\x00"), "\x00"), Merges: []string{stackMergeStep(parentBranch, branch)}}
 		}
 		return "", fmt.Errorf("merge into layer %d: %w: %s", position, err, err.Stderr())
 	}
@@ -85,6 +89,7 @@ func buildStackUpdate(ctx context.Context, op *issues_model.StackOperation, laye
 	}
 	defer cancel()
 	parentBranch := trunkBranch
+	var merges []string
 	for i, layer := range layers {
 		pr, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
 		if err != nil {
@@ -113,10 +118,11 @@ func buildStackUpdate(ctx context.Context, op *issues_model.StackOperation, laye
 			if pb != nil && pb.RequireSignedCommits && tmp.signKey == nil {
 				return fmt.Errorf("layer %d requires signed commits; merge %s into %s locally with signing", layer.Position, parentBranch, pr.HeadBranch)
 			}
+			merges = append(merges, stackMergeStep(parentBranch, pr.HeadBranch))
 		}
 		// Only the lowest open layer sits on the trunk, where squashed layers landed.
 		for _, entry := range landed {
-			if contained || i > 0 {
+			if i > 0 || contained {
 				break
 			}
 			equivalent, err := landedStackLayerEquivalent(ctx, tmp.tmpRepo, entry, head)
@@ -135,6 +141,10 @@ func buildStackUpdate(ctx context.Context, op *issues_model.StackOperation, laye
 		}
 		if !contained {
 			if head, err = mergeStackLayer(ctx, tmp.tmpRepo, tmp.env, tmp.signKey, head, parent, parentBranch, pr.HeadBranch, layer.Position, false); err != nil {
+				if conflict, ok := errors.AsType[StackMergeConflict](err); ok {
+					conflict.Merges = merges
+					return conflict
+				}
 				return err
 			}
 		}

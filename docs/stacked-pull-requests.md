@@ -124,9 +124,11 @@ branches cannot be deleted or renamed; finish or unstack the stack first.
   source head or an unrecognized result blocks progress for inspection.
 * **Signed source history required:** use a signed local rebase if the server
   cannot produce commits accepted by the source branch's signing policy.
-* **Merge-mode conflict:** the operation stops with the conflicting files. Merge
-  the parent into the layer locally, push normally, then retry. Retry adopts a
-  layer head that only moved forward; any other change still blocks the operation.
+* **Merge-mode conflict:** the operation stops with the conflicting files and the
+  parent merges to repeat locally, bottom-up. Lower layers are listed too because
+  their server-side merges are not published until every layer builds. Push
+  normally, then retry. Retry adopts a layer head that only moved forward; any
+  other change still blocks the operation.
 
 The command-line client under `contrib/gitea-stack` provides local replay and
 operation controls. Its README documents the supported commands and conflict
