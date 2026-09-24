@@ -69,10 +69,10 @@ func TestStackOperationLeaseAndRecovery(t *testing.T) {
 	require.NoError(t, issues_model.SaveStackOperation(ctx, op))
 	require.ErrorIs(t, issues_model.SaveStackOperation(ctx, &stale), issues_model.ErrStackRevision)
 	layer := &stackLayerJournal{EntryID: entry.ID, PullID: pr.ID, Position: 1, HeadBranch: pr.HeadBranch, ExpectedHead: base, OldParent: base, NewParent: base, NewHead: newHead, Phase: "publishing"}
-	require.Error(t, publishStackLayer(ctx, op, layer, actor))
+	require.Error(t, publishStackLayer(ctx, op, layer, actor, issues_model.StackModeRebase))
 	layer.ExpectedHead = head
-	require.NoError(t, publishStackLayer(ctx, op, layer, actor))
-	require.NoError(t, publishStackLayer(ctx, op, layer, actor))
+	require.NoError(t, publishStackLayer(ctx, op, layer, actor, issues_model.StackModeRebase))
+	require.NoError(t, publishStackLayer(ctx, op, layer, actor, issues_model.StackModeRebase))
 	bareRun := stackTestGit(t, gitrepo.RepoLocalPath(repo))
 	assert.Equal(t, newHead, bareRun("rev-parse", "branch2"))
 	require.ErrorIs(t, checkOrdinaryStackMutation(ctx, pr), ErrPullRequestStacked)
@@ -80,7 +80,7 @@ func TestStackOperationLeaseAndRecovery(t *testing.T) {
 	require.ErrorIs(t, checkStackMergeOrder(ctx, pr), ErrPullRequestStacked)
 
 	bareRun("update-ref", "refs/heads/branch2", externalHead)
-	require.Error(t, publishStackLayer(ctx, op, layer, actor))
+	require.Error(t, publishStackLayer(ctx, op, layer, actor, issues_model.StackModeRebase))
 	partial := &stackJournal{Stage: "publish", Layers: []*stackLayerJournal{layer}}
 	op.State = "blocked"
 	require.NoError(t, saveStackJournal(ctx, op, partial))

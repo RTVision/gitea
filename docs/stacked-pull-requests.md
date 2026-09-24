@@ -37,7 +37,7 @@ release ← feature/storage ← feature/api ← feature/ui
 ```
 
 Each branch must contain its current parent's head, with at least one additional
-commit. Layer history must be linear. Cross-repository branches, duplicate
+commit. In rebase mode, layer history must be linear. Cross-repository branches, duplicate
 membership, multiple open pull requests sharing a head branch, and already
 scheduled ordinary auto-merges cannot be adopted.
 
@@ -54,6 +54,32 @@ Permanently deleting a pull request dissolves its associated stack groupings and
 preserves the other pull requests and branches. Deletion is refused while an
 associated stack operation is active. Deleting a repository also removes its
 stack records.
+
+## Stack modes
+
+A stack's mode is chosen at creation and cannot change; to switch, unstack and
+adopt the chain again.
+
+* **Rebase** (default) replays layers onto their updated parents. It keeps layer
+  history linear and needs force-push permission on the layer branches.
+* **Merge** merges each updated parent into its layer. Nothing in the stack's
+  lifecycle force-pushes, so it works on long-lived, shared branches where
+  force-push is disabled. Only push permission is needed.
+
+In merge mode, layers may contain merge commits, including merges of topic
+branches. Each layer must still contain its parent's current head. Content merged
+in from outside the stack shows up in the layer's diff, so bring outside branches
+in through the trunk.
+
+Merge-mode stacks land with `merge`, `squash` or `fast-forward-only`. A layer lands
+only once it contains the trunk head, so a squash commit carries exactly the
+landed layer's content. The next update records that squash commit in the layer
+above without changing its files, leaving the trunk with one commit per layer.
+`rebase` landing is not available because it rewrites merge commits.
+
+A merge-mode layer can also be updated on its own, merging its stack parent into
+it, when its base is that parent and no stack operation is active. Updating by
+rebase stays blocked.
 
 ## Rebase and land
 
@@ -98,6 +124,11 @@ branches cannot be deleted or renamed; finish or unstack the stack first.
   source head or an unrecognized result blocks progress for inspection.
 * **Signed source history required:** use a signed local rebase if the server
   cannot produce commits accepted by the source branch's signing policy.
+* **Merge-mode conflict:** the operation stops with the conflicting files and the
+  parent merges to repeat locally, bottom-up. Lower layers are listed too because
+  their server-side merges are not published until every layer builds. Push
+  normally, then retry. Retry adopts a layer head that only moved forward; any
+  other change still blocks the operation.
 
 The command-line client under `contrib/gitea-stack` provides local replay and
 operation controls. Its README documents the supported commands and conflict
@@ -111,7 +142,8 @@ numbers. Mutations require an expected stack revision and return a conflict when
 the stack changed or another operation owns it. Check `/stacks/capabilities`
 before offering stack creation in a client.
 
-Rebase and landing return an operation resource. Poll
+Rebase, update and landing return an operation resource. `POST /stacks/{id}/update`
+updates a merge-mode stack; `/rebase` applies only to rebase-mode stacks. Poll
 `/stacks/{id}/operations/{operation}` for progress, and use its `retry` and
 `cancel` actions for recovery. `POST /stacks/{id}/sync` explicitly records locally
 published boundaries: submit every open layer's pull request number, expected

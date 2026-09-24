@@ -252,7 +252,7 @@ func PullStackAction(ctx *context.Context) {
 		}
 	case "unstack":
 		err = pull_service.Unstack(ctx, ctx.Doer, stack.ID, revision)
-	case "land", "rebase":
+	case "land", "rebase", "update":
 		through := ctx.FormInt("through")
 		style := repo_model.MergeStyle(ctx.FormTrim("merge_style"))
 		if style == "" {

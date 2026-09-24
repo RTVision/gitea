@@ -837,7 +837,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 		for i := range through {
 			pulls = append(pulls, state.Layers[i].PullRequest)
 		}
-		server, err := client.CreateStack(ctx, state.Trunk, pulls)
+		server, err := client.CreateStack(ctx, state.Trunk, "", pulls)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -1005,7 +1005,7 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 		}
 		state.Layers = append(state.Layers, localstate.Layer{Branch: pull.Head.Ref, PullRequest: pull.Index, HeadSHA: localHead, RemoteSHA: remoteHead, ParentSHA: parentSHA})
 	}
-	server, err := client.CreateStack(ctx, *trunk, pulls)
+	server, err := client.CreateStack(ctx, *trunk, "", pulls)
 	if err != nil {
 		return mapAPIError(err)
 	}

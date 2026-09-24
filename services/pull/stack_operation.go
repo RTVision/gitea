@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gitea.dev/models/db"
@@ -65,16 +66,31 @@ func stackActorPermission(ctx context.Context, stack *issues_model.PullRequestSt
 	return nil
 }
 
-func StartStackOperation(ctx context.Context, actor *user_model.User, opts StackOperationOptions) (*issues_model.StackOperation, error) {
-	if opts.Kind != "land" && opts.Kind != "rebase" {
-		return nil, fmt.Errorf("unknown stack operation %q", opts.Kind)
+// StackLandingStyles lists the merge styles that keep a stack's remaining layers valid.
+func StackLandingStyles(mode string) []repo_model.MergeStyle {
+	if mode == issues_model.StackModeMerge {
+		// A rebase replays merge commits, so its result cannot be reconciled with the layers above.
+		return []repo_model.MergeStyle{repo_model.MergeStyleMerge, repo_model.MergeStyleSquash, repo_model.MergeStyleFastForwardOnly}
 	}
-	if opts.Kind == "land" && opts.MergeStyle != repo_model.MergeStyleMerge && opts.MergeStyle != repo_model.MergeStyleSquash && opts.MergeStyle != repo_model.MergeStyleRebase {
-		return nil, errors.New("stacks support merge, squash and rebase landing")
+	return []repo_model.MergeStyle{repo_model.MergeStyleMerge, repo_model.MergeStyleSquash, repo_model.MergeStyleRebase}
+}
+
+func StartStackOperation(ctx context.Context, actor *user_model.User, opts StackOperationOptions) (*issues_model.StackOperation, error) {
+	if opts.Kind != "land" && opts.Kind != "rebase" && opts.Kind != "update" {
+		return nil, fmt.Errorf("unknown stack operation %q", opts.Kind)
 	}
 	stack, err := issues_model.GetStackByID(ctx, opts.StackID)
 	if err != nil {
 		return nil, err
+	}
+	if opts.Kind == "rebase" && stack.Mode == issues_model.StackModeMerge {
+		return nil, errors.New("merge-mode stacks update by merging")
+	}
+	if opts.Kind == "update" && stack.Mode != issues_model.StackModeMerge {
+		return nil, errors.New("rebase-mode stacks update by rebasing")
+	}
+	if opts.Kind == "land" && !slices.Contains(StackLandingStyles(stack.Mode), opts.MergeStyle) {
+		return nil, fmt.Errorf("%s-mode stacks cannot land with %q", stack.Mode, opts.MergeStyle)
 	}
 	if err := stackActorPermission(ctx, stack, actor); err != nil {
 		return nil, err
@@ -263,7 +279,16 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err != nil {
 				return err
 			}
-			if err := buildStackRebase(ctx, op, layers, trunk, actor); err != nil {
+			if stack.Mode == issues_model.StackModeMerge {
+				var landed []*issues_model.StackEntry
+				if landed, err = getLandedStackEntries(ctx, stack.ID); err != nil {
+					return err
+				}
+				err = buildStackUpdate(ctx, op, layers, landed, stack.TrunkBranch, trunk, actor)
+			} else {
+				err = buildStackRebase(ctx, op, layers, trunk, actor)
+			}
+			if err != nil {
 				return err
 			}
 			journal.Stage = "publish"
@@ -276,7 +301,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				if err := saveStackJournal(ctx, op, journal); err != nil {
 					return err
 				}
-				if err := publishStackLayer(ctx, op, layer, actor); err != nil {
+				if err := publishStackLayer(ctx, op, layer, actor, stack.Mode); err != nil {
 					return err
 				}
 				layer.Phase = "published"
@@ -305,7 +330,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				}
 			}
 			journal.Stage = "land"
-			if op.Kind == "rebase" || len(layers) == 0 || layers[0].Position > op.ThroughPosition {
+			if op.Kind != "land" || len(layers) == 0 || layers[0].Position > op.ThroughPosition {
 				journal.Stage = "finish"
 			}
 		case "land":
@@ -344,7 +369,13 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err != nil {
 				return err
 			}
-			if trunk != layer.OldParent {
+			ready := trunk == layer.OldParent
+			if stack.Mode == issues_model.StackModeMerge {
+				if ready, err = stackAncestor(ctx, repo, trunk, layer.ExpectedHead); err != nil {
+					return err
+				}
+			}
+			if !ready {
 				journal.Stage = "restack"
 				break
 			}
@@ -432,6 +463,14 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			return err
 		}
 	}
+}
+
+func getLandedStackEntries(ctx context.Context, stackID int64) ([]*issues_model.StackEntry, error) {
+	entries, err := issues_model.GetStackEntries(ctx, stackID)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(entries, func(entry *issues_model.StackEntry) bool { return entry.LandedCommitSHA == "" }), nil
 }
 
 func cleanupStackCandidates(ctx context.Context, repo *repo_model.Repository, operationID int64) {
@@ -525,11 +564,51 @@ func ResumeStackOperation(ctx context.Context, actor *user_model.User, id int64)
 	if op.State != "blocked" && op.State != "waiting" {
 		return issues_model.ErrStackRevision
 	}
+	journal := new(stackJournal)
+	if err := json.Unmarshal([]byte(op.JournalJSON), journal); err != nil {
+		return err
+	}
+	if stack.Mode == issues_model.StackModeMerge {
+		if err := adoptFastForwardedStackHeads(ctx, stack, journal); err != nil {
+			return err
+		}
+	}
 	op.State = "queued"
-	if err := issues_model.SaveStackOperation(ctx, op); err != nil {
+	if err := saveStackJournal(ctx, op, journal); err != nil {
 		return err
 	}
 	enqueueStackOperation(op.ID)
+	return nil
+}
+
+// adoptFastForwardedStackHeads accepts layer pushes that only add commits, such as a locally resolved merge.
+func adoptFastForwardedStackHeads(ctx context.Context, stack *issues_model.PullRequestStack, journal *stackJournal) error {
+	if journal.Stage != "restack" && journal.Stage != "land" {
+		return nil // other stages hold candidates built from the recorded heads
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
+	if err != nil {
+		return err
+	}
+	for _, layer := range remainingStackLayers(journal) {
+		if layer.Phase != "ready" {
+			continue
+		}
+		head, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+layer.HeadBranch)
+		if err != nil {
+			return err
+		}
+		if head == layer.ExpectedHead {
+			continue
+		}
+		forward, err := stackAncestor(ctx, repo, layer.ExpectedHead, head)
+		if err != nil {
+			return err
+		}
+		if forward {
+			layer.ExpectedHead = head
+		}
+	}
 	return nil
 }
 

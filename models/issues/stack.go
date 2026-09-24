@@ -41,6 +41,7 @@ type PullRequestStack struct {
 	ID                int64  `xorm:"pk autoincr"`
 	RepoID            int64  `xorm:"INDEX NOT NULL"`
 	TrunkBranch       string `xorm:"NOT NULL"`
+	Mode              string `xorm:"VARCHAR(20) NOT NULL DEFAULT 'rebase'"`
 	State             string `xorm:"VARCHAR(20) NOT NULL"`
 	Revision          int64  `xorm:"NOT NULL"`
 	ActiveOperationID int64  `xorm:"NOT NULL DEFAULT 0"`
@@ -48,6 +49,11 @@ type PullRequestStack struct {
 	CreatedUnix       timeutil.TimeStamp `xorm:"created"`
 	UpdatedUnix       timeutil.TimeStamp `xorm:"updated"`
 }
+
+const (
+	StackModeRebase = "rebase"
+	StackModeMerge  = "merge" // layers take parent updates as merge commits and never force-push
+)
 
 const (
 	StackStateOpen      = "open"

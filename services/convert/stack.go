@@ -37,7 +37,7 @@ func ToAPIPullRequestStackRef(ctx context.Context, pr *issues_model.PullRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: position, Base: base}, nil
+	return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: position, Mode: api.StackMode(stack.Mode), Base: base}, nil
 }
 
 func stackTrunkBase(ctx context.Context, stack *issues_model.PullRequestStack, entries []*issues_model.StackEntry, pr *issues_model.PullRequest) (*api.PullRequestStackBase, error) {
@@ -73,6 +73,7 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 	converted := &api.PullRequestStack{
 		Number:          stack.ID,
 		Trunk:           stack.TrunkBranch,
+		Mode:            api.StackMode(stack.Mode),
 		State:           stack.State,
 		Revision:        stack.Revision,
 		ActiveOperation: stack.ActiveOperationID,
@@ -97,7 +98,7 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 				return nil, err
 			}
 		}
-		return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: positions[pr.ID], Base: base}, nil
+		return &api.PullRequestStackRef{Number: stack.ID, Size: len(entries), Position: positions[pr.ID], Mode: api.StackMode(stack.Mode), Base: base}, nil
 	}
 	for _, entry := range entries {
 		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
