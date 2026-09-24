@@ -430,6 +430,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(354, "Add native pull request stacks", v28.AddPullRequestStacks),
 		newMigration(355, "Add review ID to reaction", v28.AddReviewIDToReaction),
 		newMigration(356, "Record pull request merge base revision", v28.AddPullRequestMergedBaseCommitID),
+		newMigration(357, "Add can delete to branch protection", v28.AddCanDeleteToProtectedBranch),
 	}
 	return preparedMigrations
 }

@@ -879,11 +879,10 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 				return
 			}
 			if perm.CanWrite(unit.TypeCode) {
-				// Check if branch is not protected
 				if pull.HeadBranch != pull.HeadRepo.DefaultBranch {
-					if protected, err := git_model.IsBranchProtected(ctx, pull.HeadRepo.ID, pull.HeadBranch); err != nil {
-						log.Error("IsProtectedBranch: %v", err)
-					} else if !protected {
+					if rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pull.HeadRepo.ID, pull.HeadBranch); err != nil {
+						log.Error("GetFirstMatchProtectedBranchRule: %v", err)
+					} else if rule == nil || rule.CanDelete {
 						canDelete = true
 						ctx.Data["DeleteBranchLink"] = issue.Link() + "/cleanup"
 					}

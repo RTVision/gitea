@@ -403,6 +403,11 @@ func testAPIBranchProtectionBasic(t *testing.T) {
 
 	testAPIDeleteBranchProtection(t, "master", http.StatusNoContent)
 
+	testAPICreateBranchProtection(t, "branch2", 3, http.StatusCreated)
+	testAPIDeleteBranch(t, "branch2", http.StatusForbidden)
+	testAPIEditBranchProtection(t, "branch2", &api.BranchProtection{EnableDeletion: true}, http.StatusOK)
+	assert.True(t, testAPIGetBranchProtection(t, "branch2", http.StatusOK).EnableDeletion)
+
 	// Test branch deletion
 	testAPIDeleteBranch(t, "master", http.StatusForbidden)
 	testAPIDeleteBranch(t, "branch2", http.StatusNoContent)

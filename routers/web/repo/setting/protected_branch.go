@@ -212,6 +212,7 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 		protectBranch.ForcePushAllowlistDeployKeys = false
 	}
 
+	protectBranch.CanDelete = f.EnableDeletion
 	protectBranch.EnableMergeWhitelist = f.EnableMergeWhitelist
 	if f.EnableMergeWhitelist {
 		if strings.TrimSpace(f.MergeWhitelistUsers) != "" {
