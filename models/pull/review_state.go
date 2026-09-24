@@ -129,7 +129,7 @@ func mergeFiles(oldFiles, newFiles map[string]ViewedState) map[string]ViewedStat
 // The returned PR Review will be nil if the user has not yet reviewed this PR.
 func GetNewestReviewState(ctx context.Context, userID, pullID int64) (*ReviewState, error) {
 	var review ReviewState
-	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC").Get(&review)
+	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Get(&review) // updated_unix has second resolution, and a sync plus a mark can land in the same one
 	if err != nil || !has {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func GetNewestReviewState(ctx context.Context, userID, pullID int64) (*ReviewSta
 // The returned PR Review will be nil if the user has not yet reviewed this PR.
 func getNewestReviewStateApartFrom(ctx context.Context, userID, pullID int64, commitSHA string) (*ReviewState, error) {
 	var reviews []ReviewState
-	err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC").Limit(2).Find(&reviews)
+	err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Limit(2).Find(&reviews)
 	// It would also be possible to use ".And("commit_sha != ?", commitSHA)" instead of the error handling below
 	// However, benchmarks show drastically improved performance by not doing that
 
