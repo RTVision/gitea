@@ -143,3 +143,23 @@ func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_
 		n.heads[pr.ID] = [2]string{before, after}
 	}
 }
+
+func TestSuggestStackChain(t *testing.T) {
+	lower := &issues_model.PullRequest{ID: 1, Index: 11, HeadBranch: "lower", BaseBranch: "release"}
+	middle := &issues_model.PullRequest{ID: 2, Index: 12, HeadBranch: "middle", BaseBranch: "lower"}
+	upper := &issues_model.PullRequest{ID: 3, Index: 13, HeadBranch: "upper", BaseBranch: "middle"}
+	other := &issues_model.PullRequest{ID: 4, Index: 14, HeadBranch: "other", BaseBranch: "release"}
+	candidates := []*issues_model.PullRequest{upper, other, middle, lower}
+	chain, trunk := SuggestStackChain(candidates, 13)
+	assert.Equal(t, []*issues_model.PullRequest{lower, middle, upper}, chain)
+	assert.Equal(t, "release", trunk)
+	chain, trunk = SuggestStackChain(candidates, 12)
+	assert.Equal(t, []*issues_model.PullRequest{lower, middle}, chain)
+	assert.Equal(t, "release", trunk)
+	chain, trunk = SuggestStackChain(candidates, 99)
+	assert.Empty(t, chain)
+	assert.Empty(t, trunk)
+	cycle := &issues_model.PullRequest{ID: 5, Index: 15, HeadBranch: "release", BaseBranch: "upper"}
+	chain, _ = SuggestStackChain(append(candidates, cycle), 13)
+	assert.Len(t, chain, 4, "a branch cycle stops the walk")
+}

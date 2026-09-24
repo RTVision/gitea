@@ -6,6 +6,7 @@ package pull
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gitea.dev/models/db"
@@ -112,6 +113,27 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		parentID, parentBranch, parentSHA = id, pr.HeadBranch, headSHA
 	}
 	return entries, nil
+}
+
+// SuggestStackChain follows base branches down from the top pull request, returning the chain bottom first and its trunk.
+func SuggestStackChain(candidates []*issues_model.PullRequest, top int64) ([]*issues_model.PullRequest, string) {
+	byHead := make(map[string]*issues_model.PullRequest, len(candidates))
+	var current *issues_model.PullRequest
+	for _, pr := range candidates {
+		byHead[pr.HeadBranch] = pr
+		if pr.Index == top {
+			current = pr
+		}
+	}
+	var chain []*issues_model.PullRequest
+	trunk := ""
+	for current != nil && !slices.Contains(chain, current) {
+		chain = append(chain, current)
+		trunk = current.BaseBranch
+		current = byHead[current.BaseBranch]
+	}
+	slices.Reverse(chain)
+	return chain, trunk
 }
 
 func insertStackEntries(ctx context.Context, stack *issues_model.PullRequestStack, entries []*issues_model.StackEntry) error {

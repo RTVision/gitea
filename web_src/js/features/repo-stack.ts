@@ -1,4 +1,11 @@
 import {GET} from '../modules/fetch.ts';
+import {registerGlobalInitFunc} from '../modules/observer.ts';
+
+export function initRepoStackNew() {
+  registerGlobalInitFunc('initRepoStackNew', (form: HTMLFormElement) => {
+    form.querySelector<HTMLSelectElement>('select[name="pull"]')!.addEventListener('change', () => form.submit());
+  });
+}
 
 export function initRepoStackStatus() {
   for (const status of document.querySelectorAll<HTMLElement>('[data-stack-status-url]')) {

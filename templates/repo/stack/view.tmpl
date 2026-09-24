@@ -5,7 +5,7 @@
 	<div class="ui container">
 		{{template "base/alert" .}}
 		<div class="flex-text-block tw-mb-4"><h1 class="tw-text-xl tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stack_number" $data.Stack.ID}}</h1>
-			<span class="ui label">{{$data.Stack.State}}</span><span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</span></div>
+			<span class="ui label">{{$data.Stack.State}}</span>{{template "repo/stack/mode_label" $data.Stack}}<span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</span></div>
 		<div class="ui stackable grid tw-max-w-full">
 			<div class="eleven wide column tw-min-w-0">
 				<ol class="ui segments tw-pl-0" aria-label="{{ctx.Locale.Tr "repo.pulls.stack_entries"}}">
@@ -18,10 +18,12 @@
 					<ul class="tw-pl-5">{{range $data.Operations}}<li>{{ctx.Locale.Tr "repo.pulls.stack_operation" .State}} {{if gt .Completed 0}}({{ctx.Locale.Tr "repo.pulls.stack_landed" .Completed}}){{end}}</li>{{end}}</ul></div>{{end}}
 				{{if .CanManageStack}}
 				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/land"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_land"}}</h3>
-					<div class="field"><label for="stack-through">{{ctx.Locale.Tr "repo.pulls.stack_land_through"}}</label><select id="stack-through" name="through">{{range $data.Entries}}{{if not .Pull.HasMerged}}<option value="{{.Entry.Position}}">#{{.Pull.Index}}</option>{{end}}{{end}}</select></div><div class="field"><label for="stack-style">{{ctx.Locale.Tr "repo.pulls.stack_merge_style"}}</label><select id="stack-style" name="merge_style"><option value="merge">{{ctx.Locale.Tr "repo.pulls.stack_merge_commit"}}</option><option value="squash">{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</option><option value="rebase">{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}</option></select></div><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_land_desc"}}</p><button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.stack_land"}}</button></form>
-				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/rebase"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_update"}}</h3>
-					<button class="ui button">{{ctx.Locale.Tr "repo.pulls.stack_rebase"}}</button></form>
-				<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/unstack"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><button class="ui basic red button">{{ctx.Locale.Tr "repo.pulls.unstack"}}</button></form>
+					<div class="field"><label for="stack-through">{{ctx.Locale.Tr "repo.pulls.stack_land_through"}}</label><select id="stack-through" name="through">{{range $data.Entries}}{{if not .Pull.HasMerged}}<option value="{{.Entry.Position}}">#{{.Pull.Index}}</option>{{end}}{{end}}</select></div><div class="field"><label for="stack-style">{{ctx.Locale.Tr "repo.pulls.stack_merge_style"}}</label><select id="stack-style" name="merge_style">{{range $data.LandingStyles}}<option value="{{.}}">{{if eq . "merge"}}{{ctx.Locale.Tr "repo.pulls.stack_merge_commit"}}{{else if eq . "squash"}}{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}{{else if eq . "rebase"}}{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}{{else}}{{ctx.Locale.Tr "repo.pulls.fast_forward_only_merge_pull_request"}}{{end}}</option>{{end}}</select></div><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_land_desc"}}</p><button type="submit" class="ui primary button">{{ctx.Locale.Tr "repo.pulls.stack_land"}}</button></form>
+				{{$merge := eq $data.Stack.Mode "merge"}}
+				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/{{if $merge}}update{{else}}rebase{{end}}"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_update"}}</h3>
+					<p class="help">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge_desc"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_update_rebase_desc"}}{{end}}</p>
+					<button type="submit" class="ui button">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebase"}}{{end}}</button></form>
+				<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/unstack"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><button type="submit" class="ui basic red button">{{ctx.Locale.Tr "repo.pulls.unstack"}}</button></form>
 				{{end}}
 			</div>
 		</div>

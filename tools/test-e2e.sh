@@ -113,6 +113,9 @@ ENABLE_CAPTCHA = false
 [ui.notification]
 EVENT_SOURCE_UPDATE_TIME = 500ms
 
+[repository.pull-request]
+ENABLE_STACKS = true
+
 [log]
 MODE = console
 LEVEL = Warn

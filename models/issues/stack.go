@@ -13,6 +13,8 @@ import (
 	"gitea.dev/models/db"
 	"gitea.dev/modules/timeutil"
 	"gitea.dev/modules/util"
+
+	"xorm.io/builder"
 )
 
 var (
@@ -174,6 +176,20 @@ func ListStacks(ctx context.Context, repoID int64, opts db.ListOptions) ([]*Pull
 	}
 	err = sess.Find(&stacks)
 	return stacks, count, err
+}
+
+// FindStackCandidatePulls lists open same-repository pull requests that no stack claims.
+func FindStackCandidatePulls(ctx context.Context, repoID int64) (PullRequestList, error) {
+	prs := make(PullRequestList, 0)
+	err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").
+		Where("pull_request.base_repo_id = ? AND pull_request.head_repo_id = ? AND pull_request.flow = ? AND pull_request.has_merged = ? AND issue.is_closed = ?", repoID, repoID, PullRequestFlowGithub, false, false).
+		And(builder.NotIn("pull_request.id", builder.Select("pull_request_id").From("stack_branch_claim"))).
+		Desc("pull_request.index").Find(&prs)
+	if err != nil {
+		return nil, err
+	}
+	_, err = prs.LoadIssues(ctx)
+	return prs, err
 }
 
 // AdvanceStackRevision reserves a structural edit inside the caller's transaction.

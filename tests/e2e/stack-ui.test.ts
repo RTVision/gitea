@@ -17,12 +17,18 @@ test('stack pages create and render a pull request chain', async ({page, request
     const three = await apiCreatePR(request, owner, repo, 'layer-three', 'layer-two', 'Layer three');
     return {one, two, three};
   })();
-  const [{one, two, three}] = await Promise.all([createStack, login(page)]);
+  const [{two, three}] = await Promise.all([createStack, login(page)]);
   const stackURL = `/${owner}/${repo}/pulls/stacks`;
   await page.goto(`/${owner}/${repo}/pulls/${two}`);
   await page.screenshot({path: testInfo.outputPath('pull-before-stack.png'), fullPage: true});
   await page.goto(`${stackURL}/new`);
-  await page.getByLabel('Pull requests, bottom first').fill(`#${one}, #${two}, #${three}`);
+  await expect(page.getByRole('button', {name: 'Create stack'})).toBeDisabled();
+  await page.getByLabel('Top pull request').selectOption(String(three));
+  for (const title of ['Layer one', 'Layer two', 'Layer three']) {
+    await expect(page.getByRole('checkbox', {name: new RegExp(title)})).toBeChecked();
+  }
+  await expect(page.getByRole('radio', {name: /^Merge/})).toBeChecked();
+  await page.screenshot({path: testInfo.outputPath('stack-new.png'), fullPage: true});
   await page.getByRole('button', {name: 'Create stack'}).click();
   await expect(page.getByRole('link', {name: /Stack #\d+/})).toBeVisible();
 
@@ -31,6 +37,8 @@ test('stack pages create and render a pull request chain', async ({page, request
   await expect(page.getByText('#1 Layer one')).toBeVisible();
   await expect(page.getByText('#2 Layer two')).toBeVisible();
   await expect(page.getByText('#3 Layer three')).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Update stack'})).toBeVisible();
+  await expect(page.getByLabel('Merge method').locator('option')).toHaveText(['Create merge commit', 'Create squash commit', 'Fast-forward only']);
   await page.screenshot({path: testInfo.outputPath('stack-desktop.png'), fullPage: true});
 
   await page.setViewportSize({width: 375, height: 812});
