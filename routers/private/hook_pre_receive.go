@@ -177,7 +177,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	//
 	// 1. Detect and prevent deletion of the branch
 	if newCommitID == objectFormat.EmptyObjectID().String() {
-		if !protectBranch.CanDelete {
+		if !protectBranch.CanDelete || (!ctx.opts.IsWiki && branchName == repo.GetPullRequestTargetBranch(ctx)) {
 			ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is protected from deletion", branchName)
 		}
 		return

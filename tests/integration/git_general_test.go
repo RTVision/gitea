@@ -24,6 +24,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/perm"
 	repo_model "gitea.dev/models/repo"
+	unit_model "gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/commitstatus"
@@ -33,6 +34,7 @@ import (
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/test"
+	repo_service "gitea.dev/services/repository"
 	"gitea.dev/tests"
 
 	"github.com/kballard/go-shellquote"
@@ -487,11 +489,23 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 		t.Run("PushToProtectedBranch", doGitPushTestRepository(dstPath, "origin", "toforce:protected"))
 		t.Run("CheckoutMasterAgain", doGitCheckoutBranch(dstPath, "master"))
 
-		t.Run("PushReleaseBranch", doGitPushTestRepository(dstPath, "origin", "master:release/temp"))
+		t.Run("PushReleaseBranches", doGitPushTestRepository(dstPath, "origin", "master:release/temp", "master:release/target"))
 		t.Run("ProtectReleaseBranches", doProtectBranch(ctx, "release/*", "", "", "", ""))
 		t.Run("FailToDeleteProtectedBranch", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "release/temp"))
 		t.Run("AllowReleaseBranchDeletion", doProtectBranchExt(ctx, "release/*", doProtectBranchOptions{EnableDeletion: true}))
 		t.Run("DeleteProtectedBranch", doGitPushTestRepository(dstPath, "origin", "--delete", "release/temp"))
+		setPRTargetBranch := func(branch string) func(t *testing.T) {
+			return func(t *testing.T) {
+				repo, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), baseCtx.Username, baseCtx.Reponame)
+				require.NoError(t, err)
+				prUnit := repo.MustGetUnit(t.Context(), unit_model.TypePullRequests)
+				prUnit.PullRequestsConfig().DefaultTargetBranch = branch
+				require.NoError(t, repo_service.UpdateRepositoryUnits(t.Context(), repo, []repo_model.RepoUnit{*prUnit}, nil))
+			}
+		}
+		t.Run("SetPRTargetBranch", setPRTargetBranch("release/target"))
+		t.Run("FailToDeletePRTargetBranch", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "release/target"))
+		t.Run("ResetPRTargetBranch", setPRTargetBranch(""))
 	}
 }
 
