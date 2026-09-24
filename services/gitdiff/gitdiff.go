@@ -1582,7 +1582,7 @@ func SyncUserSpecificDiff(ctx context.Context, userID int64, pull *issues_model.
 	// when a file was modified in a previous commit of the diff and the modification got reverted afterwards.
 	// Marking the files as unviewed to prevent errors where a non-existing file has a view state
 	for changedFile := range changedFilesSet {
-		if _, ok := review.UpdatedFiles[changedFile]; ok {
+		if state, ok := review.UpdatedFiles[changedFile]; ok && state != pull_model.Unviewed { // rewriting would bump updated_unix and keep this outdated review newest
 			filesChangedSinceLastDiff[changedFile] = pull_model.Unviewed
 		}
 	}

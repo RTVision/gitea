@@ -9,6 +9,7 @@ import (
 	"maps"
 
 	"gitea.dev/models/db"
+	"gitea.dev/modules/globallock"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/timeutil"
 
@@ -83,6 +84,12 @@ func GetReviewState(ctx context.Context, userID, pullID int64, commitSHA string)
 func UpdateReviewState(ctx context.Context, userID, pullID int64, commitSHA string, updatedFiles map[string]ViewedState) (*ReviewState, error) {
 	log.Trace("Updating review for user %d, repo %d, commit %s with the updated files %v.", userID, pullID, commitSHA, updatedFiles)
 
+	releaser, err := globallock.Lock(ctx, fmt.Sprintf("review_state_%d_%d", userID, pullID)) // each write must see the one before it
+	if err != nil {
+		return nil, err
+	}
+	defer releaser()
+
 	review, exists, err := GetReviewState(ctx, userID, pullID, commitSHA)
 	if err != nil {
 		return nil, err
@@ -100,15 +107,22 @@ func UpdateReviewState(ctx context.Context, userID, pullID int64, commitSHA stri
 		review.UpdatedFiles = updatedFiles
 	}
 
+	// updated_unix is what picks the newest review, so it must move past every earlier write, even one in the same second
+	var latest int64
+	if _, err := db.GetEngine(ctx).SQL("SELECT COALESCE(MAX(updated_unix), 0) FROM review_state WHERE user_id = ? AND pull_id = ?", userID, pullID).Get(&latest); err != nil {
+		return nil, err
+	}
+	review.UpdatedUnix = max(timeutil.TimeStampNow(), timeutil.TimeStamp(latest)+1)
+
 	// Insert or Update review
-	engine := db.GetEngine(ctx)
+	engine := db.GetEngine(ctx).NoAutoTime()
 	if !exists {
 		log.Trace("Inserting new review for user %d, repo %d, commit %s with the updated files %v.", userID, pullID, commitSHA, review.UpdatedFiles)
 		_, err := engine.Insert(review)
 		return nil, err
 	}
 	log.Trace("Updating already existing review with ID %d (user %d, repo %d, commit %s) with the updated files %v.", review.ID, userID, pullID, commitSHA, review.UpdatedFiles)
-	_, err = engine.ID(review.ID).Cols("updated_files").Update(review)
+	_, err = engine.ID(review.ID).Cols("updated_files", "updated_unix").Update(review)
 	return review, err
 }
 

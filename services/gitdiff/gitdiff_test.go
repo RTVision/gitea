@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	pull_model "gitea.dev/models/pull"
 	"gitea.dev/models/unittest"
@@ -1380,6 +1381,15 @@ D test10.txt`
 	assert.NotNil(t, thirdReview)
 	assert.Equal(t, thirdReviewUpdatedFiles, thirdReview.UpdatedFiles)
 	assert.Equal(t, 1, thirdReview.GetViewedFileCount())
+
+	// nothing new to record, so the review must keep its timestamp
+	_, err = db.GetEngine(t.Context()).Exec("UPDATE review_state SET updated_unix = 1 WHERE id = ?", thirdReview.ID)
+	require.NoError(t, err)
+	fourthReview, err := SyncUserSpecificDiff(t.Context(), user.ID, pull, gitRepo, thirdReviewDiff, thirdReviewDiffOpts)
+	assert.NoError(t, err)
+	assert.Equal(t, thirdReviewUpdatedFiles, fourthReview.UpdatedFiles)
+	stored := unittest.AssertExistsAndLoadBean(t, &pull_model.ReviewState{ID: thirdReview.ID})
+	assert.EqualValues(t, 1, stored.UpdatedUnix)
 }
 
 func TestGetDiffShortStatWithOptions(t *testing.T) {
