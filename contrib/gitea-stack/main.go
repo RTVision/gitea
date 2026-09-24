@@ -139,7 +139,7 @@ func (a *application) run(ctx context.Context, command string, args []string) er
 	case "checkout":
 		return a.checkout(args)
 	case "push":
-		return a.push(ctx, args, true)
+		return a.push(ctx, args)
 	case "submit":
 		return a.submit(ctx, args)
 	case "adopt":
@@ -241,6 +241,38 @@ func parseMode(value string) (api.StackMode, error) {
 	default:
 		return "", fail(2, "usage", "invalid --mode %q; use rebase or merge", value)
 	}
+}
+
+// checkServerMode keeps a local stack from publishing with the other mode's rules, such as force-pushing merge-mode layers.
+func checkServerMode(state *localstate.State, server *api.PullRequestStack) error {
+	return checkLocalMode(state, server.Number, server.Mode)
+}
+
+func checkLocalMode(state *localstate.State, stack int64, serverMode api.StackMode) error {
+	serverMode, localMode := cmp.Or(serverMode, api.StackModeRebase), cmp.Or(state.Mode, api.StackModeRebase)
+	if serverMode != localMode {
+		return fail(3, "mode_mismatch", "S%d is a %s-mode stack but the local stack is in %s mode.\nRun adopt with its open pull requests to bind S%d before publishing.", stack, serverMode, localMode, stack)
+	}
+	return nil
+}
+
+// checkPullStackModes refuses to publish unbound layers whose pull requests already belong to a stack of another mode.
+func (a *application) checkPullStackModes(ctx context.Context, client *stackclient.Client, state *localstate.State, through int) error {
+	for _, layer := range state.Layers[:through] {
+		if layer.PullRequest == 0 || layer.LandedSHA != "" {
+			continue
+		}
+		pull, err := client.GetPull(ctx, layer.PullRequest)
+		if err != nil {
+			return mapAPIError(err)
+		}
+		if pull.Stack != nil {
+			if err := checkLocalMode(state, pull.Stack.Number, pull.Stack.Mode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func modeMismatch(stack int64, mode api.StackMode) error {
@@ -748,7 +780,7 @@ func (a *application) pushMergeLayers(ctx context.Context, state *localstate.Sta
 	return nil
 }
 
-func (a *application) push(ctx context.Context, args []string, synchronize bool) error {
+func (a *application) push(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("push", flag.ContinueOnError)
 	throughValue := flags.String("through", "", "last layer to push")
 	if err := flags.Parse(args); err != nil {
@@ -771,7 +803,7 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 	}
 	var client *stackclient.Client
 	var server *api.PullRequestStack
-	if synchronize && stackNumber != 0 {
+	if stackNumber != 0 {
 		client, err = a.client(state)
 		if err != nil {
 			return err
@@ -780,6 +812,12 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 		if err != nil {
 			return mapAPIError(err)
 		}
+		if server.State != "open" {
+			return fail(3, "precondition", "S%d is %s; push requires an open stack", server.Number, server.State)
+		}
+		if err := checkServerMode(state, server); err != nil {
+			return err
+		}
 		if server.ActiveOperation != 0 {
 			return fail(6, "operation_active", "stack has active operation %d", server.ActiveOperation)
 		}
@@ -787,6 +825,14 @@ func (a *application) push(ctx context.Context, args []string, synchronize bool)
 			if state.Layers[i].LandedSHA == "" {
 				return fail(3, "precondition", "a submitted stack push must include every open layer so server boundaries stay complete")
 			}
+		}
+	} else if slices.ContainsFunc(state.Layers[:through], func(layer localstate.Layer) bool { return layer.PullRequest != 0 }) {
+		unbound, err := a.client(state)
+		if err != nil {
+			return err
+		}
+		if err := a.checkPullStackModes(ctx, unbound, state, through); err != nil {
+			return err
 		}
 	}
 	if err := a.pushLayers(ctx, state, through); err != nil {
@@ -882,6 +928,8 @@ func (a *application) submit(ctx context.Context, args []string) error {
 		if err := validateSubmitStack(state, server); err != nil {
 			return err
 		}
+	} else if err := a.checkPullStackModes(ctx, client, state, through); err != nil {
+		return err
 	}
 	if err := a.pushLayers(ctx, state, through); err != nil {
 		return err
@@ -962,6 +1010,9 @@ func validateSubmitStack(state *localstate.State, server *api.PullRequestStack) 
 	}
 	if server.State != "open" {
 		return fail(3, "precondition", "S%d is %s; submit requires an open stack", server.Number, server.State)
+	}
+	if err := checkServerMode(state, server); err != nil {
+		return err
 	}
 	if server.ActiveOperation != 0 {
 		return fail(6, "operation_active", "S%d has an operation in progress; retry when it completes", server.Number)
@@ -1181,6 +1232,12 @@ func (a *application) sync(ctx context.Context) error {
 	if err != nil {
 		return mapAPIError(err)
 	}
+	if server.State != "open" && server.State != "complete" { // a complete stack still syncs so the final landings are recorded
+		return fail(3, "precondition", "S%d is %s; sync requires an open or complete stack", server.Number, server.State)
+	}
+	if err := checkServerMode(state, server); err != nil {
+		return err
+	}
 	landedPulls := make(map[int64]bool, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil && entry.LandedSHA != "" {
@@ -1200,7 +1257,7 @@ func (a *application) sync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	needsRestack, needsReconciliation, err := a.updateSyncState(state, server, trunkSHA)
+	report, err := a.updateSyncState(state, server, trunkSHA)
 	if err != nil {
 		return err
 	}
@@ -1209,20 +1266,32 @@ func (a *application) sync(ctx context.Context) error {
 		return err
 	}
 	if !a.jsonOutput {
-		fmt.Fprintf(os.Stdout, "S%d rev %d; restack: %s\n", number, server.Revision, strings.Join(needsRestack, ", "))
-		if len(needsReconciliation) != 0 && state.Mode == api.StackModeMerge {
-			fmt.Fprintf(os.Stdout, "Merge remote changes before pushing: %s\n", strings.Join(needsReconciliation, ", "))
-		} else if len(needsReconciliation) != 0 {
-			fmt.Fprintf(os.Stdout, "Reconcile remote changes before pushing: %s; previous leases retained\n", strings.Join(needsReconciliation, ", "))
+		fmt.Fprintf(os.Stdout, "S%d rev %d; restack: %s\n", number, server.Revision, strings.Join(report.NeedsRestack, ", "))
+		if len(report.NeedsReconciliation) != 0 && state.Mode == api.StackModeMerge {
+			fmt.Fprintf(os.Stdout, "Merge remote changes before pushing: %s\n", strings.Join(report.NeedsReconciliation, ", "))
+		} else if len(report.NeedsReconciliation) != 0 {
+			fmt.Fprintf(os.Stdout, "Reconcile remote changes before pushing: %s; previous leases retained\n", strings.Join(report.NeedsReconciliation, ", "))
+		}
+		if len(report.BehindElsewhere) != 0 {
+			fmt.Fprintf(os.Stdout, "Behind the remote but checked out in another worktree; pull there: %s\n", strings.Join(report.BehindElsewhere, ", "))
 		}
 	}
-	a.success(map[string]any{"stack": state, "needs_restack": needsRestack, "needs_reconciliation": needsReconciliation})
+	result := map[string]any{"stack": state, "needs_restack": report.NeedsRestack, "needs_reconciliation": report.NeedsReconciliation}
+	if len(report.BehindElsewhere) != 0 {
+		result["behind_in_other_worktree"] = report.BehindElsewhere
+	}
+	a.success(result)
 	return nil
 }
 
-func (a *application) updateSyncState(state *localstate.State, server *api.PullRequestStack, trunkSHA string) ([]string, []string, error) {
-	needsRestack := make([]string, 0)
-	needsReconciliation := make([]string, 0)
+type syncReport struct {
+	NeedsRestack        []string
+	NeedsReconciliation []string
+	BehindElsewhere     []string
+}
+
+func (a *application) updateSyncState(state *localstate.State, server *api.PullRequestStack, trunkSHA string) (*syncReport, error) {
+	report := &syncReport{NeedsRestack: make([]string, 0), NeedsReconciliation: make([]string, 0)}
 	entriesByPull := make(map[int64]*api.PullRequestStackEntry, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil {
@@ -1247,22 +1316,18 @@ func (a *application) updateSyncState(state *localstate.State, server *api.PullR
 		}
 		localHead, err := a.repo.Head(layer.Branch)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		remoteSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + layer.Branch)
 		if merge {
 			if err != nil {
 				remoteSHA = ""
 			}
-			var diverged bool
-			if localHead, diverged, err = a.syncMergeLayer(layer, current, localHead, remoteSHA); err != nil {
-				return nil, nil, err
-			}
-			if diverged {
-				needsReconciliation = append(needsReconciliation, layer.Branch)
+			if localHead, err = a.syncMergeLayer(layer, current, localHead, remoteSHA, report); err != nil {
+				return nil, err
 			}
 			if a.repo.IsAncestor(openParent, localHead) != nil {
-				needsRestack = append(needsRestack, layer.Branch)
+				report.NeedsRestack = append(report.NeedsRestack, layer.Branch)
 			}
 			openParent = localHead
 			continue
@@ -1271,44 +1336,46 @@ func (a *application) updateSyncState(state *localstate.State, server *api.PullR
 			layer.RemoteSHA = remoteSHA
 		}
 		if remoteSHA != "" && remoteSHA != layer.RemoteSHA {
-			needsReconciliation = append(needsReconciliation, layer.Branch)
+			report.NeedsReconciliation = append(report.NeedsReconciliation, layer.Branch)
 		}
 		if layer.ParentSHA != openParent {
-			needsRestack = append(needsRestack, layer.Branch)
+			report.NeedsRestack = append(report.NeedsRestack, layer.Branch)
 		}
 		openParent = localHead
 	}
-	return needsRestack, needsReconciliation, nil
+	return report, nil
 }
 
-// syncMergeLayer fast-forwards a local layer to its remote head and reports divergence without rewriting.
-func (a *application) syncMergeLayer(layer *localstate.Layer, current, localHead, remoteSHA string) (string, bool, error) {
+// syncMergeLayer fast-forwards a local layer to its remote head and reports what it cannot fast-forward without rewriting.
+func (a *application) syncMergeLayer(layer *localstate.Layer, current, localHead, remoteSHA string, report *syncReport) (string, error) {
 	switch {
 	case remoteSHA == "":
-		return localHead, false, nil
+		return localHead, nil
 	case a.repo.IsAncestor(remoteSHA, localHead) == nil:
 		layer.RemoteSHA = remoteSHA
-		return localHead, false, nil
+		return localHead, nil
 	case a.repo.IsAncestor(localHead, remoteSHA) != nil:
-		return localHead, true, nil
+		report.NeedsReconciliation = append(report.NeedsReconciliation, layer.Branch)
+		return localHead, nil
 	}
 	worktrees, err := a.repo.WorktreesForBranch(layer.Branch)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	switch {
 	case layer.Branch == current:
 		_, err = a.repo.Run(nil, "merge", "--ff-only", "--end-of-options", remoteSHA)
 	case len(worktrees) != 0:
-		return localHead, true, nil
+		report.BehindElsewhere = append(report.BehindElsewhere, layer.Branch)
+		return localHead, nil
 	default:
 		err = a.repo.UpdateRef("refs/heads/"+layer.Branch, remoteSHA, localHead)
 	}
 	if err != nil {
-		return "", false, fail(3, "precondition", "fast-forward %s: %v", layer.Branch, err)
+		return "", fail(3, "precondition", "fast-forward %s: %v", layer.Branch, err)
 	}
 	layer.HeadSHA, layer.RemoteSHA = remoteSHA, remoteSHA
-	return remoteSHA, false, nil
+	return remoteSHA, nil
 }
 
 func remoteLeaseCanAdvance(repo gitx.Repo, localHead, acceptedHead, remoteHead string, entry *api.PullRequestStackEntry) bool {

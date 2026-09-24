@@ -199,7 +199,7 @@ func TestSyncRemoteLeaseContentSafety(t *testing.T) {
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Revision: 2, Entries: []*api.PullRequestStackEntry{entry}})
+				_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, State: "open", Revision: 2, Entries: []*api.PullRequestStackEntry{entry}})
 			}))
 			defer server.Close()
 			t.Setenv("GITEA_URL", server.URL)
@@ -423,6 +423,7 @@ func TestSubmitStackValidationRejectsDrift(t *testing.T) {
 		"nil-entry": {Number: 1, Trunk: "main", State: "open", Entries: []*api.PullRequestStackEntry{nil}},
 		"duplicate": stack(1, 1),
 		"mismatch":  stack(1, 3),
+		"mode":      {Number: 1, Trunk: "main", State: "open", Mode: api.StackModeMerge},
 	}
 	for name, server := range invalid {
 		t.Run(name, func(t *testing.T) {
@@ -434,6 +435,8 @@ func TestSubmitStackValidationRejectsDrift(t *testing.T) {
 			} else if name == "active" {
 				expectedCode = 6
 				assert.Equal(t, "operation_active", commandErr.kind)
+			} else if name == "mode" {
+				assert.Equal(t, "mode_mismatch", commandErr.kind)
 			} else {
 				assert.Equal(t, "stack_drift", commandErr.kind)
 			}
@@ -487,10 +490,10 @@ func TestSyncDetectsUpperLayerAfterLowerLocalHeadMoves(t *testing.T) {
 		{PullRequest: &api.PullRequest{Index: 2}, HeadSHA: upperRemote},
 	}}
 	app := &application{repo: gitx.Repo{Dir: dir}}
-	needsRestack, needsReconciliation, err := app.updateSyncState(state, server, trunk)
+	report, err := app.updateSyncState(state, server, trunk)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"layer-2"}, needsRestack)
-	assert.Empty(t, needsReconciliation)
+	assert.Equal(t, []string{"layer-2"}, report.NeedsRestack)
+	assert.Empty(t, report.NeedsReconciliation)
 }
 
 func TestSyncStateDoesNotRequireLandedLocalBranch(t *testing.T) {
@@ -498,10 +501,10 @@ func TestSyncStateDoesNotRequireLandedLocalBranch(t *testing.T) {
 	server := &api.PullRequestStack{Entries: []*api.PullRequestStackEntry{{PullRequest: &api.PullRequest{Index: 1}, LandedSHA: "landed"}}}
 	app := &application{repo: gitx.Repo{Dir: t.TempDir()}}
 
-	needsRestack, needsReconciliation, err := app.updateSyncState(state, server, "trunk")
+	report, err := app.updateSyncState(state, server, "trunk")
 	require.NoError(t, err)
-	assert.Empty(t, needsRestack)
-	assert.Empty(t, needsReconciliation)
+	assert.Empty(t, report.NeedsRestack)
+	assert.Empty(t, report.NeedsReconciliation)
 	assert.Equal(t, "landed", state.Layers[0].LandedSHA)
 }
 
@@ -626,11 +629,12 @@ func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
 	runGit(t, work, "switch", "layer-2")
 
 	var synced []api.PullRequestStackHead
+	serverState := "unstacked"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/1":
-			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Trunk: "main", Mode: api.StackModeMerge, State: "open", Revision: 3, Entries: []*api.PullRequestStackEntry{
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 1, Trunk: "main", Mode: api.StackModeMerge, State: serverState, Revision: 3, Entries: []*api.PullRequestStackEntry{
 				{Position: 1, PullRequest: &api.PullRequest{Index: 1}, HeadSHA: lower},
 				{Position: 2, PullRequest: &api.PullRequest{Index: 2}, HeadSHA: otherHead},
 			}})
@@ -646,12 +650,20 @@ func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
 	defer server.Close()
 	t.Setenv("GITEA_URL", server.URL)
 	t.Setenv("GITEA_TOKEN", "test-token")
-	app, store := mergeModeApp(t, work, &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeMerge, Stack: 1, LastRevision: 3, Layers: []localstate.Layer{
+	state := &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeRebase, Stack: 1, LastRevision: 3, Layers: []localstate.Layer{
 		{Branch: "layer-1", PullRequest: 1, HeadSHA: lower, RemoteSHA: lower, ParentSHA: trunk},
 		{Branch: "layer-2", PullRequest: 2, HeadSHA: upper, RemoteSHA: upper, ParentSHA: lower},
-	}})
+	}}
+	app, store := mergeModeApp(t, work, state)
+	requireCommandError(t, app.push(t.Context(), nil), 3, "precondition")
+	serverState = "open"
+	requireCommandError(t, app.push(t.Context(), nil), 3, "mode_mismatch")
+	requireCommandError(t, app.sync(t.Context()), 3, "mode_mismatch")
+	assert.Equal(t, lower, gitLine(t, remote, "rev-parse", "layer-1"), "a rebase-mode local stack never force-pushes merge-mode layers")
+	state.Mode = api.StackModeMerge
+	require.NoError(t, store.Save(state))
 
-	requireCommandError(t, app.push(t.Context(), nil, true), 6, "non_fast_forward")
+	requireCommandError(t, app.push(t.Context(), nil), 6, "non_fast_forward")
 	assert.Equal(t, lower, gitLine(t, remote, "rev-parse", "layer-1"), "nothing is pushed while any layer would be rewritten")
 
 	require.NoError(t, app.sync(t.Context()))
@@ -660,7 +672,7 @@ func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
 	assert.Equal(t, localLower, gitLine(t, work, "rev-parse", "layer-1"))
 
 	require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
-	require.NoError(t, app.push(t.Context(), nil, true))
+	require.NoError(t, app.push(t.Context(), nil))
 	upperMerge := gitLine(t, work, "rev-parse", "layer-2")
 	assert.Equal(t, localLower, gitLine(t, remote, "rev-parse", "layer-1"))
 	assert.Equal(t, upperMerge, gitLine(t, remote, "rev-parse", "layer-2"))
@@ -673,10 +685,16 @@ func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
 	require.NoError(t, err)
 	diverged := gitLine(t, work, "commit-tree", trunk+"^{tree}", "-p", lower, "-m", "diverged")
 	runGit(t, work, "update-ref", "refs/remotes/origin/layer-1", diverged)
-	_, needsReconciliation, err := app.updateSyncState(state, &api.PullRequestStack{}, trunk)
+	runGit(t, work, "switch", "main")
+	runGit(t, work, "worktree", "add", filepath.Join(filepath.Dir(work), "elsewhere"), "layer-2")
+	ahead := gitLine(t, work, "commit-tree", upperMerge+"^{tree}", "-p", upperMerge, "-m", "remote ahead")
+	runGit(t, work, "update-ref", "refs/remotes/origin/layer-2", ahead)
+	report, err := app.updateSyncState(state, &api.PullRequestStack{}, trunk)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"layer-1"}, needsReconciliation)
+	assert.Equal(t, []string{"layer-1"}, report.NeedsReconciliation)
+	assert.Equal(t, []string{"layer-2"}, report.BehindElsewhere, "a layer only behind in another worktree is not divergent")
 	assert.Equal(t, localLower, gitLine(t, work, "rev-parse", "layer-1"))
+	assert.Equal(t, upperMerge, gitLine(t, work, "rev-parse", "layer-2"))
 }
 
 func TestMergeModeFlagsAndAdopt(t *testing.T) {
@@ -690,6 +708,8 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/2":
 			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 2, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}, Stack: &api.PullRequestStackRef{Number: 5, Mode: api.StackModeMerge}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/capabilities":
+			_ = json.NewEncoder(w).Encode(&api.PullRequestStackCapabilities{Enabled: true})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/3":
 			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 3, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/5":
@@ -712,7 +732,12 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 	defer server.Close()
 	t.Setenv("GITEA_URL", server.URL)
 	t.Setenv("GITEA_TOKEN", "test-token")
-	app, store := mergeModeApp(t, work, &localstate.State{})
+	app, store := mergeModeApp(t, work, &localstate.State{Remote: "origin", Trunk: "main", Mode: api.StackModeRebase, Layers: []localstate.Layer{
+		{Branch: "layer-1", HeadSHA: lower, ParentSHA: trunk},
+		{Branch: "layer-2", PullRequest: 2, HeadSHA: lower, ParentSHA: lower},
+	}})
+	requireCommandError(t, app.push(t.Context(), nil), 3, "mode_mismatch")
+	requireCommandError(t, app.submit(t.Context(), nil), 3, "mode_mismatch")
 
 	requireCommandError(t, app.adopt(t.Context(), []string{"--prs", "2", "--trunk", "main", "--mode", "rebase"}), 3, "mode_mismatch")
 	require.NoError(t, app.adopt(t.Context(), []string{"--prs", "2", "--trunk", "main"}))

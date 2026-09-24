@@ -43,13 +43,13 @@ After a local restack, `push` publishes every open layer with its previously acc
 
 ### Merge mode
 
-`init`, `submit` and `adopt` take `--mode rebase|merge` (default `rebase`). The mode is fixed when the server stack is created; `adopt` of pull requests that already belong to a stack binds that stack and reads its mode, and an explicit `--mode` must match it. See [Stack modes](../../docs/stacked-pull-requests.md#stack-modes).
+`init`, `submit` and `adopt` take `--mode rebase|merge` (default `rebase`). The mode is fixed when the server stack is created; `adopt` of pull requests that already belong to a stack binds that stack and reads its mode, and an explicit `--mode` must match it. `push`, `submit` and `sync` refuse with `mode_mismatch` when the local mode differs from the server stack's, or from the stack an unbound layer's pull request already belongs to; run `adopt` to bind that stack. See [Stack modes](../../docs/stacked-pull-requests.md#stack-modes).
 
 Merge mode never force-pushes:
 
 * `restack` merges each open layer's parent into it bottom-up (`git merge --no-ff`, message `Merge branch '<parent>' into <layer>`), skipping layers that already contain their parent. When a lower layer was squash-landed, the lowest open layer first records the squash commit with `git merge -s ours`, keeping its files, as the server update does. Backup refs, `--continue` (which commits the resolved merge) and `--abort` work as in rebase mode.
 * `push` and `submit` publish fast-forwards only. They refuse, before pushing anything, when a remote layer head is not an ancestor of the local head; run `sync` and merge the remote changes first. Each push leases the remote head seen by that check, so a branch rewound in the meantime is rejected rather than re-advanced. The leased update is still a fast-forward, so branches that disallow force-push accept it.
-* `sync` fast-forwards local layer branches to remote heads that descend from them and lists diverged layers in `needs_reconciliation` without rewriting them.
+* `sync` fast-forwards local layer branches to remote heads that descend from them and lists diverged layers in `needs_reconciliation` without rewriting them. A layer that is only behind but checked out in another worktree is listed in `behind_in_other_worktree`; pull it there.
 * `rebase --server` starts a server update, which merges each parent into its layer.
 * `land` accepts `merge`, `squash` or `fast-forward-only`.
 
