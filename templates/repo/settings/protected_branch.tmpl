@@ -160,6 +160,14 @@
 						</div>
 					</div>
 				</div>
+				<h5 class="ui dividing header">{{ctx.Locale.Tr "repo.settings.protect_deletion"}}</h5>
+				<div class="field">
+					<div class="ui checkbox">
+						<input name="enable_deletion" type="checkbox" {{if .Rule.CanDelete}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "repo.settings.protect_enable_deletion"}}</label>
+						<p class="help">{{ctx.Locale.Tr "repo.settings.protect_enable_deletion_desc"}}</p>
+					</div>
+				</div>
 				<h5 class="ui dividing header">{{ctx.Locale.Tr "repo.settings.event_pull_request_approvals"}}</h5>
 				<div class="field">
 					<label>{{ctx.Locale.Tr "repo.settings.protect_required_approvals"}}</label>

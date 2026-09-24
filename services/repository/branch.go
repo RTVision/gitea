@@ -50,6 +50,7 @@ func CreateNewBranch(ctx context.Context, doer *user_model.User, repo *repo_mode
 type Branch struct {
 	DBBranch          *git_model.Branch
 	IsProtected       bool
+	CanDelete         bool
 	IsIncluded        bool
 	CommitsAhead      int
 	CommitsBehind     int
@@ -247,6 +248,7 @@ func loadOneBranch(ctx context.Context, repo *repo_model.Repository, dbBranch *g
 	return &Branch{
 		DBBranch:          dbBranch,
 		IsProtected:       isProtected,
+		CanDelete:         !isProtected || p.CanDelete,
 		IsIncluded:        isIncluded,
 		CommitsAhead:      divergence.Ahead,
 		CommitsBehind:     divergence.Behind,
@@ -567,11 +569,11 @@ func CanDeleteBranch(ctx context.Context, repo *repo_model.Repository, branchNam
 		return util.NewPermissionDeniedErrorf("permission denied to access repo %d unit %s", repo.ID, unit.TypeCode.LogString())
 	}
 
-	isProtected, err := git_model.IsBranchProtected(ctx, repo.ID, branchName)
+	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repo.ID, branchName)
 	if err != nil {
 		return err
 	}
-	if isProtected {
+	if rule != nil && !rule.CanDelete {
 		return git_model.ErrBranchIsProtected
 	}
 	return nil

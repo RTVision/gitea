@@ -161,6 +161,7 @@ type ProtectBranchForm struct {
 	ForcePushAllowlistUsers       string
 	ForcePushAllowlistTeams       string
 	ForcePushAllowlistDeployKeys  bool
+	EnableDeletion                bool
 	EnableMergeWhitelist          bool
 	MergeWhitelistUsers           string
 	MergeWhitelistTeams           string

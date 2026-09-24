@@ -27015,6 +27015,10 @@
           "type": "boolean",
           "x-go-name": "EnableBypassAllowlist"
         },
+        "enable_deletion": {
+          "type": "boolean",
+          "x-go-name": "EnableDeletion"
+        },
         "enable_force_push": {
           "type": "boolean",
           "x-go-name": "EnableForcePush"
@@ -27897,6 +27901,10 @@
         "enable_bypass_allowlist": {
           "type": "boolean",
           "x-go-name": "EnableBypassAllowlist"
+        },
+        "enable_deletion": {
+          "type": "boolean",
+          "x-go-name": "EnableDeletion"
         },
         "enable_force_push": {
           "type": "boolean",
@@ -29499,6 +29507,10 @@
         "enable_bypass_allowlist": {
           "type": "boolean",
           "x-go-name": "EnableBypassAllowlist"
+        },
+        "enable_deletion": {
+          "type": "boolean",
+          "x-go-name": "EnableDeletion"
         },
         "enable_force_push": {
           "type": "boolean",

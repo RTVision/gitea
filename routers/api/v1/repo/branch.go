@@ -798,6 +798,7 @@ func CreateBranchProtection(ctx *context.APIContext) {
 		CanForcePush:                  form.EnablePush && form.EnableForcePush,
 		EnableForcePushAllowlist:      form.EnablePush && form.EnableForcePush && form.EnableForcePushAllowlist,
 		ForcePushAllowlistDeployKeys:  form.EnablePush && form.EnableForcePush && form.EnableForcePushAllowlist && form.ForcePushAllowlistDeployKeys,
+		CanDelete:                     form.EnableDeletion,
 		EnableMergeWhitelist:          form.EnableMergeWhitelist,
 		EnableBypassAllowlist:         form.EnableBypassAllowlist,
 		EnableStatusCheck:             form.EnableStatusCheck,
@@ -937,6 +938,10 @@ func EditBranchProtection(ctx *context.APIContext) {
 				}
 			}
 		}
+	}
+
+	if form.EnableDeletion != nil {
+		protectBranch.CanDelete = *form.EnableDeletion
 	}
 
 	if form.Priority != nil {

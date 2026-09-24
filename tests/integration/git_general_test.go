@@ -486,6 +486,12 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 		t.Run("MergeProtectedToToforce", doGitMerge(dstPath, "protected"))
 		t.Run("PushToProtectedBranch", doGitPushTestRepository(dstPath, "origin", "toforce:protected"))
 		t.Run("CheckoutMasterAgain", doGitCheckoutBranch(dstPath, "master"))
+
+		t.Run("PushReleaseBranch", doGitPushTestRepository(dstPath, "origin", "master:release/temp"))
+		t.Run("ProtectReleaseBranches", doProtectBranch(ctx, "release/*", "", "", "", ""))
+		t.Run("FailToDeleteProtectedBranch", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "release/temp"))
+		t.Run("AllowReleaseBranchDeletion", doProtectBranchExt(ctx, "release/*", doProtectBranchOptions{EnableDeletion: true}))
+		t.Run("DeleteProtectedBranch", doGitPushTestRepository(dstPath, "origin", "--delete", "release/temp"))
 	}
 }
 
@@ -502,6 +508,7 @@ type doProtectBranchOptions struct {
 	UserToWhitelistPush, UserToWhitelistForcePush, UnprotectedFilePatterns, ProtectedFilePatterns string
 
 	StatusCheckPatterns []string
+	EnableDeletion      bool
 }
 
 func doProtectBranchExt(ctx APITestContext, ruleName string, opts doProtectBranchOptions) func(t *testing.T) {
@@ -527,6 +534,10 @@ func doProtectBranchExt(ctx APITestContext, ruleName string, opts doProtectBranc
 			formData["force_push_allowlist_users"] = strconv.FormatInt(user.ID, 10)
 			formData["enable_force_push"] = "whitelist"
 			formData["enable_force_push_allowlist"] = "on"
+		}
+
+		if opts.EnableDeletion {
+			formData["enable_deletion"] = "on"
 		}
 
 		if len(opts.StatusCheckPatterns) > 0 {
