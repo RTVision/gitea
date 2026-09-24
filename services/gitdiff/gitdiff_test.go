@@ -1332,7 +1332,7 @@ D test10.txt`
 	}
 	_, err = pull_model.UpdateReviewState(t.Context(), user.ID, pull.ID, firstReviewCommit, firstReviewUpdatedFiles)
 	assert.NoError(t, err)
-	firstReview, err := pull_model.GetNewestReviewState(t.Context(), user.ID, pull.ID)
+	firstReview, err := pull_model.GetNewestReviewState(t.Context(), user.ID, pull.ID, firstReviewCommit)
 	assert.NoError(t, err)
 	assert.NotNil(t, firstReview)
 	assert.Equal(t, firstReviewUpdatedFiles, firstReview.UpdatedFiles)

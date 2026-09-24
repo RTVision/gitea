@@ -126,14 +126,24 @@ func mergeFiles(oldFiles, newFiles map[string]ViewedState) map[string]ViewedStat
 }
 
 // GetNewestReviewState gets the newest review of the current user in the current PR.
+// A tie goes to the review at headCommitID, which a mark writes after syncing the previous newest review.
 // The returned PR Review will be nil if the user has not yet reviewed this PR.
-func GetNewestReviewState(ctx context.Context, userID, pullID int64) (*ReviewState, error) {
+func GetNewestReviewState(ctx context.Context, userID, pullID int64, headCommitID string) (*ReviewState, error) {
 	var review ReviewState
-	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Get(&review) // updated_unix has second resolution, and a sync plus a mark can land in the same one
+	has, err := db.GetEngine(ctx).Where("user_id = ?", userID).And("pull_id = ?", pullID).OrderBy("updated_unix DESC, id DESC").Get(&review)
 	if err != nil || !has {
 		return nil, err
 	}
-	return &review, err
+	if review.CommitSHA != headCommitID { // updated_unix has second resolution
+		head, has, err := db.Get[ReviewState](ctx, builder.Eq{"user_id": userID, "pull_id": pullID, "commit_sha": headCommitID, "updated_unix": review.UpdatedUnix})
+		if err != nil {
+			return nil, err
+		}
+		if has {
+			return head, nil
+		}
+	}
+	return &review, nil
 }
 
 // getNewestReviewStateApartFrom is like GetNewestReview, except that the second newest review will be returned if the newest review points at the given commit.

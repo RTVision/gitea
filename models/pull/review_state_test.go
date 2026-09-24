@@ -28,8 +28,13 @@ func TestGetNewestReviewStateSameSecond(t *testing.T) {
 	_, err = db.GetEngine(ctx).Exec("UPDATE review_state SET updated_unix = 1 WHERE user_id = ? AND pull_id = ?", userID, pullID) // the sync and the mark landing in one second
 	require.NoError(t, err)
 
-	newest, err := pull_model.GetNewestReviewState(ctx, userID, pullID)
+	newest, err := pull_model.GetNewestReviewState(ctx, userID, pullID, newHead)
 	require.NoError(t, err)
 	assert.Equal(t, newHead, newest.CommitSHA)
 	assert.Equal(t, pull_model.Viewed, newest.UpdatedFiles["a"])
+
+	// force-pushed back to the old head: the mark there is what landed last
+	newest, err = pull_model.GetNewestReviewState(ctx, userID, pullID, oldHead)
+	require.NoError(t, err)
+	assert.Equal(t, oldHead, newest.CommitSHA)
 }
