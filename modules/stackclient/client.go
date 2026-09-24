@@ -220,9 +220,9 @@ func (c *Client) GetStack(ctx context.Context, number int64) (*api.PullRequestSt
 	return result, err
 }
 
-func (c *Client) CreateStack(ctx context.Context, trunk string, pullRequests []int64) (*api.PullRequestStack, error) {
+func (c *Client) CreateStack(ctx context.Context, trunk string, mode api.StackMode, pullRequests []int64) (*api.PullRequestStack, error) {
 	result := new(api.PullRequestStack)
-	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks"), &api.CreatePullRequestStackOption{Trunk: trunk, PullRequests: pullRequests}, result)
+	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks"), &api.CreatePullRequestStackOption{Trunk: trunk, Mode: mode, PullRequests: pullRequests}, result)
 	return result, err
 }
 
@@ -255,6 +255,11 @@ func (c *Client) StartLand(ctx context.Context, number, revision int64, through 
 
 func (c *Client) StartRebase(ctx context.Context, number, revision int64, through int) (*api.PullRequestStackOperation, error) {
 	return c.startOperation(ctx, number, revision, "/rebase", through, "")
+}
+
+// StartUpdate merges each parent into its layer in a merge-mode stack.
+func (c *Client) StartUpdate(ctx context.Context, number, revision int64) (*api.PullRequestStackOperation, error) {
+	return c.startOperation(ctx, number, revision, "/update", 0, "")
 }
 
 func (c *Client) ListOperations(ctx context.Context, number int64, page, limit int) ([]*api.PullRequestStackOperation, error) {

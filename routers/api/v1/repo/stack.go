@@ -98,10 +98,19 @@ func StackCapabilities(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStackCapabilities"
+	modes := []string{issues_model.StackModeRebase, issues_model.StackModeMerge}
+	styles := make(map[string][]string, len(modes))
+	for _, mode := range modes {
+		for _, style := range pull_service.StackLandingStyles(mode) {
+			styles[mode] = append(styles[mode], string(style))
+		}
+	}
 	ctx.JSON(http.StatusOK, &api.PullRequestStackCapabilities{
-		Enabled:     setting.Repository.PullRequest.EnableStacks,
-		Operations:  []string{"land", "rebase"},
-		MergeStyles: []string{string(repo_model.MergeStyleMerge), string(repo_model.MergeStyleSquash), string(repo_model.MergeStyleRebase)},
+		Enabled:         setting.Repository.PullRequest.EnableStacks,
+		Operations:      []string{"land", "rebase", "update"},
+		Modes:           modes,
+		MergeStyles:     styles[issues_model.StackModeRebase],
+		ModeMergeStyles: styles,
 	})
 }
 
@@ -187,7 +196,7 @@ func CreatePullRequestStack(ctx *context.APIContext) {
 	if !ok {
 		return
 	}
-	stack, err := pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: form.Trunk, PullRequestIDs: pullIDs})
+	stack, err := pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: form.Trunk, Mode: string(form.Mode), PullRequestIDs: pullIDs})
 	if err != nil {
 		stackServiceError(ctx, 0, err)
 		return
@@ -378,6 +387,42 @@ func RebasePullRequestStack(ctx *context.APIContext) {
 	//   "422":
 	//     "$ref": "#/responses/validationError"
 	startPullRequestStackOperation(ctx, "rebase")
+}
+
+// UpdatePullRequestStack starts a durable merge-mode stack update.
+func UpdatePullRequestStack(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/stacks/{id}/update repository repoUpdatePullRequestStack
+	// ---
+	// summary: Start a merge-mode pull request stack update, merging each parent into its layer
+	// consumes:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   required: true
+	//   type: string
+	// - name: repo
+	//   in: path
+	//   required: true
+	//   type: string
+	// - name: id
+	//   in: path
+	//   required: true
+	//   type: integer
+	//   format: int64
+	// - name: body
+	//   in: body
+	//   required: true
+	//   schema:
+	//     "$ref": "#/definitions/PullRequestStackOperationOption"
+	// responses:
+	//   "202":
+	//     "$ref": "#/responses/PullRequestStackOperation"
+	//   "409":
+	//     "$ref": "#/responses/StackRevisionConflict"
+	//   "422":
+	//     "$ref": "#/responses/validationError"
+	startPullRequestStackOperation(ctx, "update")
 }
 
 // LandPullRequestStack starts ordered landing of a stack prefix.

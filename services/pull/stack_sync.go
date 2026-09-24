@@ -55,7 +55,7 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 		if len(expected) == 0 || len(expected) != len(open) {
 			return issues_model.ErrInvalidStack
 		}
-		live, err := validateStackChain(ctx, repo, stack.TrunkBranch, pullIDs)
+		live, err := validateStackChain(ctx, repo, stack.TrunkBranch, stack.Mode, pullIDs)
 		if err != nil {
 			return err
 		}

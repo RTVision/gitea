@@ -24,6 +24,7 @@ import (
 
 type CreateStackOptions struct {
 	TrunkBranch    string
+	Mode           string
 	PullRequestIDs []int64
 }
 
@@ -44,7 +45,7 @@ func checkStackAuthority(ctx context.Context, doer *user_model.User, repo *repo_
 	return nil
 }
 
-func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk string, pullIDs []int64) ([]*issues_model.StackEntry, error) {
+func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mode string, pullIDs []int64) ([]*issues_model.StackEntry, error) {
 	if trunk == "" || len(pullIDs) == 0 {
 		return nil, issues_model.ErrInvalidStack
 	}
@@ -89,12 +90,14 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk 
 		if boundary != parentSHA || headSHA == parentSHA {
 			return nil, fmt.Errorf("%w: pull request %d must contain its current parent head", issues_model.ErrInvalidStack, id)
 		}
-		merges, _, err := gitcmd.NewCommand("rev-list", "--merges").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(merges) != "" {
-			return nil, fmt.Errorf("%w: pull request %d must have linear layer history", issues_model.ErrInvalidStack, id)
+		if mode != issues_model.StackModeMerge {
+			merges, _, err := gitcmd.NewCommand("rev-list", "--merges").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(merges) != "" {
+				return nil, fmt.Errorf("%w: pull request %d must have linear layer history", issues_model.ErrInvalidStack, id)
+			}
 		}
 		// A head shared by another open PR has ambiguous rewrite ownership.
 		count, err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").Where("pull_request.head_repo_id = ? AND pull_request.head_branch = ? AND issue.is_closed = ? AND pull_request.id <> ?", repo.ID, pr.HeadBranch, false, id).Count(new(issues_model.PullRequest))
@@ -142,12 +145,18 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 	if err := checkStackAuthority(ctx, doer, repo); err != nil {
 		return nil, err
 	}
-	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
+	if opts.Mode == "" {
+		opts.Mode = issues_model.StackModeRebase
+	}
+	if opts.Mode != issues_model.StackModeRebase && opts.Mode != issues_model.StackModeMerge {
+		return nil, fmt.Errorf("%w: unknown stack mode %q", issues_model.ErrInvalidStack, opts.Mode)
+	}
+	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, Mode: opts.Mode, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, opts.PullRequestIDs...); err != nil {
 			return err
 		}
-		entries, err := validateStackChain(ctx, repo, opts.TrunkBranch, opts.PullRequestIDs)
+		entries, err := validateStackChain(ctx, repo, opts.TrunkBranch, opts.Mode, opts.PullRequestIDs)
 		if err != nil {
 			return err
 		}
@@ -206,7 +215,7 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 			return issues_model.ErrInvalidStack
 		}
 		allIDs = append(allIDs, pullIDs...)
-		entries, err := validateStackChain(ctx, repo, stack.TrunkBranch, allIDs)
+		entries, err := validateStackChain(ctx, repo, stack.TrunkBranch, stack.Mode, allIDs)
 		if err != nil {
 			return err
 		}

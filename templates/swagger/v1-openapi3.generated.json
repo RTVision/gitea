@@ -4674,6 +4674,14 @@
       },
       "CreatePullRequestStackOption": {
         "properties": {
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StackMode"
+              }
+            ],
+            "description": "How layers take parent updates, fixed at creation; defaults to rebase"
+          },
           "pull_requests": {
             "description": "Ordered pull request numbers, starting at the trunk",
             "items": {
@@ -9286,6 +9294,14 @@
             "type": "array",
             "x-go-name": "Entries"
           },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StackMode"
+              }
+            ],
+            "description": "How layers take parent updates"
+          },
           "number": {
             "description": "The stack number",
             "format": "int64",
@@ -9338,12 +9354,31 @@
             "x-go-name": "Enabled"
           },
           "merge_styles": {
-            "description": "Supported merge styles for stack landing",
+            "description": "Supported merge styles for stack landing in rebase mode",
             "items": {
               "type": "string"
             },
             "type": "array",
             "x-go-name": "MergeStyles"
+          },
+          "mode_merge_styles": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Supported merge styles for stack landing, by stack mode",
+            "type": "object",
+            "x-go-name": "ModeMergeStyles"
+          },
+          "modes": {
+            "description": "Supported stack modes",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "x-go-name": "Modes"
           },
           "operations": {
             "description": "Supported durable operation kinds",
@@ -9377,7 +9412,7 @@
             "x-go-name": "ParentPullRequest"
           },
           "parent_sha": {
-            "description": "The saved replay boundary commit SHA",
+            "description": "The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained",
             "type": "string",
             "x-go-name": "ParentSHA"
           },
@@ -9517,6 +9552,14 @@
         "properties": {
           "base": {
             "$ref": "#/components/schemas/PullRequestStackBase"
+          },
+          "mode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StackMode"
+              }
+            ],
+            "description": "How layers take parent updates"
           },
           "number": {
             "description": "The stack number",
@@ -10494,6 +10537,13 @@
         },
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
+      },
+      "StackMode": {
+        "enum": [
+          "rebase",
+          "merge"
+        ],
+        "type": "string"
       },
       "StateType": {
         "enum": [
@@ -33239,6 +33289,64 @@
           }
         },
         "summary": "Synchronize locally restacked pull request heads and boundaries",
+        "tags": [
+          "repository"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/update": {
+      "post": {
+        "operationId": "repoUpdatePullRequestStack",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PullRequestStackOperationOption"
+              }
+            }
+          },
+          "required": true,
+          "x-originalParamName": "body"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/PullRequestStackOperation"
+          },
+          "409": {
+            "$ref": "#/components/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          }
+        },
+        "summary": "Start a merge-mode pull request stack update, merging each parent into its layer",
         "tags": [
           "repository"
         ]

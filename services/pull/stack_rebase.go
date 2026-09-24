@@ -125,6 +125,10 @@ func buildStackRebase(ctx context.Context, op *issues_model.StackOperation, laye
 		}
 		parent = layer.NewHead
 	}
+	return storeStackCandidates(ctx, op, layers, tmp, pr)
+}
+
+func storeStackCandidates(ctx context.Context, op *issues_model.StackOperation, layers []*stackLayerJournal, tmp *mergeContext, pr *issues_model.PullRequest) error {
 	for _, layer := range layers {
 		if err := gitcmd.NewCommand("fetch", "--no-tags", "--no-write-fetch-head").AddDashesAndList(tmp.tmpBasePath, "+"+layer.NewHead+":"+stackCandidateRef(op.ID, layer.EntryID)).WithRepo(pr.BaseRepo).Run(ctx); err != nil {
 			return err
@@ -134,7 +138,7 @@ func buildStackRebase(ctx context.Context, op *issues_model.StackOperation, laye
 	return nil
 }
 
-func publishStackLayer(ctx context.Context, op *issues_model.StackOperation, layer *stackLayerJournal, doer *user_model.User) error {
+func publishStackLayer(ctx context.Context, op *issues_model.StackOperation, layer *stackLayerJournal, doer *user_model.User, mode string) error {
 	pr, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
 	if err != nil {
 		return err
@@ -159,13 +163,18 @@ func publishStackLayer(ctx context.Context, op *issues_model.StackOperation, lay
 	if err != nil {
 		return err
 	}
-	if !push || !force {
+	merge := mode == issues_model.StackModeMerge
+	if !push || (!force && !merge) {
 		return ErrNoPermissionToMerge
 	}
 	if err := pr.HeadRepo.LoadOwner(ctx); err != nil {
 		return err
 	}
-	cmd := gitcmd.NewCommand("push").AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.HeadBranch+":"+layer.ExpectedHead).
-		AddDashesAndList(gitrepo.RepoLocalPath(pr.HeadRepo.CodeStorageRepo()), layer.NewHead+":"+git.BranchPrefix+pr.HeadBranch)
+	cmd := gitcmd.NewCommand("push")
+	// A merge candidate fast-forwards ExpectedHead, so git's non-fast-forward rejection is the lease.
+	if !merge {
+		cmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.HeadBranch+":"+layer.ExpectedHead)
+	}
+	cmd.AddDashesAndList(gitrepo.RepoLocalPath(pr.HeadRepo.CodeStorageRepo()), layer.NewHead+":"+git.BranchPrefix+pr.HeadBranch)
 	return cmd.WithRepo(pr.HeadRepo).WithEnv(repo_module.FullPushingEnvironment(pr.HeadRepo.Owner, doer, pr.HeadRepo, pr.HeadRepo.Name, 0, 0)).Run(ctx)
 }

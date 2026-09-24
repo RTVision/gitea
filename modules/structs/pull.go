@@ -136,6 +136,18 @@ type PullRequest struct {
 	Stack *PullRequestStackRef `json:"stack,omitempty"`
 }
 
+// StackMode is how a stack's layers take parent updates
+//
+// swagger:enum StackMode
+type StackMode string
+
+const (
+	// StackModeRebase replays layers onto their updated parents
+	StackModeRebase StackMode = "rebase"
+	// StackModeMerge merges updated parents into layers without force-pushing
+	StackModeMerge StackMode = "merge"
+)
+
 // PullRequestStackRef identifies a pull request's position in a stack.
 type PullRequestStackRef struct {
 	// The stack number
@@ -144,6 +156,8 @@ type PullRequestStackRef struct {
 	Size int `json:"size"`
 	// The one-based position of this pull request in the stack
 	Position int `json:"position"`
+	// How layers take parent updates
+	Mode StackMode `json:"mode"`
 	// The trunk branch and commit used for policy and workflow selection
 	Base *PullRequestStackBase `json:"base"`
 }
@@ -162,6 +176,8 @@ type PullRequestStack struct {
 	Number int64 `json:"number"`
 	// The trunk branch
 	Trunk string `json:"trunk"`
+	// How layers take parent updates
+	Mode StackMode `json:"mode"`
 	// The stack lifecycle state
 	State string `json:"state"`
 	// The revision used for optimistic locking
@@ -182,7 +198,7 @@ type PullRequestStackEntry struct {
 	ParentPullRequest int64 `json:"parent_pull_request"`
 	// The last observed head commit SHA
 	HeadSHA string `json:"head_sha"`
-	// The saved replay boundary commit SHA
+	// The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained
 	ParentSHA string `json:"parent_sha"`
 	// The commit recorded after this layer landed
 	LandedSHA string `json:"landed_sha,omitempty"`
@@ -220,6 +236,8 @@ type PullRequestStackOperation struct {
 type CreatePullRequestStackOption struct {
 	// The stack trunk branch
 	Trunk string `json:"trunk" binding:"Required"`
+	// How layers take parent updates, fixed at creation; defaults to rebase
+	Mode StackMode `json:"mode"`
 	// Ordered pull request numbers, starting at the trunk
 	PullRequests []int64 `json:"pull_requests" binding:"Required"`
 }
@@ -272,8 +290,12 @@ type PullRequestStackCapabilities struct {
 	Enabled bool `json:"enabled"`
 	// Supported durable operation kinds
 	Operations []string `json:"operations"`
-	// Supported merge styles for stack landing
+	// Supported stack modes
+	Modes []string `json:"modes"`
+	// Supported merge styles for stack landing in rebase mode
 	MergeStyles []string `json:"merge_styles"`
+	// Supported merge styles for stack landing, by stack mode
+	ModeMergeStyles map[string][]string `json:"mode_merge_styles"`
 }
 
 // PRBranchInfo information about a branch

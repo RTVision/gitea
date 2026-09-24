@@ -22,7 +22,7 @@ func stackTestGit(t *testing.T, path string) func(...string) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = path
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Stack Test", "GIT_AUTHOR_EMAIL=stack@example.com", "GIT_COMMITTER_NAME=Stack Test", "GIT_COMMITTER_EMAIL=stack@example.com")
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_AUTHOR_NAME=Stack Test", "GIT_AUTHOR_EMAIL=stack@example.com", "GIT_COMMITTER_NAME=Stack Test", "GIT_COMMITTER_EMAIL=stack@example.com")
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "%s", out)
 		return strings.TrimSpace(string(out))

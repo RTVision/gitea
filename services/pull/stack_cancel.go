@@ -16,7 +16,7 @@ import (
 	"gitea.dev/modules/log"
 )
 
-func stackAncestor(ctx context.Context, repo *repo_model.Repository, parent, head string) (bool, error) {
+func stackAncestor(ctx context.Context, repo git.RepositoryFacade, parent, head string) (bool, error) {
 	if parent == "" {
 		return false, nil
 	}

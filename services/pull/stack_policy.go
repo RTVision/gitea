@@ -32,6 +32,38 @@ func checkOrdinaryStackMutation(ctx context.Context, pr *issues_model.PullReques
 	return nil
 }
 
+// CheckStackUpdateByMerge allows a one-layer parent merge, which a merge-mode stack's update would also produce.
+func CheckStackUpdateByMerge(ctx context.Context, pr *issues_model.PullRequest) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || stack == nil {
+		return err
+	}
+	if stack.Mode != issues_model.StackModeMerge || stack.State != issues_model.StackStateOpen || stack.ActiveOperationID != 0 {
+		return ErrPullRequestStacked
+	}
+	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	if err != nil {
+		return err
+	}
+	parent := stack.TrunkBranch
+	for _, entry := range entries {
+		if entry.PullRequestID == pr.ID {
+			if pr.BaseBranch != parent {
+				return ErrPullRequestStacked
+			}
+			return nil
+		}
+		layer, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
+		if err != nil {
+			return err
+		}
+		if !layer.HasMerged {
+			parent = layer.HeadBranch
+		}
+	}
+	return issues_model.ErrInvalidStack
+}
+
 func checkStackMergeOrder(ctx context.Context, pr *issues_model.PullRequest) error {
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil || stack == nil {

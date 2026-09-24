@@ -19979,6 +19979,58 @@
         }
       }
     },
+    "/repos/{owner}/{repo}/stacks/{id}/update": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "tags": [
+          "repository"
+        ],
+        "summary": "Start a merge-mode pull request stack update, merging each parent into its layer",
+        "operationId": "repoUpdatePullRequestStack",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "owner",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "repo",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PullRequestStackOperationOption"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/responses/PullRequestStackOperation"
+          },
+          "409": {
+            "$ref": "#/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          }
+        }
+      }
+    },
     "/repos/{owner}/{repo}/stargazers": {
       "get": {
         "produces": [
@@ -28654,6 +28706,16 @@
       "type": "object",
       "title": "CreatePullRequestStackOption creates a stack from an existing pull request chain.",
       "properties": {
+        "mode": {
+          "description": "How layers take parent updates, fixed at creation; defaults to rebase",
+          "type": "string",
+          "enum": [
+            "rebase",
+            "merge"
+          ],
+          "x-go-enum-desc": "rebase StackModeRebase replays layers onto their updated parents\nmerge StackModeMerge merges updated parents into layers without force-pushing",
+          "x-go-name": "Mode"
+        },
         "pull_requests": {
           "description": "Ordered pull request numbers, starting at the trunk",
           "type": "array",
@@ -33286,6 +33348,16 @@
           },
           "x-go-name": "Entries"
         },
+        "mode": {
+          "description": "How layers take parent updates",
+          "type": "string",
+          "enum": [
+            "rebase",
+            "merge"
+          ],
+          "x-go-enum-desc": "rebase StackModeRebase replays layers onto their updated parents\nmerge StackModeMerge merges updated parents into layers without force-pushing",
+          "x-go-name": "Mode"
+        },
         "number": {
           "description": "The stack number",
           "type": "integer",
@@ -33338,12 +33410,31 @@
           "x-go-name": "Enabled"
         },
         "merge_styles": {
-          "description": "Supported merge styles for stack landing",
+          "description": "Supported merge styles for stack landing in rebase mode",
           "type": "array",
           "items": {
             "type": "string"
           },
           "x-go-name": "MergeStyles"
+        },
+        "mode_merge_styles": {
+          "description": "Supported merge styles for stack landing, by stack mode",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "x-go-name": "ModeMergeStyles"
+        },
+        "modes": {
+          "description": "Supported stack modes",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Modes"
         },
         "operations": {
           "description": "Supported durable operation kinds",
@@ -33377,7 +33468,7 @@
           "x-go-name": "ParentPullRequest"
         },
         "parent_sha": {
-          "description": "The saved replay boundary commit SHA",
+          "description": "The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained",
           "type": "string",
           "x-go-name": "ParentSHA"
         },
@@ -33517,6 +33608,16 @@
       "properties": {
         "base": {
           "$ref": "#/definitions/PullRequestStackBase"
+        },
+        "mode": {
+          "description": "How layers take parent updates",
+          "type": "string",
+          "enum": [
+            "rebase",
+            "merge"
+          ],
+          "x-go-enum-desc": "rebase StackModeRebase replays layers onto their updated parents\nmerge StackModeMerge merges updated parents into layers without force-pushing",
+          "x-go-name": "Mode"
         },
         "number": {
           "description": "The stack number",
