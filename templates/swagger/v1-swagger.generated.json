@@ -33432,7 +33432,12 @@
           "description": "Supported stack modes",
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "rebase",
+              "merge"
+            ],
+            "x-go-enum-desc": "rebase StackModeRebase replays layers onto their updated parents\nmerge StackModeMerge merges updated parents into layers without force-pushing"
           },
           "x-go-name": "Modes"
         },
