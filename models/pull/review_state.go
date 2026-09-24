@@ -9,6 +9,7 @@ import (
 	"maps"
 
 	"gitea.dev/models/db"
+	"gitea.dev/modules/globallock"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/timeutil"
 
@@ -82,6 +83,12 @@ func GetReviewState(ctx context.Context, userID, pullID int64, commitSHA string)
 // The given map of files with their viewed state will be merged with the previous review, if present
 func UpdateReviewState(ctx context.Context, userID, pullID int64, commitSHA string, updatedFiles map[string]ViewedState) (*ReviewState, error) {
 	log.Trace("Updating review for user %d, repo %d, commit %s with the updated files %v.", userID, pullID, commitSHA, updatedFiles)
+
+	releaser, err := globallock.Lock(ctx, fmt.Sprintf("review_state_%d_%d", userID, pullID)) // each write must see the one before it
+	if err != nil {
+		return nil, err
+	}
+	defer releaser()
 
 	review, exists, err := GetReviewState(ctx, userID, pullID, commitSHA)
 	if err != nil {

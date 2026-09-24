@@ -4,15 +4,19 @@
 package pull_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"gitea.dev/models/db"
 	pull_model "gitea.dev/models/pull"
 	"gitea.dev/models/unittest"
 	"gitea.dev/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"xorm.io/builder"
 )
 
 func TestUpdateReviewStateSameSecond(t *testing.T) {
@@ -43,4 +47,26 @@ func TestUpdateReviewStateSameSecond(t *testing.T) {
 
 	write(c, pull_model.Viewed) // pushed to c: seeded from a
 	assertNewest(c, pull_model.Viewed)
+}
+
+func TestUpdateReviewStateConcurrent(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	defer timeutil.MockSet(time.Unix(1_700_000_000, 0))()
+	const userID, pullID, writers = 2, 3, 8
+	var wg sync.WaitGroup
+	for i := range writers {
+		wg.Go(func() {
+			_, err := pull_model.UpdateReviewState(t.Context(), userID, pullID, fmt.Sprintf("%040d", i), map[string]pull_model.ViewedState{"file": pull_model.Viewed})
+			assert.NoError(t, err)
+		})
+	}
+	wg.Wait()
+
+	var reviews []pull_model.ReviewState
+	require.NoError(t, db.GetEngine(t.Context()).Where(builder.Eq{"user_id": userID, "pull_id": pullID}).Find(&reviews))
+	stamps := map[timeutil.TimeStamp]bool{}
+	for _, review := range reviews {
+		stamps[review.UpdatedUnix] = true
+	}
+	assert.Len(t, stamps, writers)
 }
