@@ -70,6 +70,7 @@ test('stack pages create and render a pull request chain', async ({page, request
 
   const insertPicker = page.locator('.ui.dropdown', {has: page.getByRole('combobox', {name: 'Pull request'})});
   await expectEscapedSelection(insertPicker);
+  await page.screenshot({path: testInfo.outputPath('stack-insert-selected.png'), fullPage: true});
   await insertPicker.getByRole('combobox').pressSequentially('inserted');
   await expect(page.getByRole('option', {name: /Layer inserted.*inserted after #1/})).toBeVisible();
   await page.screenshot({path: testInfo.outputPath('stack-insert.png'), fullPage: true});
