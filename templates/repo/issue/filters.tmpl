@@ -14,8 +14,15 @@
 			</div>
 		{{end}}
 	</div>
-	<div class="issue-list-toolbar-right">
-		<div class="ui secondary filter menu labels">
+	<div class="issue-list-toolbar-right{{if .PullListView}} flex-text-block tw-flex-wrap{{end}}">
+		{{if .PullListView}}
+			{{$viewLink := QueryBuild "?" "q" $.Keyword "type" $.ViewType "sort" $.SortType "state" $.State "labels" $.SelectLabels "milestone" $.MilestoneID "project" (SliceUtils.JoinInt64 $.ProjectIDs) "assignee" $.AssigneeID "poster" $.PosterUsername "archived_labels" (Iif $.ShowArchivedLabels "true")}}
+			<div class="small-menu-items ui compact tiny menu tw-my-0 tw-self-end" role="group" aria-label="{{ctx.Locale.Tr "repo.pulls.list_view"}}">
+				<a class="{{if eq .PullListView "grouped"}}active {{end}}item flex-text-inline" href="{{QueryBuild $viewLink "view" "grouped"}}" {{if eq .PullListView "grouped"}}aria-current="page"{{end}}>{{svg "octicon-stack"}} {{ctx.Locale.Tr "repo.pulls.list_view_grouped"}}</a>
+				<a class="{{if eq .PullListView "flat"}}active {{end}}item flex-text-inline" href="{{QueryBuild $viewLink "view" "flat"}}" {{if eq .PullListView "flat"}}aria-current="page"{{end}}>{{svg "octicon-list-unordered"}} {{ctx.Locale.Tr "repo.pulls.list_view_flat"}}</a>
+			</div>
+		{{end}}
+		<div class="ui secondary filter menu labels tw-my-0 tw-shrink">
 			{{if .PageIsMilestones}}
 				{{template "repo/issue/milestone/filter_list" .}}
 			{{else}}

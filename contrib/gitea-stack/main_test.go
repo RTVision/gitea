@@ -26,6 +26,7 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Setenv("GIT_CONFIG_NOSYSTEM", "1") // host configs may force commit signing
 	_ = os.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	_ = os.Setenv("XDG_CONFIG_HOME", os.DevNull) // host tea logins must not reach test servers
 	os.Exit(m.Run())
 }
 
@@ -275,12 +276,16 @@ func TestStatusServerFailureReturnsNoServerState(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "remote", "add", "origin", "https://code.example.test/acme/widget.git")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, r.Header.Get("Authorization"), http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
 	t.Setenv("GITEA_URL", server.URL)
 	t.Setenv("GITEA_TOKEN", "test-token")
+	xdg := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(xdg, "tea"), 0o700))
+	writeFile(t, filepath.Join(xdg, "tea", "config.yml"), "logins:\n- {name: other, url: https://other.example.test, token: other-token, default: true}\n- {name: local, url: https"+server.URL[len("http"):]+", token: tea-token}\n")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
 	state := &localstate.State{Remote: "origin", Stack: 1}
 	app := &application{repo: gitx.Repo{Dir: dir}}
 
@@ -292,6 +297,11 @@ func TestStatusServerFailureReturnsNoServerState(t *testing.T) {
 	got, err = app.statusServer(t.Context(), state, 1)
 	require.Error(t, err)
 	assert.Nil(t, got.Stack)
+	assert.ErrorContains(t, err, "token test-token")
+
+	t.Setenv("GITEA_TOKEN", "")
+	_, err = app.statusServer(t.Context(), state, 1)
+	assert.ErrorContains(t, err, "token tea-token")
 }
 
 func TestStatusHeaderDistinguishesUnavailableServer(t *testing.T) {
