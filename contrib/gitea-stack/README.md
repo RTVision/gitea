@@ -6,7 +6,7 @@
 go build -o gitea-stack ./contrib/gitea-stack
 ```
 
-Set `GITEA_TOKEN` (or `GITEA_STACK_TOKEN`) for commands that call the API. The server URL is derived from the selected Git remote; set `GITEA_URL=https://code.example.com/gitea` when the instance uses a URL prefix or an SSH remote has path components before the owner and repository. Those SSH paths may be filesystem paths, so the CLI requires `GITEA_URL` instead of guessing an HTTP prefix. Choose a remote with global `--remote`, `stack.remote`, or a repository with exactly one remote.
+Set `GITEA_TOKEN` (or `GITEA_STACK_TOKEN`) for commands that call the API. Without either, the CLI uses the token of the [tea](https://gitea.com/gitea/tea) login in `$XDG_CONFIG_HOME/tea/config.yml` (default `~/.config/tea/config.yml`) whose URL host matches the server, preferring tea's default login. The server URL is derived from the selected Git remote; set `GITEA_URL=https://code.example.com/gitea` when the instance uses a URL prefix or an SSH remote has path components before the owner and repository. Those SSH paths may be filesystem paths, so the CLI requires `GITEA_URL` instead of guessing an HTTP prefix. Choose a remote with global `--remote`, `stack.remote`, or a repository with exactly one remote.
 
 Start a local stack with explicit ordered branches. Omitting branches creates an empty definition that `new` can extend.
 

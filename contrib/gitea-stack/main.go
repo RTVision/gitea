@@ -9,7 +9,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +22,8 @@ import (
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/stackclient"
 	api "gitea.dev/modules/structs"
+
+	"go.yaml.in/yaml/v4"
 )
 
 type commandError struct {
@@ -300,13 +304,6 @@ func (a *application) selectedRemote(state *localstate.State) (string, error) {
 }
 
 func (a *application) client(state *localstate.State) (*stackclient.Client, error) {
-	token := os.Getenv("GITEA_TOKEN")
-	if token == "" {
-		token = os.Getenv("GITEA_STACK_TOKEN")
-	}
-	if token == "" {
-		return nil, fail(7, "missing_token", "set GITEA_TOKEN")
-	}
 	remote, err := a.selectedRemote(state)
 	if err != nil {
 		return nil, err
@@ -315,14 +312,59 @@ func (a *application) client(state *localstate.State) (*stackclient.Client, erro
 	if err != nil {
 		return nil, err
 	}
-	client, err := stackclient.FromRemote(remoteURL, token)
+	client, err := stackclient.FromRemote(remoteURL, cmp.Or(os.Getenv("GITEA_TOKEN"), os.Getenv("GITEA_STACK_TOKEN")))
 	if err != nil {
 		if _, ok := errors.AsType[stackclient.ErrAmbiguousRemoteURL](err); ok {
 			return nil, fail(3, "url_ambiguous", "%v", err)
 		}
 		return nil, err
 	}
+	if client.Token == "" {
+		base, _ := url.Parse(client.BaseURL) // validated by FromRemote
+		client.Token = teaToken(base.Host)
+		if client.Token == "" {
+			return nil, fail(7, "missing_token", "set GITEA_TOKEN or add a tea login for %s", base.Host)
+		}
+	}
 	return client, nil
+}
+
+// teaToken only accepts a login for the server the request goes to, so a token never reaches another host.
+func teaToken(serverHost string) string {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "tea", "config.yml"))
+	if err != nil {
+		return ""
+	}
+	var config struct {
+		Logins []struct {
+			URL     string `yaml:"url"`
+			Token   string `yaml:"token"`
+			Default bool   `yaml:"default"`
+		} `yaml:"logins"`
+	}
+	if yaml.Unmarshal(data, &config) != nil {
+		return ""
+	}
+	token := ""
+	for _, login := range config.Logins {
+		u, err := url.Parse(login.URL)
+		if login.Token == "" || err != nil || !strings.EqualFold(u.Host, serverHost) {
+			continue
+		}
+		if login.Default {
+			return login.Token
+		}
+		token = cmp.Or(token, login.Token)
+	}
+	return token
 }
 
 func mapAPIError(err error) error {
@@ -505,7 +547,7 @@ func (a *application) status(ctx context.Context) error {
 		}
 	}
 	var server *api.PullRequestStack
-	if number != 0 && (a.stackFlag != "" || os.Getenv("GITEA_TOKEN") != "" || os.Getenv("GITEA_STACK_TOKEN") != "") {
+	if number != 0 {
 		result, err := a.statusServer(ctx, state, number)
 		if err != nil {
 			return err

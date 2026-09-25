@@ -91,6 +91,8 @@ type swaggerParameterBodies struct {
 	// in:body
 	EditPullRequestStackOption api.EditPullRequestStackOption
 	// in:body
+	InsertPullRequestStackOption api.InsertPullRequestStackOption
+	// in:body
 	PullRequestStackRevisionOption api.PullRequestStackRevisionOption
 	// in:body
 	PullRequestStackOperationOption api.PullRequestStackOperationOption

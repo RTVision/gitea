@@ -180,15 +180,27 @@ func ListStacks(ctx context.Context, repoID int64, opts db.ListOptions) ([]*Pull
 
 // FindStackCandidatePulls lists open same-repository pull requests that no stack claims.
 func FindStackCandidatePulls(ctx context.Context, repoID int64) (PullRequestList, error) {
+	return findStackCandidatePulls(ctx, repoID, builder.NewCond(), 0)
+}
+
+// FindStackInsertCandidatePulls lists up to limit stack candidates targeting one of baseBranches.
+func FindStackInsertCandidatePulls(ctx context.Context, repoID int64, baseBranches []string, limit int) (PullRequestList, error) {
+	return findStackCandidatePulls(ctx, repoID, builder.In("pull_request.base_branch", baseBranches), limit)
+}
+
+func findStackCandidatePulls(ctx context.Context, repoID int64, cond builder.Cond, limit int) (PullRequestList, error) {
 	prs := make(PullRequestList, 0)
-	err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").
+	sess := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").
 		Where("pull_request.base_repo_id = ? AND pull_request.head_repo_id = ? AND pull_request.flow = ? AND pull_request.has_merged = ? AND issue.is_closed = ?", repoID, repoID, PullRequestFlowGithub, false, false).
-		And(builder.NotIn("pull_request.id", builder.Select("pull_request_id").From("stack_branch_claim"))).
-		Desc("pull_request.index").Find(&prs)
-	if err != nil {
+		And(builder.NotIn("pull_request.id", builder.Select("pull_request_id").From("stack_branch_claim"))).And(cond).
+		Desc("pull_request.index")
+	if limit > 0 {
+		sess.Limit(limit)
+	}
+	if err := sess.Find(&prs); err != nil {
 		return nil, err
 	}
-	_, err = prs.LoadIssues(ctx)
+	_, err := prs.LoadIssues(ctx)
 	return prs, err
 }
 

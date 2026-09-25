@@ -19,6 +19,7 @@ import (
 	user_model "gitea.dev/models/user"
 	issue_indexer "gitea.dev/modules/indexer/issues"
 	db_indexer "gitea.dev/modules/indexer/issues/db"
+	"gitea.dev/modules/log"
 	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
@@ -29,6 +30,8 @@ import (
 	"gitea.dev/services/convert"
 	issue_service "gitea.dev/services/issue"
 	pull_service "gitea.dev/services/pull"
+
+	"xorm.io/builder"
 )
 
 func retrieveProjectsForIssueList(ctx *context.Context, repo *repo_model.Repository) {
@@ -507,44 +510,85 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 		ctx.Data["TotalTrackedTime"] = totalTrackedTime
 	}
 
-	// prepare pager
+	var openStacks *issues_model.OpenStacks
+	if isPullOption.Value() {
+		layers, err := issues_model.FindOpenStackLayers(ctx, repo.ID)
+		if err != nil {
+			ctx.ServerError("FindOpenStackLayers", err)
+			return
+		}
+		if len(layers) > 0 {
+			openStacks = issues_model.NewOpenStacks(layers)
+			ctx.Data["PullListView"] = preparePullListView(ctx)
+		}
+	}
+	grouped := ctx.Data["PullListView"] == pullListViewGrouped
+
 	total := issueStats.OpenCount + issueStats.ClosedCount
 	if isShowClosed.Has() {
 		total = util.Iif(isShowClosed.Value(), issueStats.ClosedCount, issueStats.OpenCount)
 	}
-	page := max(ctx.FormInt("page"), 1)
-	pager := context.NewPagerBuilder(ctx).TotalCount(total).PerPageLimit(setting.UI.IssuePagingNum).CurPage(page).Build()
+	findOpts := &issues_model.IssuesOptions{
+		RepoIDs:           []int64{repo.ID},
+		AssigneeID:        assigneeID,
+		PosterID:          posterUserID,
+		MentionedID:       mentionedID,
+		ReviewRequestedID: reviewRequestedID,
+		ReviewedID:        reviewedID,
+		MilestoneIDs:      mileIDs,
+		ProjectIDs:        projectIDs,
+		IsClosed:          isShowClosed,
+		IsPull:            isPullOption,
+		LabelIDs:          preparedLabelFilter.SelectedLabelIDs,
+		SortType:          sortType,
+		IssueIDs:          keywordMatchedIssueIDs,
+	}
+	// Either it did search with the keyword, and found some issues, then keywordMatchedIssueIDs is not null, it needs to use db indexer.
+	// Or the keyword is empty, it also needs to usd db indexer.
+	// In either case, no need to use keyword anymore
+	searchable := keywordMatchedIssueIDs == nil || len(keywordMatchedIssueIDs) > 0
 
-	// prepare real issue list:
-	var issues issues_model.IssueList
-	if keywordMatchedIssueIDs == nil || len(keywordMatchedIssueIDs) > 0 {
-		// Either it did search with the keyword, and found some issues, then keywordMatchedIssueIDs is not null, it needs to use db indexer.
-		// Or the keyword is empty, it also needs to usd db indexer.
-		// In either case, no need to use keyword anymore
-		searchResult, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, &issues_model.IssuesOptions{
-			Paginator: &db.ListOptions{
-				Page:     pager.Paginator.Current(),
-				PageSize: setting.UI.IssuePagingNum,
-			},
-			RepoIDs:           []int64{repo.ID},
-			AssigneeID:        assigneeID,
-			PosterID:          posterUserID,
-			MentionedID:       mentionedID,
-			ReviewRequestedID: reviewRequestedID,
-			ReviewedID:        reviewedID,
-			MilestoneIDs:      mileIDs,
-			ProjectIDs:        projectIDs,
-			IsClosed:          isShowClosed,
-			IsPull:            isPullOption,
-			LabelIDs:          preparedLabelFilter.SelectedLabelIDs,
-			SortType:          sortType,
-			IssueIDs:          keywordMatchedIssueIDs,
-		})
+	var leads *issues_model.StackLeads
+	var skipHidden []builder.Cond
+	if grouped && searchable {
+		// bounded by the layers of open stacks, so each stack takes one slot of the paginated list below
+		members, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, findOpts, builder.In("`issue`.id", openStacks.IssueIDs()))
 		if err != nil {
 			ctx.ServerError("DBIndexer.Search", err)
 			return
 		}
-		issueIDs := issue_indexer.SearchResultToIDSlice(searchResult)
+		leads = openStacks.Leads(issue_indexer.SearchResultToIDSlice(members))
+		total -= int64(len(leads.Hidden))
+		if len(leads.Hidden) > 0 {
+			skipHidden = append(skipHidden, builder.NotIn("`issue`.id", leads.Hidden))
+		}
+	}
+
+	page := max(ctx.FormInt("page"), 1)
+	pager := context.NewPagerBuilder(ctx).TotalCount(total).PerPageLimit(setting.UI.IssuePagingNum).CurPage(page).Build()
+	findOpts.Paginator = &db.ListOptions{Page: pager.Paginator.Current(), PageSize: setting.UI.IssuePagingNum}
+
+	var issueIDs []int64
+	if searchable {
+		searchResult, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, findOpts, skipHidden...)
+		if err != nil {
+			ctx.ServerError("DBIndexer.Search", err)
+			return
+		}
+		issueIDs = issue_indexer.SearchResultToIDSlice(searchResult)
+	}
+
+	var groups []issues_model.IssueGroup
+	if leads != nil {
+		groups = leads.Rows(issueIDs)
+		issueIDs = nil
+		for _, group := range groups {
+			issueIDs = append(issueIDs, group.IssueIDs...)
+		}
+	}
+
+	var issues issues_model.IssueList
+	if len(issueIDs) > 0 {
 		issues, err = issues_model.GetIssuesByIDs(ctx, issueIDs, true)
 		if err != nil {
 			ctx.ServerError("GetIssuesByIDs", err)
@@ -581,6 +625,13 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	}
 
 	ctx.Data["Issues"] = issues
+	ctx.Data["OpenStacks"] = openStacks
+	if grouped {
+		filtered := keyword != "" || viewType != "all" || len(preparedLabelFilter.SelectedLabelIDs) > 0 || milestoneID != 0 ||
+			len(projectIDs) > 0 || assigneeID != "" || posterUsername != ""
+		ctx.Data["IssueGroups"] = pullListRows(issues, groups, openStacks, filtered)
+		ctx.Data["StackRowsFiltered"] = filtered
+	}
 	ctx.Data["CommitLastStatus"] = lastStatus
 	ctx.Data["CommitStatuses"] = commitStatuses
 
@@ -650,6 +701,68 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 		ctx.Data["State"] = "open"
 	}
 	ctx.Data["Page"] = pager
+}
+
+const (
+	pullListViewGrouped = "grouped"
+	pullListViewFlat    = "flat"
+)
+
+// preparePullListView remembers an explicit view choice per signed-in user.
+func preparePullListView(ctx *context.Context) string {
+	view := ctx.FormString("view")
+	chosen := view == pullListViewGrouped || view == pullListViewFlat
+	if !ctx.IsSigned {
+		return util.Iif(chosen, view, pullListViewGrouped)
+	}
+	stored, err := user_model.GetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyPullListView, pullListViewGrouped)
+	if err != nil {
+		log.Error("GetUserSetting: %v", err)
+	}
+	if !chosen {
+		return util.Iif(stored == pullListViewFlat, pullListViewFlat, pullListViewGrouped)
+	}
+	if view != stored {
+		if err := user_model.SetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyPullListView, view); err != nil {
+			log.Error("SetUserSetting: %v", err)
+		}
+	}
+	return view
+}
+
+// pullListRow is either a lone pull request or the listed layers of one stack.
+type pullListRow struct {
+	Issue    *issues_model.Issue
+	Stack    *issues_model.StackSummary
+	Layers   issues_model.IssueList
+	Expanded bool
+}
+
+const pullListStackCollapseAbove = 3
+
+func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGroup, stacks *issues_model.OpenStacks, filtered bool) []*pullListRow {
+	byID := make(map[int64]*issues_model.Issue, len(issues))
+	for _, issue := range issues {
+		byID[issue.ID] = issue
+	}
+	rows := make([]*pullListRow, 0, len(groups))
+	for _, group := range groups {
+		row := &pullListRow{Stack: stacks.Stacks[group.StackID]}
+		for _, id := range group.IssueIDs {
+			if issue := byID[id]; issue != nil { // deleted since the ID query
+				row.Layers = append(row.Layers, issue)
+			}
+		}
+		if len(row.Layers) == 0 {
+			continue
+		}
+		if row.Stack == nil {
+			row.Issue = row.Layers[0]
+		}
+		row.Expanded = filtered || len(row.Layers) <= pullListStackCollapseAbove // a filter points at exact layers
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // Issues render issues page

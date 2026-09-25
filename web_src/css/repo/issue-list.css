@@ -128,3 +128,39 @@
 .list-item-secondary-bar a:hover {
   color: var(--color-text);
 }
+
+.stack-status-bar {
+  display: flex;
+  gap: 2px;
+  width: 160px;
+  height: 6px;
+}
+
+.stack-status-bar > span {
+  flex: 1;
+  border-radius: 1px;
+}
+
+.stack-status-bar > .merged {
+  background: var(--color-purple);
+}
+
+.stack-status-bar > .open {
+  background: var(--color-green);
+}
+
+.stack-status-bar > .closed {
+  background: var(--color-red);
+}
+
+@media (max-width: 767.98px) {
+  .stack-status-bar {
+    width: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .stack-status-bar > span {
+    background: CanvasText;
+  }
+}

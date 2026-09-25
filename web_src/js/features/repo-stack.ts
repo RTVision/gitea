@@ -1,4 +1,5 @@
 import {GET} from '../modules/fetch.ts';
+import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {registerGlobalInitFunc} from '../modules/observer.ts';
 import {hideElem, toggleElem, toggleElemClass} from '../utils/dom.ts';
 
@@ -24,6 +25,17 @@ export function initRepoStackNew() {
       form.querySelector<HTMLButtonElement>('.stack-new-create')!.disabled = joined.some((layer) => layer.hasAttribute('data-invalid'));
     };
     for (const layer of layers) layer.querySelector('input[name="start"]')!.addEventListener('change', syncStart);
+  });
+}
+
+export function initRepoStackInsert() {
+  registerGlobalInitFunc('initRepoStackInsert', (form: HTMLFormElement) => {
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (!submit) return; // no candidates to pick
+    fomanticQuery(form.querySelector('.ui.dropdown')!).dropdown('setting', {
+      fullTextSearch: true, // match titles and branches, not just number prefixes
+      onChange: () => { submit.disabled = false },
+    });
   });
 }
 
