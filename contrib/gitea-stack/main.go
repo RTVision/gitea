@@ -1197,6 +1197,9 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 			localHead = remoteHead
 		}
 		parentSHA := pull.Base.Sha
+		if state.Mode == api.StackModeMerge && parentSHA != "" && a.repo.IsAncestor(parentSHA, localHead) != nil {
+			parentSHA, _ = a.repo.Run(nil, "merge-base", parentSHA, localHead) // a merge-mode layer may be behind; restack merges the parent in
+		}
 		if parentSHA == "" || a.repo.IsAncestor(parentSHA, localHead) != nil {
 			return fail(3, "boundary_invalid", "#%d has no verifiable saved parent boundary", pull.Index)
 		}

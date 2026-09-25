@@ -703,6 +703,7 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 	requireCommandError(t, (&application{}).init([]string{"--trunk", "main", "--mode", "squash"}), 2, "usage")
 	work, _, trunk, lower, _ := newMergeStackRepo(t)
 	squash := gitLine(t, work, "commit-tree", lower+"^{tree}", "-p", trunk, "-m", "squashed layer-1")
+	aheadTrunk := gitLine(t, work, "commit-tree", trunk+"^{tree}", "-p", trunk, "-m", "trunk ahead")
 	createdModes := make([]api.StackMode, 0, 1)
 	updates := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -713,7 +714,7 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/capabilities":
 			_ = json.NewEncoder(w).Encode(&api.PullRequestStackCapabilities{Enabled: true})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/pulls/3":
-			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 3, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}})
+			_ = json.NewEncoder(w).Encode(&api.PullRequest{Index: 3, Base: &api.PRBranchInfo{Ref: "main", Sha: aheadTrunk}, Head: &api.PRBranchInfo{Ref: "layer-2"}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/owner/repo/stacks/5":
 			_ = json.NewEncoder(w).Encode(&api.PullRequestStack{Number: 5, Trunk: "main", Mode: api.StackModeMerge, State: "open", Revision: 7, Entries: []*api.PullRequestStackEntry{
 				{Position: 1, PullRequest: &api.PullRequest{Index: 1, Head: &api.PRBranchInfo{Ref: "layer-1"}}, HeadSHA: lower, LandedSHA: squash},
@@ -755,4 +756,7 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 
 	require.NoError(t, app.adopt(t.Context(), []string{"--prs", "3", "--trunk", "main", "--mode", "merge"}))
 	assert.Equal(t, []api.StackMode{api.StackModeMerge}, createdModes)
+	state, err = store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, trunk, state.Layers[0].ParentSHA, "a layer behind its parent is bound at the merge base")
 }
