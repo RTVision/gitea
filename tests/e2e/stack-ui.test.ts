@@ -59,15 +59,30 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.screenshot({path: testInfo.outputPath('pull-after-stack.png'), fullPage: true});
 
   await page.goto(`/${owner}/${repo}/pulls?view=grouped`); // explicit, the preference is shared with parallel projects
-  await expect(page.getByRole('link', {name: /^Stack #\d+ · 3 layers · Merge mode$/})).toBeVisible();
-  await expect(page.getByRole('link', {name: 'Layer two'})).toBeHidden();
+  const layers = page.getByText('3 of 3 layers');
+  const layerTwo = page.getByRole('checkbox', {name: /Layer two/});
+  const unstacked = page.getByRole('checkbox', {name: /Unstacked change/});
+  await expect(page.getByRole('link', {name: /^Stack #\d+$/})).toBeVisible();
+  await expect(page.getByRole('img', {name: '0 merged, 3 open, 0 closed'})).toBeVisible();
+  await expect(layerTwo).toBeVisible(); // up to three layers start expanded
   await page.screenshot({path: testInfo.outputPath('pr-list-after.png'), fullPage: true});
-  await page.getByText('3 matching pull requests').click();
-  await expect(page.getByRole('link', {name: 'Layer two'})).toBeVisible();
+  await layers.click();
+  await expect(layerTwo).toBeHidden();
+  await page.getByTitle('Check/Uncheck all items').check();
+  await expect(unstacked).toBeChecked();
+  await layers.click();
+  await expect(layerTwo).not.toBeChecked(); // collapsed layers stay out of batch actions
+  await unstacked.uncheck();
+
+  await page.setViewportSize({width: 375, height: 812});
+  await expect.poll(() => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.scrollingElement!.scrollWidth) - innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({path: testInfo.outputPath('pr-list-mobile.png'), fullPage: true});
+  await page.setViewportSize({width: 1280, height: 720});
+
   await page.getByRole('link', {name: 'Flat'}).click();
   await expect(page.getByRole('link', {name: /^Stack #\d+ · 2\/3$/})).toBeVisible();
   await expect(page.getByRole('link', {name: 'Unstacked change'})).toBeVisible();
   await page.screenshot({path: testInfo.outputPath('pr-list-flat.png'), fullPage: true});
   await page.getByRole('link', {name: 'Grouped'}).click();
-  await expect(page.getByRole('link', {name: 'Layer two'})).toBeHidden();
+  await expect(page.getByRole('link', {name: /^Stack #\d+$/})).toBeVisible();
 });

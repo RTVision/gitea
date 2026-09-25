@@ -30,7 +30,7 @@ func TestOpenStacksGroup(t *testing.T) {
 
 	first, second, landed := stacks.Stacks[1], stacks.Stacks[2], stacks.Stacks[3]
 	assert.Equal(t, [3]int{1, 2, 0}, [3]int{first.Merged, first.Open, first.Closed})
-	assert.Equal(t, 3, first.Size)
+	assert.Len(t, first.Layers, 3)
 	assert.EqualValues(t, 11, first.Bottom.IssueID)
 	assert.Equal(t, [3]int{0, 1, 1}, [3]int{second.Merged, second.Open, second.Closed})
 	assert.EqualValues(t, 21, second.Bottom.IssueID)

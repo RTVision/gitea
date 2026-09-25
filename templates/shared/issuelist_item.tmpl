@@ -79,7 +79,7 @@
 			{{if $root.OpenStacks}}{{with index $root.OpenStacks.Layers .ID}}
 				<a class="flex-text-inline" href="{{$root.RepoLink}}/pulls/stacks/{{.StackID}}">
 					{{svg "octicon-stack" 14}}
-					{{ctx.Locale.Tr "repo.pulls.stack_badge" .StackID .Position .Stack.Size}}
+					{{ctx.Locale.Tr "repo.pulls.stack_badge" .StackID .Position (len .Stack.Layers)}}
 				</a>
 			{{end}}{{end}}
 			{{if and .Milestone (ne $root.listType "milestone")}}

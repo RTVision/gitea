@@ -615,9 +615,10 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	ctx.Data["Issues"] = issues
 	ctx.Data["OpenStacks"] = openStacks
 	if grouped {
-		ctx.Data["IssueGroups"] = pullListRows(issues, groups, openStacks)
-		ctx.Data["StackRowsOpen"] = keyword != "" || viewType != "all" || len(preparedLabelFilter.SelectedLabelIDs) > 0 || milestoneID != 0 ||
-			len(projectIDs) > 0 || assigneeID != "" || posterUsername != "" // show which layers matched the filter
+		filtered := keyword != "" || viewType != "all" || len(preparedLabelFilter.SelectedLabelIDs) > 0 || milestoneID != 0 ||
+			len(projectIDs) > 0 || assigneeID != "" || posterUsername != ""
+		ctx.Data["IssueGroups"] = pullListRows(issues, groups, openStacks, filtered)
+		ctx.Data["StackRowsFiltered"] = filtered
 	}
 	ctx.Data["CommitLastStatus"] = lastStatus
 	ctx.Data["CommitStatuses"] = commitStatuses
@@ -719,12 +720,15 @@ func preparePullListView(ctx *context.Context) string {
 
 // pullListRow is either a lone pull request or the listed layers of one stack.
 type pullListRow struct {
-	Issue  *issues_model.Issue
-	Stack  *issues_model.StackSummary
-	Layers issues_model.IssueList
+	Issue    *issues_model.Issue
+	Stack    *issues_model.StackSummary
+	Layers   issues_model.IssueList
+	Expanded bool
 }
 
-func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGroup, stacks *issues_model.OpenStacks) []*pullListRow {
+const pullListStackCollapseAbove = 3
+
+func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGroup, stacks *issues_model.OpenStacks, filtered bool) []*pullListRow {
 	byID := make(map[int64]*issues_model.Issue, len(issues))
 	for _, issue := range issues {
 		byID[issue.ID] = issue
@@ -743,6 +747,7 @@ func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGrou
 		if row.Stack == nil {
 			row.Issue = row.Layers[0]
 		}
+		row.Expanded = filtered || len(row.Layers) <= pullListStackCollapseAbove // a filter points at exact layers
 		rows = append(rows, row)
 	}
 	return rows

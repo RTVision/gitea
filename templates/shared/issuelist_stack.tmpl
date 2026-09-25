@@ -1,5 +1,7 @@
 {{$root := .Root}}
+{{$row := .Row}}
 {{$stack := .Row.Stack}}
+{{$size := len $stack.Layers}}
 <div class="item">
 	<div class="item-leading">
 		<div class="flex-text-inline tw-mt-[3px]">
@@ -9,20 +11,32 @@
 	</div>
 	<div class="item-main">
 		<div class="item-header">
-			<a class="list-item-large-title" href="{{$root.Link}}/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
+			<div class="flex-text-inline tw-flex-wrap">
+				<a class="list-item-large-title" href="{{$root.RepoLink}}/pulls/stacks/{{$stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" $stack.ID}}</a>
+				<a class="list-item-large-title tw-font-normal" href="{{$root.Link}}/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
+			</div>
 		</div>
-		<div class="item-body tw-gap-2">
-			<a class="flex-text-inline" href="{{$root.RepoLink}}/pulls/stacks/{{$stack.ID}}">
-				{{ctx.Locale.Tr "repo.pulls.stack_number" $stack.ID}} · {{ctx.Locale.TrN $stack.Size "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" $stack.Size}} · {{if eq $stack.Mode "merge"}}{{ctx.Locale.Tr "repo.pulls.stack_mode_badge_merge"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_mode_badge_rebase"}}{{end}}
-			</a>
-			{{if $stack.Merged}}<span class="flex-text-inline">{{svg "octicon-git-merge" 14 "tw-text-purple"}}{{ctx.Locale.Tr "repo.pulls.stack_merged_count" $stack.Merged}}</span>{{end}}
-			{{if $stack.Open}}<span class="flex-text-inline">{{svg "octicon-git-pull-request" 14 "tw-text-green"}}{{ctx.Locale.Tr "repo.pulls.stack_open_count" $stack.Open}}</span>{{end}}
-			{{if $stack.Closed}}<span class="flex-text-inline">{{svg "octicon-git-pull-request-closed" 14 "tw-text-red"}}{{ctx.Locale.Tr "repo.pulls.stack_closed_count" $stack.Closed}}</span>{{end}}
+		<div class="item-body">
+			{{template "repo/stack/mode_label" $stack}}
+			<span>{{ctx.Locale.TrN $size "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" $size}}</span>
+			{{if $stack.Operation}}<span class="ui basic label">{{ctx.Locale.Tr "repo.pulls.stack_operation" $stack.Operation}}</span>{{end}}
+			{{$status := ctx.Locale.Tr "repo.pulls.stack_status" $stack.Merged $stack.Open $stack.Closed}}
+			<span class="stack-status-bar" role="img" aria-label="{{$status}}" data-tooltip-content="{{$status}}">
+				{{- range $stack.Layers -}}
+					<span class="{{if .HasMerged}}merged{{else if .IsClosed}}closed{{else}}open{{end}}"></span>
+				{{- end -}}
+			</span>
 		</div>
-		<details {{if $root.StackRowsOpen}}open{{end}}>
-			<summary class="tw-text-text-light-2">{{ctx.Locale.TrN (len .Row.Layers) "repo.pulls.stack_listed_layers_1" "repo.pulls.stack_listed_layers_n" (len .Row.Layers)}}</summary>
+		<details {{if $row.Expanded}}open{{end}}>
+			<summary class="tw-text-text-light-2">
+				{{if $root.StackRowsFiltered}}
+					{{ctx.Locale.Tr "repo.pulls.stack_layers_match" (len $row.Layers) $size}}
+				{{else}}
+					{{ctx.Locale.Tr "repo.pulls.stack_layers_listed" (len $row.Layers) $size}}
+				{{end}}
+			</summary>
 			<div class="flex-divided-list items-with-main">
-				{{range .Row.Layers}}
+				{{range $row.Layers}}
 					{{template "shared/issuelist_item" dict "Root" $root "Issue" .}}
 				{{end}}
 			</div>

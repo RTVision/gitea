@@ -13,26 +13,28 @@ import (
 
 // StackLayer is one pull request of an open stack, as the pull request list shows it.
 type StackLayer struct {
-	StackID   int64
-	Mode      string
-	Position  int
-	IssueID   int64
-	Index     int64
-	Title     string
-	IsClosed  bool
-	HasMerged bool
-	Stack     *StackSummary `xorm:"-"`
+	StackID        int64
+	Mode           string
+	Position       int
+	IssueID        int64
+	Index          int64
+	Title          string
+	IsClosed       bool
+	HasMerged      bool
+	OperationState string
+	Stack          *StackSummary `xorm:"-"`
 }
 
 // StackSummary aggregates every layer of an open stack, including layers outside the listed page.
 type StackSummary struct {
-	ID     int64
-	Mode   string
-	Size   int
-	Merged int
-	Open   int
-	Closed int
-	Bottom *StackLayer // lowest open layer, which lands next; the first layer when none is open
+	ID        int64
+	Mode      string
+	Operation string // state of the active operation, if any
+	Layers    []*StackLayer
+	Merged    int
+	Open      int
+	Closed    int
+	Bottom    *StackLayer // lowest open layer, which lands next; the first layer when none is open
 }
 
 // OpenStacks indexes a repository's open stacks by stack and by layer issue.
@@ -54,8 +56,9 @@ func FindOpenStackLayers(ctx context.Context, repoID int64) ([]*StackLayer, erro
 		Join("INNER", "pull_request_stack", "pull_request_stack.id = stack_entry.stack_id").
 		Join("INNER", "pull_request", "pull_request.id = stack_entry.pull_request_id").
 		Join("INNER", "issue", "issue.id = pull_request.issue_id").
+		Join("LEFT", "stack_operation", "stack_operation.id = pull_request_stack.active_operation_id").
 		Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ?", repoID, StackStateOpen).
-		Select("stack_entry.stack_id, pull_request_stack.mode, stack_entry.position, issue.id AS issue_id, issue.`index`, issue.name AS title, issue.is_closed, pull_request.has_merged").
+		Select("stack_entry.stack_id, pull_request_stack.mode, stack_entry.position, issue.id AS issue_id, issue.`index`, issue.name AS title, issue.is_closed, pull_request.has_merged, stack_operation.state AS operation_state").
 		Asc("stack_entry.stack_id", "stack_entry.position").
 		Find(&layers)
 	return layers, err
@@ -67,10 +70,10 @@ func NewOpenStacks(layers []*StackLayer) *OpenStacks {
 	for _, layer := range layers {
 		summary := stacks.Stacks[layer.StackID]
 		if summary == nil {
-			summary = &StackSummary{ID: layer.StackID, Mode: layer.Mode, Bottom: layer}
+			summary = &StackSummary{ID: layer.StackID, Mode: layer.Mode, Operation: layer.OperationState, Bottom: layer}
 			stacks.Stacks[layer.StackID] = summary
 		}
-		summary.Size++
+		summary.Layers = append(summary.Layers, layer)
 		switch {
 		case layer.HasMerged:
 			summary.Merged++

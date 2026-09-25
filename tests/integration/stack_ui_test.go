@@ -62,6 +62,10 @@ func TestPullListGroupsStacks(t *testing.T) {
 	for i, pullID := range []int64{1, 2, 5} { // fixture pulls #2 (merged), #3 and #5
 		require.NoError(t, db.Insert(t.Context(), &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pullID, Position: i + 1}))
 	}
+	op := &issues_model.StackOperation{StackID: stack.ID, Kind: "land", State: "blocked"}
+	require.NoError(t, db.Insert(t.Context(), op))
+	_, err := db.GetEngine(t.Context()).ID(stack.ID).Cols("active_operation_id").Update(&issues_model.PullRequestStack{ActiveOperationID: op.ID})
+	require.NoError(t, err)
 	stackLink := fmt.Sprintf(`a[href="/user2/repo1/pulls/stacks/%d"]`, stack.ID)
 	list := func(query string) *HTMLDoc {
 		return NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, "/user2/repo1/pulls"+query), http.StatusOK).Body)
@@ -70,9 +74,11 @@ func TestPullListGroupsStacks(t *testing.T) {
 	doc := list("")
 	assert.Equal(t, 2, doc.Find("#issue-list > .item").Length())
 	stackRow := doc.Find("#issue-list > .item:has(details)")
-	assert.Contains(t, stackRow.Find(".item-header").First().Text(), "issue3") // lowest open layer; #2 has merged
-	assert.Contains(t, stackRow.Find(".item-body "+stackLink).First().Text(), "3 layers")
-	assert.Equal(t, 3, stackRow.Find("details:not([open]) .index").Length())
+	assert.Equal(t, fmt.Sprintf("Stack #%d issue3", stack.ID), strings.Join(strings.Fields(stackRow.Find(".item-header").First().Text()), " ")) // lowest open layer; #2 has merged
+	assert.Contains(t, stackRow.Find(".item-body").First().Text(), "Operation: blocked")
+	assert.Equal(t, 3, stackRow.Find(".stack-status-bar > span").Length())
+	assert.Equal(t, "3 of 3 layers", strings.TrimSpace(stackRow.Find("details[open] > summary").Text())) // few layers start expanded
+	assert.Equal(t, 3, stackRow.Find("details .index").Length())
 	assert.Equal(t, "4 Open", strings.Join(strings.Fields(doc.Find(".small-menu-items .item").First().Text()), " ")) // counts individual pulls
 
 	doc = list("?view=flat")
@@ -82,6 +88,7 @@ func TestPullListGroupsStacks(t *testing.T) {
 
 	doc = list("?view=grouped&milestone=3")
 	assert.Equal(t, 1, doc.Find("#issue-list > .item").Length())
+	assert.Equal(t, "1 of 3 match", strings.TrimSpace(doc.Find("#issue-list details[open] > summary").Text()))
 	layers := doc.Find("#issue-list details[open] .index")
 	assert.Equal(t, []string{"#3"}, layers.Map(func(_ int, s *goquery.Selection) string { return strings.TrimSpace(s.Text()) }))
 }
