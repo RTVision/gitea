@@ -49,6 +49,12 @@ type IssueGroup struct {
 	IssueIDs []int64
 }
 
+// StackLeads places each stack at its first listed layer, the lead, and hides its other listed layers.
+type StackLeads struct {
+	Groups map[int64]IssueGroup // by lead issue ID
+	Hidden []int64
+}
+
 // FindOpenStackLayers lists every layer of a repository's open stacks with one query.
 func FindOpenStackLayers(ctx context.Context, repoID int64) ([]*StackLayer, error) {
 	layers := make([]*StackLayer, 0)
@@ -91,28 +97,47 @@ func NewOpenStacks(layers []*StackLayer) *OpenStacks {
 	return stacks
 }
 
-// Group collapses sorted issue IDs into rows, placing each stack at its first listed layer.
-func (s *OpenStacks) Group(issueIDs []int64) []IssueGroup {
-	groups := make([]IssueGroup, 0, len(issueIDs))
-	stackRows := make(map[int64]int)
-	for _, id := range issueIDs {
-		layer := s.Layers[id]
-		if layer == nil {
-			groups = append(groups, IssueGroup{IssueIDs: []int64{id}})
+// Leads groups the listed layers of open stacks, given in list order.
+func (s *OpenStacks) Leads(memberIDs []int64) *StackLeads {
+	leads := &StackLeads{Groups: make(map[int64]IssueGroup)}
+	leadOf := make(map[int64]int64)
+	for _, id := range memberIDs {
+		stackID := s.Layers[id].StackID
+		lead, ok := leadOf[stackID]
+		if !ok {
+			leadOf[stackID] = id
+			leads.Groups[id] = IssueGroup{StackID: stackID, IssueIDs: []int64{id}}
 			continue
 		}
-		if row, ok := stackRows[layer.StackID]; ok {
-			groups[row].IssueIDs = append(groups[row].IssueIDs, id)
-			continue
-		}
-		stackRows[layer.StackID] = len(groups)
-		groups = append(groups, IssueGroup{StackID: layer.StackID, IssueIDs: []int64{id}})
+		group := leads.Groups[lead]
+		group.IssueIDs = append(group.IssueIDs, id)
+		leads.Groups[lead] = group
+		leads.Hidden = append(leads.Hidden, id)
 	}
-	for _, group := range groups {
-		if group.StackID == 0 {
-			continue
-		}
+	for _, group := range leads.Groups {
 		slices.SortFunc(group.IssueIDs, func(a, b int64) int { return cmp.Compare(s.Layers[a].Position, s.Layers[b].Position) })
 	}
-	return groups
+	return leads
+}
+
+// Rows expands a page of list IDs, which excludes hidden layers, into rows.
+func (l *StackLeads) Rows(pageIDs []int64) []IssueGroup {
+	rows := make([]IssueGroup, 0, len(pageIDs))
+	for _, id := range pageIDs {
+		group, ok := l.Groups[id]
+		if !ok {
+			group = IssueGroup{IssueIDs: []int64{id}}
+		}
+		rows = append(rows, group)
+	}
+	return rows
+}
+
+// IssueIDs lists the open stack layers' issues.
+func (s *OpenStacks) IssueIDs() []int64 {
+	ids := make([]int64, 0, len(s.Layers))
+	for id := range s.Layers {
+		ids = append(ids, id)
+	}
+	return ids
 }

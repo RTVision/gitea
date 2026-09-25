@@ -30,6 +30,8 @@ import (
 	"gitea.dev/services/convert"
 	issue_service "gitea.dev/services/issue"
 	pull_service "gitea.dev/services/pull"
+
+	"xorm.io/builder"
 )
 
 func retrieveProjectsForIssueList(ctx *context.Context, repo *repo_model.Repository) {
@@ -526,10 +528,6 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	if isShowClosed.Has() {
 		total = util.Iif(isShowClosed.Value(), issueStats.ClosedCount, issueStats.OpenCount)
 	}
-	page := max(ctx.FormInt("page"), 1)
-	newPager := func(total int64) *context.Pagination {
-		return context.NewPagerBuilder(ctx).TotalCount(total).PerPageLimit(setting.UI.IssuePagingNum).CurPage(page).Build()
-	}
 	findOpts := &issues_model.IssuesOptions{
 		RepoIDs:           []int64{repo.ID},
 		AssigneeID:        assigneeID,
@@ -545,18 +543,34 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 		SortType:          sortType,
 		IssueIDs:          keywordMatchedIssueIDs,
 	}
-	var pager *context.Pagination
-	if !grouped {
-		pager = newPager(total)
-		findOpts.Paginator = &db.ListOptions{Page: pager.Paginator.Current(), PageSize: setting.UI.IssuePagingNum}
-	} // grouped lists every matching ID so a stack counts as one row when paginating
+	// Either it did search with the keyword, and found some issues, then keywordMatchedIssueIDs is not null, it needs to use db indexer.
+	// Or the keyword is empty, it also needs to usd db indexer.
+	// In either case, no need to use keyword anymore
+	searchable := keywordMatchedIssueIDs == nil || len(keywordMatchedIssueIDs) > 0
+
+	var leads *issues_model.StackLeads
+	var skipHidden []builder.Cond
+	if grouped && searchable {
+		// bounded by the layers of open stacks, so each stack takes one slot of the paginated list below
+		members, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, findOpts, builder.In("`issue`.id", openStacks.IssueIDs()))
+		if err != nil {
+			ctx.ServerError("DBIndexer.Search", err)
+			return
+		}
+		leads = openStacks.Leads(issue_indexer.SearchResultToIDSlice(members))
+		total -= int64(len(leads.Hidden))
+		if len(leads.Hidden) > 0 {
+			skipHidden = append(skipHidden, builder.NotIn("`issue`.id", leads.Hidden))
+		}
+	}
+
+	page := max(ctx.FormInt("page"), 1)
+	pager := context.NewPagerBuilder(ctx).TotalCount(total).PerPageLimit(setting.UI.IssuePagingNum).CurPage(page).Build()
+	findOpts.Paginator = &db.ListOptions{Page: pager.Paginator.Current(), PageSize: setting.UI.IssuePagingNum}
 
 	var issueIDs []int64
-	if keywordMatchedIssueIDs == nil || len(keywordMatchedIssueIDs) > 0 {
-		// Either it did search with the keyword, and found some issues, then keywordMatchedIssueIDs is not null, it needs to use db indexer.
-		// Or the keyword is empty, it also needs to usd db indexer.
-		// In either case, no need to use keyword anymore
-		searchResult, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, findOpts)
+	if searchable {
+		searchResult, err := db_indexer.GetIndexer().FindWithIssueOptions(ctx, findOpts, skipHidden...)
 		if err != nil {
 			ctx.ServerError("DBIndexer.Search", err)
 			return
@@ -565,10 +579,8 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	}
 
 	var groups []issues_model.IssueGroup
-	if grouped {
-		groups = openStacks.Group(issueIDs)
-		pager = newPager(int64(len(groups)))
-		groups = util.PaginateSlice(groups, pager.Paginator.Current(), setting.UI.IssuePagingNum)
+	if leads != nil {
+		groups = leads.Rows(issueIDs)
 		issueIDs = nil
 		for _, group := range groups {
 			issueIDs = append(issueIDs, group.IssueIDs...)

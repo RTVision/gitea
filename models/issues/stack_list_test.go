@@ -4,6 +4,7 @@
 package issues_test
 
 import (
+	"slices"
 	"testing"
 
 	issues_model "gitea.dev/models/issues"
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOpenStacksGroup(t *testing.T) {
+func TestOpenStackLeads(t *testing.T) {
 	stacks := issues_model.NewOpenStacks([]*issues_model.StackLayer{
 		{StackID: 1, Position: 1, IssueID: 10, HasMerged: true, IsClosed: true},
 		{StackID: 1, Position: 2, IssueID: 11},
@@ -20,13 +21,23 @@ func TestOpenStacksGroup(t *testing.T) {
 		{StackID: 2, Position: 2, IssueID: 21},
 		{StackID: 3, Position: 1, IssueID: 30, HasMerged: true, IsClosed: true},
 	})
+	list := []int64{12, 5, 21, 11, 6, 7} // matching issues in list order
+	members := slices.DeleteFunc(slices.Clone(list), func(id int64) bool { return stacks.Layers[id] == nil })
+	leads := stacks.Leads(members)
+	assert.Equal(t, []int64{11}, leads.Hidden)
+	visible := slices.DeleteFunc(slices.Clone(list), func(id int64) bool { return slices.Contains(leads.Hidden, id) })
+	var rows []issues_model.IssueGroup
+	for page := range slices.Chunk(visible, 2) { // the database pages the list without hidden layers
+		rows = append(rows, leads.Rows(page)...)
+	}
 	assert.Equal(t, []issues_model.IssueGroup{
 		{StackID: 1, IssueIDs: []int64{11, 12}},
 		{IssueIDs: []int64{5}},
 		{StackID: 2, IssueIDs: []int64{21}},
 		{IssueIDs: []int64{6}},
-	}, stacks.Group([]int64{12, 5, 21, 11, 6}))
-	assert.Empty(t, stacks.Group(nil))
+		{IssueIDs: []int64{7}},
+	}, rows)
+	assert.Empty(t, stacks.Leads(nil).Groups)
 
 	first, second, landed := stacks.Stacks[1], stacks.Stacks[2], stacks.Stacks[3]
 	assert.Equal(t, [3]int{1, 2, 0}, [3]int{first.Merged, first.Open, first.Closed})

@@ -92,4 +92,14 @@ func TestPullListGroupsStacks(t *testing.T) {
 	assert.Equal(t, "1 of 3 match", strings.TrimSpace(doc.Find("#issue-list details[open] > summary").Text()))
 	layers := doc.Find("#issue-list details[open] .index")
 	assert.Equal(t, []string{"#3"}, layers.Map(func(_ int, s *goquery.Selection) string { return strings.TrimSpace(s.Text()) }))
+
+	defer test.MockVariableValue(&setting.UI.IssuePagingNum, 1)()
+	indexes := func(doc *HTMLDoc) []string {
+		return doc.Find("#issue-list .index").Map(func(_ int, s *goquery.Selection) string { return strings.TrimSpace(s.Text()) })
+	}
+	doc = list("?view=grouped&page=1")
+	assert.Equal(t, []string{"#6"}, indexes(doc))
+	assert.Positive(t, doc.Find(`.pagination a[href*="page=2"]`).Length())
+	assert.Zero(t, doc.Find(`.pagination a[href*="page=3"]`).Length(), "a stack takes one page slot")
+	assert.Equal(t, []string{"#2", "#3", "#5"}, indexes(list("?view=grouped&page=2")))
 }
