@@ -82,10 +82,11 @@ func TestNativeStackMergeMode(t *testing.T) {
 			pulls = append(pulls, pull.Index)
 			parent = branch
 		}
+		MakeRequest(t, NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("%s/pulls/%d", base, pulls[2]), &api.EditPullRequestOption{Base: "stack-lower"}).AddTokenAuth(token), http.StatusCreated) // stack-middle is inserted later
 		advanceTrunk("trunk-1.txt")
 		updateLayers()
 
-		create := &api.CreatePullRequestStackOption{Trunk: "release", PullRequests: pulls}
+		create := &api.CreatePullRequestStackOption{Trunk: "release", PullRequests: []int64{pulls[0], pulls[2]}}
 		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, base+"/stacks", create).AddTokenAuth(token), http.StatusUnprocessableEntity)
 		create.Mode = api.StackModeMerge
 		stack := DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, base+"/stacks", create).AddTokenAuth(token), http.StatusCreated), &api.PullRequestStack{})
@@ -94,6 +95,7 @@ func TestNativeStackMergeMode(t *testing.T) {
 		capabilities := DecodeJSON(t, MakeRequest(t, NewRequest(t, http.MethodGet, base+"/stacks/capabilities").AddTokenAuth(token), http.StatusOK), &api.PullRequestStackCapabilities{})
 		assert.Equal(t, []api.StackMode{api.StackModeRebase, api.StackModeMerge}, capabilities.Modes)
 		assert.Contains(t, capabilities.Operations, "update")
+		assert.Contains(t, capabilities.Operations, "insert")
 		assert.Equal(t, []string{"merge", "squash", "fast-forward-only"}, capabilities.ModeMergeStyles["merge"])
 		path = fmt.Sprintf("%s/stacks/%d", base, stack.Number)
 		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, path+"/rebase", &api.PullRequestStackOperationOption{Revision: 1}).AddTokenAuth(token), http.StatusUnprocessableEntity)
@@ -102,6 +104,16 @@ func TestNativeStackMergeMode(t *testing.T) {
 		advanceTrunk("trunk-2.txt")
 		MakeRequest(t, NewRequest(t, http.MethodPost, fmt.Sprintf("%s/pulls/%d/update?style=rebase", base, pulls[0])).AddTokenAuth(token), http.StatusForbidden) // force-push is disabled on the layers
 		updateLayers()
+
+		insert := &api.InsertPullRequestStackOption{Revision: stack.Revision, PullRequest: pulls[2]}
+		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, path+"/insert", insert).AddTokenAuth(token), http.StatusUnprocessableEntity)
+		insert.PullRequest = pulls[1]
+		stack = DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, path+"/insert", insert).AddTokenAuth(token), http.StatusOK), &api.PullRequestStack{})
+		require.Len(t, stack.Entries, 3)
+		assert.Equal(t, pulls[1], stack.Entries[1].PullRequest.Index)
+		assert.Equal(t, "stack-middle", stack.Entries[2].PullRequest.Base.Ref)
+		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, path+"/insert", insert).AddTokenAuth(token), http.StatusConflict)
+		require.False(t, ancestor(head("stack-middle"), head("stack-upper")))
 
 		advanceTrunk("trunk-3.txt")
 		before := make([]string, 0, len(branches))
@@ -113,6 +125,7 @@ func TestNativeStackMergeMode(t *testing.T) {
 			assert.True(t, ancestor(before[i], head(branch)), "%s only moves forward", branch)
 			assert.True(t, ancestor(head("release"), head(branch)), "%s contains the trunk", branch)
 		}
+		assert.True(t, ancestor(head("stack-middle"), head("stack-upper")), "the layer above absorbs the inserted layer")
 
 		trunk := head("release")
 		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 1, MergeStyle: string(repo_model.MergeStyleSquash)})

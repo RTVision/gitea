@@ -230,6 +230,22 @@ func ChangeTargetBranch(ctx context.Context, pr *issues_model.PullRequest, doer 
 }
 
 func changeTargetBranchForStack(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, targetBranch string, operationID int64) (err error) {
+	if operationID != 0 {
+		if err := validateStackOperation(ctx, pr, operationID, doer.ID); err != nil {
+			return err
+		}
+	}
+	releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(pr.ID))
+	if err != nil {
+		log.Error("lock.Lock(): %v", err)
+		return fmt.Errorf("lock.Lock: %w", err)
+	}
+	defer releaser()
+	return changeTargetBranchLocked(ctx, pr, doer, targetBranch)
+}
+
+// changeTargetBranchLocked requires the caller to hold the pull request's working lock.
+func changeTargetBranchLocked(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, targetBranch string) (err error) {
 	if err := pr.LoadBaseRepo(ctx); err != nil {
 		return err
 	}
@@ -242,17 +258,6 @@ func changeTargetBranchForStack(ctx context.Context, pr *issues_model.PullReques
 	if err := pr.Issue.LoadRepo(ctx); err != nil {
 		return err
 	}
-	if operationID != 0 {
-		if err := validateStackOperation(ctx, pr, operationID, doer.ID); err != nil {
-			return err
-		}
-	}
-	releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(pr.ID))
-	if err != nil {
-		log.Error("lock.Lock(): %v", err)
-		return fmt.Errorf("lock.Lock: %w", err)
-	}
-	defer releaser()
 
 	// Current target branch is already the same
 	if pr.BaseBranch == targetBranch {

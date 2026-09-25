@@ -30,7 +30,8 @@ func TestClientStackRequestsAndRevisionConflict(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/gitea/api/v1/repos/acme/widget/stacks/12":
 			return response(http.StatusOK, `{"number":12,"trunk":"main","revision":4,"entries":[]}`, nil), nil
-		case r.Method == http.MethodPatch && r.URL.Path == "/gitea/api/v1/repos/acme/widget/stacks/12":
+		case r.Method == http.MethodPatch && r.URL.Path == "/gitea/api/v1/repos/acme/widget/stacks/12",
+			r.Method == http.MethodPost && r.URL.Path == "/gitea/api/v1/repos/acme/widget/stacks/12/insert":
 			return response(http.StatusConflict, `{"revision":5}`, nil), nil
 		default:
 			return response(http.StatusNotFound, `{"message":"missing"}`, nil), nil
@@ -47,7 +48,9 @@ func TestClientStackRequestsAndRevisionConflict(t *testing.T) {
 	var revision ErrRevision
 	require.ErrorAs(t, err, &revision)
 	assert.Equal(t, int64(5), revision.Current)
-	assert.Equal(t, 2, requests, "mutations must not be retried")
+	_, err = client.InsertLayer(context.Background(), 12, 4, 9)
+	require.ErrorAs(t, err, &revision)
+	assert.Equal(t, 3, requests, "mutations must not be retried")
 }
 
 func TestClientGetRetriesServerFailure(t *testing.T) {

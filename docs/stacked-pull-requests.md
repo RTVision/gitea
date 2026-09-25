@@ -50,10 +50,18 @@ The stack box on each pull request links the layers in landing order. Review the
 individual layer diff as usual. A closed but unmerged predecessor does not satisfy
 the stack's landing order.
 
-Append additional pull requests whose bases continue the chain. To restructure
-an open stack, unstack it, adjust the ordinary branches and pull request bases,
-then adopt the resulting chain. Unstacking preserves branches, pull requests and
-the original stack's history. Already merged entries retain their history.
+Append additional pull requests whose bases continue the chain. To add a layer
+in the middle, branch from the layer below, open a pull request targeting that
+layer's branch, and choose **Insert pull request** on the stack page. It goes
+directly above the branch it targets, or at the bottom when it targets the
+trunk; the layer that was there is retargeted onto it. The stack keeps its number
+and history. In rebase mode, first rebase the layer above onto the new branch.
+In merge mode, **Update stack** then merges the new layer into the layers above.
+
+For other restructures, unstack the stack, adjust the ordinary branches and pull
+request bases, then adopt the resulting chain. Unstacking preserves branches,
+pull requests and the original stack's history. Already merged entries retain
+their history.
 
 Permanently deleting a pull request dissolves its associated stack groupings and
 preserves the other pull requests and branches. Deletion is refused while an
@@ -147,7 +155,8 @@ numbers. Mutations require an expected stack revision and return a conflict when
 the stack changed or another operation owns it. Check `/stacks/capabilities`
 before offering stack creation in a client.
 
-Rebase, update and landing return an operation resource. `POST /stacks/{id}/update`
+`POST /stacks/{id}/insert` inserts one pull request by number and returns the
+updated stack. Rebase, update and landing return an operation resource. `POST /stacks/{id}/update`
 updates a merge-mode stack; `/rebase` applies only to rebase-mode stacks. Poll
 `/stacks/{id}/operations/{operation}` for progress, and use its `retry` and
 `cancel` actions for recovery. `POST /stacks/{id}/sync` explicitly records locally

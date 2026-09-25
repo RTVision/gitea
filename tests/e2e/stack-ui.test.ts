@@ -31,6 +31,9 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.screenshot({path: testInfo.outputPath('stack-new.png'), fullPage: true});
   await page.getByRole('button', {name: 'Create stack'}).click();
   await expect(page.getByRole('link', {name: /Stack #\d+/})).toBeVisible();
+  // created after the stack so the chain suggestion isn't cut at its shared base branch
+  await apiCreateFiles(request, owner, repo, [{path: 'inserted.txt', content: 'inserted\n'}], {branch: 'layer-one', newBranch: 'layer-inserted'});
+  const inserted = await apiCreatePR(request, owner, repo, 'layer-inserted', 'layer-one', 'Layer inserted');
 
   await page.getByRole('link', {name: /Stack #\d+/}).click();
   await expect(page.getByRole('heading', {name: /Stack #\d+/})).toBeVisible();
@@ -40,6 +43,14 @@ test('stack pages create and render a pull request chain', async ({page, request
   await expect(page.getByRole('button', {name: 'Update stack'})).toBeVisible();
   await expect(page.getByLabel('Merge method').locator('option')).toHaveText(['Create merge commit', 'Create squash commit', 'Fast-forward only']);
   await page.screenshot({path: testInfo.outputPath('stack-desktop.png'), fullPage: true});
+
+  await page.getByRole('combobox', {name: 'Pull request'}).pressSequentially('inserted');
+  await expect(page.getByRole('option', {name: /Layer inserted.*inserted after #1/})).toBeVisible();
+  await page.screenshot({path: testInfo.outputPath('stack-insert.png'), fullPage: true});
+  await page.getByRole('option', {name: /Layer inserted/}).click();
+  await page.getByRole('button', {name: 'Insert pull request'}).click();
+  await expect(page.getByText(`Inserted #${inserted}. Select Update stack`)).toBeVisible();
+  await expect(page.getByRole('list', {name: 'entries'}).getByRole('link')).toHaveText(['#1 Layer one', `#${inserted} Layer inserted`, '#2 Layer two', '#3 Layer three']);
 
   await page.setViewportSize({width: 375, height: 812});
   await expect.poll(() => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.scrollingElement!.scrollWidth) - innerWidth)).toBeLessThanOrEqual(0);
