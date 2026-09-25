@@ -3,13 +3,66 @@
 	{{template "repo/header" .}}
 	<div class="ui container">
 		{{template "base/alert" .}}
-		<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/new">
-			<h1>{{ctx.Locale.Tr "repo.pulls.new_stack"}}</h1>
-			<fieldset><legend>{{ctx.Locale.Tr "repo.pulls.stack_start"}}</legend>
-				<div class="field"><label for="stack-pulls">{{ctx.Locale.Tr "repo.pulls.stack_pulls"}}</label><textarea id="stack-pulls" name="pulls" required placeholder="#12, #13, #14">{{.Pulls}}</textarea><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_pulls_desc"}}</p></div>
-				<div class="field"><label for="stack-trunk">{{ctx.Locale.Tr "repo.pulls.stack_base_label"}}</label><input id="stack-trunk" name="trunk" required value="{{.DefaultBranch}}"><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_base_desc"}}</p></div>
+		<h1>{{ctx.Locale.Tr "repo.pulls.new_stack"}}</h1>
+		<form class="ui form" method="get" action="{{.RepoLink}}/pulls/stacks/new" data-global-init="initRepoStackNew">
+			<div class="field">
+				<label for="stack-top">{{ctx.Locale.Tr "repo.pulls.stack_top"}}</label>
+				<div class="flex-text-block">
+					<select id="stack-top" name="pull" class="tw-flex-1 tw-min-w-0">
+						<option value="">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</option>
+						{{range .Candidates}}<option value="{{.Index}}"{{if eq .Index $.Top}} selected{{end}}>#{{.Index}} {{.Issue.Title}} ({{.HeadBranch}} → {{.BaseBranch}})</option>{{end}}
+					</select>
+					<button type="submit" class="ui button">{{ctx.Locale.Tr "repo.pulls.stack_find_chain"}}</button>
+				</div>
+				<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_top_desc"}}</p>
+			</div>
+		</form>
+		<form class="ui form tw-mt-4" method="post" action="{{.RepoLink}}/pulls/stacks/new">
+			<input type="hidden" name="pull" value="{{if .Top}}{{.Top}}{{end}}">
+			<fieldset>
+				<legend>{{ctx.Locale.Tr "repo.pulls.stack_pulls"}}</legend>
+				{{if .Chain}}
+					{{range .Chain}}
+						<div class="field">
+							<div class="ui checkbox">
+								<input id="stack-pull-{{.Index}}" type="checkbox" name="pulls" value="{{.Index}}" checked>
+								<label for="stack-pull-{{.Index}}">#{{.Index}} {{.Issue.Title}} <span class="tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></label>
+							</div>
+						</div>
+					{{end}}
+					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_pulls_desc"}}</p>
+				{{else}}
+					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_no_chain"}}</p>
+				{{end}}
 			</fieldset>
-			<button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.create_stack"}}</button>
+			<div class="field">
+				<label>{{ctx.Locale.Tr "repo.pulls.stack_base_label"}}</label>
+				<div class="ui search selection dropdown">
+					<input type="hidden" name="trunk" value="{{.Trunk}}">
+					<div class="text">{{.Trunk}}</div>
+					{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+					<div class="menu">
+						{{range .Branches}}<div class="item" data-value="{{.}}">{{.}}</div>{{end}}
+					</div>
+				</div>
+				<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_base_desc"}}</p>
+			</div>
+			<fieldset class="grouped fields">
+				<legend>{{ctx.Locale.Tr "repo.pulls.stack_mode"}}</legend>
+				<div class="field">
+					<div class="ui radio checkbox">
+						<input id="stack-mode-merge" type="radio" name="mode" value="merge" checked>
+						<label for="stack-mode-merge"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge_desc"}}</span></label>
+					</div>
+				</div>
+				<div class="field">
+					<div class="ui radio checkbox">
+						<input id="stack-mode-rebase" type="radio" name="mode" value="rebase">
+						<label for="stack-mode-rebase"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase_desc"}}</span></label>
+					</div>
+				</div>
+			</fieldset>
+			<button type="submit" class="ui primary button"{{if not .Chain}} disabled{{end}}>{{ctx.Locale.Tr "repo.pulls.create_stack"}}</button>
 			<a class="ui button" href="{{.RepoLink}}/pulls/stacks">{{ctx.Locale.Tr "cancel"}}</a>
 		</form>
 	</div>

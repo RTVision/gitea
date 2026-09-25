@@ -4,19 +4,19 @@
 <div aria-live="polite" {{if $active}}data-global-init="initRepoStackStatus" data-stack-status-url="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/status" data-reloading-interval="3000"{{else}}data-status-final="true"{{end}}>
 	{{if $op}}
 		{{if eq $op.State "completed"}}
-			<div class="ui positive message">{{if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebased"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_landed" $op.Completed}}{{end}}</div>
+			<div class="ui positive message">{{if eq $op.Kind "update"}}{{ctx.Locale.Tr "repo.pulls.stack_updated"}}{{else if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebased"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_landed" $op.Completed}}{{end}}</div>
 		{{else if eq $op.State "cancelled"}}
-			<div class="ui info message">{{if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_cancelled_rebase"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_cancelled_land" $op.Completed}}{{end}}</div>
+			<div class="ui info message">{{if ne $op.Kind "land"}}{{ctx.Locale.Tr "repo.pulls.stack_cancelled_rebase"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_cancelled_land" $op.Completed}}{{end}}</div>
 		{{else if eq $op.State "blocked"}}
 			<div class="ui warning message">
-				<strong>{{if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_blocked"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_land_blocked" $op.Completed}}{{end}}</strong>
+				<strong>{{if eq $op.Kind "update"}}{{ctx.Locale.Tr "repo.pulls.stack_update_blocked"}}{{else if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_blocked"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_land_blocked" $op.Completed}}{{end}}</strong>
 				<p>{{$op.LastError}}</p>
 				{{if $.CanManageStack}}
 					<form class="tw-inline" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
-						<input type="hidden" name="operation" value="{{$op.ID}}"><button class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
+						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
 					</form>
 					<form class="tw-inline" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/retry">
-						<input type="hidden" name="operation" value="{{$op.ID}}"><button class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry"}}</button>
+						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry"}}</button>
 					</form>
 				{{end}}
 			</div>
@@ -25,6 +25,8 @@
 				<div class="ui active small inline loader"></div>
 				{{if eq $op.State "cancelling"}}
 					{{ctx.Locale.Tr "repo.pulls.stack_cancelling"}}
+				{{else if eq $op.Kind "update"}}
+					{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_update_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_updating"}}{{end}}
 				{{else if eq $op.Kind "rebase"}}
 					{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebasing"}}{{end}}
 				{{else if eq $op.State "waiting"}}
@@ -37,11 +39,11 @@
 				{{if $op.LastError}}<p>{{$op.LastError}}</p>{{end}}
 				{{if and $.CanManageStack (ne $op.State "cancelling")}}
 					<form class="tw-float-right" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
-						<input type="hidden" name="operation" value="{{$op.ID}}"><button class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
+						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
 					</form>
 				{{else if and $.CanManageStack (eq $op.State "cancelling") $op.LastError}}
 					<form class="tw-float-right" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
-						<input type="hidden" name="operation" value="{{$op.ID}}"><button class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry_cancel"}}</button>
+						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry_cancel"}}</button>
 					</form>
 				{{end}}
 			</div>

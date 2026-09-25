@@ -25,9 +25,12 @@ Back up the database and repositories together before upgrading an instance.
 
 ## Create and review
 
-Create ordinary pull requests whose branches form a linear chain, then open
-**Stacks** from the repository's pull request list. Select **New stack**, enter
-the trunk branch and the pull request numbers in landing order.
+Create ordinary pull requests whose branches form a chain, then open **Stacks**
+from the repository's pull request list. Select **New stack** and pick the top
+pull request. The form follows base branches down to the trunk, stopping at the
+default branch or a branch that several pull requests build on, and lists the
+chain in landing order. Adjust the selection and trunk if needed, and choose the
+stack mode.
 
 For example, with `release` as the trunk:
 
@@ -60,9 +63,9 @@ stack records.
 A stack's mode is chosen at creation and cannot change; to switch, unstack and
 adopt the chain again.
 
-* **Rebase** (default) replays layers onto their updated parents. It keeps layer
+* **Rebase** (the API and CLI default) replays layers onto their updated parents. It keeps layer
   history linear and needs force-push permission on the layer branches.
-* **Merge** merges each updated parent into its layer. Nothing in the stack's
+* **Merge** (the web form default) merges each updated parent into its layer. Nothing in the stack's
   lifecycle force-pushes, so it works on long-lived, shared branches where
   force-push is disabled. Only push permission is needed.
 

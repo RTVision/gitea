@@ -143,3 +143,33 @@ func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_
 		n.heads[pr.ID] = [2]string{before, after}
 	}
 }
+
+func TestSuggestStackChain(t *testing.T) {
+	release := &issues_model.PullRequest{ID: 1, Index: 10, HeadBranch: "release", BaseBranch: "main"}
+	lower := &issues_model.PullRequest{ID: 2, Index: 11, HeadBranch: "lower", BaseBranch: "release"}
+	middle := &issues_model.PullRequest{ID: 3, Index: 12, HeadBranch: "middle", BaseBranch: "lower"}
+	upper := &issues_model.PullRequest{ID: 4, Index: 13, HeadBranch: "upper", BaseBranch: "middle"}
+	candidates := []*issues_model.PullRequest{upper, release, middle, lower}
+	chain, trunk := SuggestStackChain(candidates, 13, "release")
+	assert.Equal(t, []*issues_model.PullRequest{lower, middle, upper}, chain, "the default branch is the trunk")
+	assert.Equal(t, "release", trunk)
+	chain, trunk = SuggestStackChain(candidates, 12, "main")
+	assert.Equal(t, []*issues_model.PullRequest{release, lower, middle}, chain)
+	assert.Equal(t, "main", trunk)
+	chain, trunk = SuggestStackChain(append(candidates, &issues_model.PullRequest{ID: 5, Index: 14, HeadBranch: "other", BaseBranch: "release"}), 13, "main")
+	assert.Equal(t, []*issues_model.PullRequest{lower, middle, upper}, chain, "a branch several pull requests build on is the trunk")
+	assert.Equal(t, "release", trunk)
+	chain, trunk = SuggestStackChain(candidates, 99, "main")
+	assert.Empty(t, chain)
+	assert.Empty(t, trunk)
+	duplicate := &issues_model.PullRequest{ID: 7, Index: 16, HeadBranch: "lower", BaseBranch: "main"}
+	chain, trunk = SuggestStackChain(append(candidates, duplicate), 13, "main")
+	assert.Equal(t, []*issues_model.PullRequest{middle, upper}, chain, "an ambiguous head branch ends the chain")
+	assert.Equal(t, "lower", trunk)
+	chain, _ = SuggestStackChain(append(candidates, duplicate), 11, "main")
+	assert.Empty(t, chain, "a top pull request sharing its head branch is not suggested")
+	cycle := &issues_model.PullRequest{ID: 6, Index: 15, HeadBranch: "main", BaseBranch: "upper"}
+	chain, trunk = SuggestStackChain(append(candidates, cycle), 13, "")
+	assert.Equal(t, []*issues_model.PullRequest{release, lower, middle, upper}, chain, "a branch cycle stops before repeating a layer")
+	assert.Equal(t, "main", trunk)
+}
