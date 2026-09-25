@@ -50,6 +50,11 @@ The stack box on each pull request links the layers in landing order. Review the
 individual layer diff as usual. A closed but unmerged predecessor does not satisfy
 the stack's landing order.
 
+The repository's pull request list shows each open stack as one expandable row
+listing the layers that match the current filters. Rows expand by default while a
+filter or search is active. Choose **Flat** to list every pull request with a
+stack badge instead; the choice is remembered per user.
+
 Append additional pull requests whose bases continue the chain. To restructure
 an open stack, unstack it, adjust the ordinary branches and pull request bases,
 then adopt the resulting chain. Unstacking preserves branches, pull requests and

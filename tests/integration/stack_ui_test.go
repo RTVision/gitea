@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
@@ -19,7 +20,9 @@ import (
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
 	pull_service "gitea.dev/services/pull"
+	"gitea.dev/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,4 +51,37 @@ func TestNativeStackUpdateBranchButton(t *testing.T) {
 			assert.NotContains(t, body, "/update?style=rebase", mode)
 		}
 	})
+}
+
+func TestPullListGroupsStacks(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	session := loginUser(t, "user2")
+	testPullCreate(t, session, "user2", "repo1", false, "master", "DefaultBranch", "unstacked pull")
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "master", Mode: issues_model.StackModeMerge, State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(t.Context(), stack))
+	for i, pullID := range []int64{1, 2, 5} { // fixture pulls #2 (merged), #3 and #5
+		require.NoError(t, db.Insert(t.Context(), &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pullID, Position: i + 1}))
+	}
+	stackLink := fmt.Sprintf(`a[href="/user2/repo1/pulls/stacks/%d"]`, stack.ID)
+	list := func(query string) *HTMLDoc {
+		return NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, "/user2/repo1/pulls"+query), http.StatusOK).Body)
+	}
+
+	doc := list("")
+	assert.Equal(t, 2, doc.Find("#issue-list > .item").Length())
+	stackRow := doc.Find("#issue-list > .item:has(details)")
+	assert.Contains(t, stackRow.Find(".item-header").First().Text(), "issue3") // lowest open layer; #2 has merged
+	assert.Contains(t, stackRow.Find(".item-body "+stackLink).First().Text(), "3 layers")
+	assert.Equal(t, 3, stackRow.Find("details:not([open]) .index").Length())
+	assert.Equal(t, "4 Open", strings.Join(strings.Fields(doc.Find(".small-menu-items .item").First().Text()), " ")) // counts individual pulls
+
+	doc = list("?view=flat")
+	assert.Equal(t, 4, doc.Find("#issue-list > .item").Length())
+	assert.Equal(t, 3, doc.Find("#issue-list > .item "+stackLink).Length())
+	assert.Equal(t, 4, list("").Find("#issue-list > .item").Length(), "flat view is remembered")
+
+	doc = list("?view=grouped&milestone=3")
+	assert.Equal(t, 1, doc.Find("#issue-list > .item").Length())
+	layers := doc.Find("#issue-list details[open] .index")
+	assert.Equal(t, []string{"#3"}, layers.Map(func(_ int, s *goquery.Selection) string { return strings.TrimSpace(s.Text()) }))
 }
