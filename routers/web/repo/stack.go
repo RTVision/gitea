@@ -38,11 +38,6 @@ type pullStackEntryData struct {
 	Readiness string
 }
 
-type pullStackInsertCandidate struct {
-	Pull  *issues_model.PullRequest
-	After *issues_model.PullRequest // nil when the candidate targets the trunk
-}
-
 type pullStackData struct {
 	Stack         *issues_model.PullRequestStack
 	Entries       []*pullStackEntryData
@@ -201,36 +196,15 @@ func PullStack(ctx *context.Context) {
 	canManage := canManagePullStack(ctx)
 	ctx.Data["CanManageStack"] = canManage
 	if canManage && setting.Repository.PullRequest.EnableStacks && stack.State == issues_model.StackStateOpen && stack.ActiveOperationID == 0 {
-		candidates, err := pullStackInsertCandidates(ctx, data)
+		candidates, err := pull_service.StackInsertCandidates(ctx, stack, 50)
 		if err != nil {
-			ctx.ServerError("pullStackInsertCandidates", err)
+			ctx.ServerError("StackInsertCandidates", err)
 			return
 		}
 		ctx.Data["CanInsertStack"] = true
 		ctx.Data["InsertCandidates"] = candidates
 	}
 	ctx.HTML(http.StatusOK, tplPullStack)
-}
-
-// pullStackInsertCandidates lists unclaimed pull requests based on the trunk or an open layer's branch.
-func pullStackInsertCandidates(ctx *context.Context, data *pullStackData) ([]*pullStackInsertCandidate, error) {
-	pulls, err := issues_model.FindStackCandidatePulls(ctx, ctx.Repo.Repository.ID)
-	if err != nil {
-		return nil, err
-	}
-	anchors := map[string]*issues_model.PullRequest{data.Stack.TrunkBranch: nil}
-	for _, entry := range data.Entries {
-		if !entry.Pull.HasMerged {
-			anchors[entry.Pull.HeadBranch] = entry.Pull
-		}
-	}
-	candidates := make([]*pullStackInsertCandidate, 0, len(pulls))
-	for _, pr := range pulls {
-		if after, ok := anchors[pr.BaseBranch]; ok {
-			candidates = append(candidates, &pullStackInsertCandidate{Pull: pr, After: after})
-		}
-	}
-	return candidates, nil
 }
 
 func pullStackNumbers(ctx *context.Context) ([]int64, error) {

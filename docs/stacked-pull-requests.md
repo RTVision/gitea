@@ -54,9 +54,15 @@ Append additional pull requests whose bases continue the chain. To add a layer
 in the middle, branch from the layer below, open a pull request targeting that
 layer's branch, and choose **Insert pull request** on the stack page. It goes
 directly above the branch it targets, or at the bottom when it targets the
-trunk; the layer that was there is retargeted onto it. The stack keeps its number
-and history. In rebase mode, first rebase the layer above onto the new branch.
-In merge mode, **Update stack** then merges the new layer into the layers above.
+trunk; the layer that was there is retargeted onto it. The stack page offers
+pull requests on the trunk only when they share commits with the bottom layer.
+The stack keeps its number and history. In merge mode, **Update stack** then
+merges the new layer into the layers above. In rebase mode, every layer above
+must already contain the new layer: restack them onto it locally (for example
+with `git rebase --update-refs`), push them, insert, then synchronize the stack.
+The insert records a new parent boundary only for the layer directly above;
+higher layers keep their old boundaries, which a server rebase would replay
+from, until the synchronization.
 
 For other restructures, unstack the stack, adjust the ordinary branches and pull
 request bases, then adopt the resulting chain. Unstacking preserves branches,

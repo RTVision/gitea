@@ -150,11 +150,13 @@ func TestStackInsertLayer(t *testing.T) {
 	}
 	run("init", "--initial-branch=release")
 	run("commit", "--allow-empty", "-m", "trunk")
-	branch("branch2", "release")
+	branch("under", "release")
+	branch("branch2", "under")
 	branch("pr-to-update", "branch2")
 	branch("upper", "pr-to-update")
 	branch("inserted", "pr-to-update")
 	branch("bottom", "release")
+	branch("fresh", "release")
 	bare := gitrepo.RepoLocalPath(repo)
 	require.NoError(t, os.MkdirAll(filepath.Dir(bare), 0o755))
 	run("clone", "--bare", work, bare)
@@ -170,10 +172,11 @@ func TestStackInsertLayer(t *testing.T) {
 	upper := newPull("upper", "pr-to-update")
 	inserted := newPull("inserted", "pr-to-update")
 	bottom := newPull("bottom", "release")
+	under := newPull("under", "release")
 	for _, pr := range []*issues_model.PullRequest{lower, upper} { // retargeted layers
 		bareRun("update-ref", pr.GetGitHeadRefName(), "refs/heads/"+pr.HeadBranch)
 	}
-	for _, name := range []string{"inserted", "bottom"} { // retarget destinations
+	for _, name := range []string{"inserted", "bottom", "fresh"} { // retarget destinations
 		require.NoError(t, db.Insert(ctx, &git_model.Branch{RepoID: repo.ID, Name: name, CommitID: bareRun("rev-parse", name), PusherID: owner.ID}))
 	}
 	chain := []int64{2, 5, upper.ID}
@@ -183,10 +186,33 @@ func TestStackInsertLayer(t *testing.T) {
 	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
 	require.ErrorIs(t, err, issues_model.ErrInvalidStack)
 	assert.ErrorContains(t, err, fmt.Sprintf("#%d must contain the current head of #%d (inserted); rebase upper onto it first", upper.Index, inserted.Index))
-	require.NoError(t, Unstack(ctx, owner, stack.ID, 1))
+	originalUpper := bareRun("rev-parse", "upper")
+	run("rebase", "--onto", "inserted", "pr-to-update", "upper")
+	run("push", "-f", bare, "upper")
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
+	require.NoError(t, err)
+	expect := func(id int64, head, parent string) StackHeadExpectation {
+		return StackHeadExpectation{PullRequestID: id, HeadSHA: bareRun("rev-parse", head), ParentSHA: bareRun("rev-parse", parent)}
+	}
+	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, []StackHeadExpectation{expect(2, "branch2", "release"), expect(5, "pr-to-update", "branch2"), expect(inserted.ID, "inserted", "pr-to-update"), expect(upper.ID, "upper", "inserted")})
+	require.NoError(t, err, "layers restacked before the insert synchronize afterwards")
+	require.NoError(t, Unstack(ctx, owner, stack.ID, 3))
+	run("push", "-f", bare, originalUpper+":refs/heads/upper")
+	_, err = db.GetEngine(ctx).ID(upper.ID).Cols("base_branch").Update(&issues_model.PullRequest{BaseBranch: "pr-to-update"})
+	require.NoError(t, err)
 
 	stack, err = CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", Mode: issues_model.StackModeMerge, PullRequestIDs: chain})
 	require.NoError(t, err)
+	candidates, err := StackInsertCandidates(ctx, stack, 0)
+	require.NoError(t, err)
+	offered := map[int64]int64{}
+	for _, candidate := range candidates {
+		offered[candidate.Pull.ID] = 0
+		if candidate.After != nil {
+			offered[candidate.Pull.ID] = candidate.After.ID
+		}
+	}
+	assert.Equal(t, map[int64]int64{under.ID: 0, inserted.ID: 5}, offered, "a trunk pull request unrelated to the bottom layer isn't offered")
 	_, err = InsertStackLayer(ctx, owner, stack.ID, 0, inserted.ID)
 	require.ErrorIs(t, err, issues_model.ErrStackRevision)
 	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, upper.ID)
@@ -225,9 +251,16 @@ func TestStackInsertLayer(t *testing.T) {
 	assertChain(bottom.ID, 2, 5, inserted.ID, upper.ID)
 	assert.Equal(t, "bottom", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).BaseBranch)
 
+	// A bottom layer whose base still names a landed branch is retargeted by position.
+	_, err = db.GetEngine(ctx).ID(bottom.ID).Cols("has_merged").Update(&issues_model.PullRequest{HasMerged: true})
+	require.NoError(t, err)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 3, newPull("fresh", "release").ID)
+	require.NoError(t, err)
+	assert.Equal(t, "fresh", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).BaseBranch)
+
 	_, err = db.GetEngine(ctx).ID(5).Cols("has_merged").Update(&issues_model.PullRequest{HasMerged: true})
 	require.NoError(t, err)
-	_, err = InsertStackLayer(ctx, owner, stack.ID, 3, newPull("late", "branch2").ID)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 4, newPull("late", "branch2").ID)
 	require.ErrorContains(t, err, "would be placed below landed pull request")
 }
 
