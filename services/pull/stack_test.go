@@ -162,6 +162,12 @@ func TestSuggestStackChain(t *testing.T) {
 	chain, trunk = SuggestStackChain(candidates, 99, "main")
 	assert.Empty(t, chain)
 	assert.Empty(t, trunk)
+	duplicate := &issues_model.PullRequest{ID: 7, Index: 16, HeadBranch: "lower", BaseBranch: "main"}
+	chain, trunk = SuggestStackChain(append(candidates, duplicate), 13, "main")
+	assert.Equal(t, []*issues_model.PullRequest{middle, upper}, chain, "an ambiguous head branch ends the chain")
+	assert.Equal(t, "lower", trunk)
+	chain, _ = SuggestStackChain(append(candidates, duplicate), 11, "main")
+	assert.Empty(t, chain, "a top pull request sharing its head branch is not suggested")
 	cycle := &issues_model.PullRequest{ID: 6, Index: 15, HeadBranch: "main", BaseBranch: "upper"}
 	chain, trunk = SuggestStackChain(append(candidates, cycle), 13, "")
 	assert.Equal(t, []*issues_model.PullRequest{release, lower, middle, upper}, chain, "a branch cycle stops before repeating a layer")
