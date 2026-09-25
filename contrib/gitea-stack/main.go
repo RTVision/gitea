@@ -695,9 +695,9 @@ func throughIndex(state *localstate.State, value string) (int, error) {
 	return index + 1, err
 }
 
-func (a *application) pushLayers(ctx context.Context, state *localstate.State, through int) error {
+func (a *application) pushLayers(ctx context.Context, state *localstate.State, through int, beforePublish func() error) error {
 	if state.Mode == api.StackModeMerge {
-		return a.pushMergeLayers(ctx, state, through)
+		return a.pushMergeLayers(ctx, state, through, beforePublish)
 	}
 	for i := range through {
 		layer := &state.Layers[i]
@@ -736,8 +736,31 @@ func (a *application) pushLayers(ctx context.Context, state *localstate.State, t
 	return nil
 }
 
+// mergeLayerParents maps each open layer to the parent head it contains, which merge-mode sync records instead of a replay boundary.
+func (a *application) mergeLayerParents(state *localstate.State) (map[int]string, error) {
+	parent, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk)
+	if err != nil {
+		return nil, fail(3, "precondition", "fetch the trunk with sync before pushing: %v", err)
+	}
+	parents := make(map[int]string, len(state.Layers))
+	for i, layer := range state.Layers {
+		if layer.LandedSHA != "" {
+			continue
+		}
+		head, err := a.repo.Head(layer.Branch)
+		if err != nil {
+			return nil, err
+		}
+		if a.repo.IsAncestor(parent, head) != nil {
+			return nil, fail(3, "precondition", "%s does not contain its parent head %s; run restack before pushing", layer.Branch, short(parent))
+		}
+		parents[i], parent = parent, head
+	}
+	return parents, nil
+}
+
 // pushMergeLayers publishes fast-forwards only, checking every layer before pushing any and leasing each on the checked remote head.
-func (a *application) pushMergeLayers(ctx context.Context, state *localstate.State, through int) error {
+func (a *application) pushMergeLayers(ctx context.Context, state *localstate.State, through int, beforePublish func() error) error {
 	type update struct {
 		layer            *localstate.Layer
 		head, remoteHead string
@@ -763,6 +786,11 @@ func (a *application) pushMergeLayers(ctx context.Context, state *localstate.Sta
 			return fail(6, "non_fast_forward", "remote branch %s has commits missing locally (%s); run sync and merge them before pushing", layer.Branch, short(remoteHead))
 		}
 		updates = append(updates, update{layer: layer, head: head, remoteHead: remoteHead})
+	}
+	if beforePublish != nil {
+		if err := beforePublish(); err != nil {
+			return err
+		}
 	}
 	for _, update := range updates {
 		a.progress("pushing %s", update.layer.Branch)
@@ -803,6 +831,8 @@ func (a *application) push(ctx context.Context, args []string) error {
 	}
 	var client *stackclient.Client
 	var server *api.PullRequestStack
+	var mergeParents map[int]string
+	var checkParents func() error
 	if stackNumber != 0 {
 		client, err = a.client(state)
 		if err != nil {
@@ -826,6 +856,12 @@ func (a *application) push(ctx context.Context, args []string) error {
 				return fail(3, "precondition", "a submitted stack push must include every open layer so server boundaries stay complete")
 			}
 		}
+		if state.Mode == api.StackModeMerge {
+			checkParents = func() (err error) {
+				mergeParents, err = a.mergeLayerParents(state)
+				return err
+			}
+		}
 	} else if slices.ContainsFunc(state.Layers[:through], func(layer localstate.Layer) bool { return layer.PullRequest != 0 }) {
 		unbound, err := a.client(state)
 		if err != nil {
@@ -835,17 +871,11 @@ func (a *application) push(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	if err := a.pushLayers(ctx, state, through); err != nil {
+	if err := a.pushLayers(ctx, state, through, checkParents); err != nil {
 		return err
 	}
 	if client != nil {
 		heads := make([]api.PullRequestStackHead, 0, len(state.Layers))
-		parentHead := ""
-		if state.Mode == api.StackModeMerge {
-			if parentHead, err = a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk); err != nil {
-				return fail(3, "precondition", "fetch the trunk with sync before pushing: %v", err)
-			}
-		}
 		for i := range state.Layers {
 			layer := &state.Layers[i]
 			if layer.LandedSHA != "" {
@@ -858,8 +888,8 @@ func (a *application) push(ctx context.Context, args []string) error {
 			if err != nil {
 				return err
 			}
-			if parentHead != "" { // merge mode records the parent head each layer contains, not a replay boundary
-				layer.ParentSHA, parentHead = parentHead, head
+			if parent, ok := mergeParents[i]; ok {
+				layer.ParentSHA = parent
 			}
 			heads = append(heads, api.PullRequestStackHead{PullRequest: layer.PullRequest, HeadSHA: head, ParentSHA: layer.ParentSHA})
 		}
@@ -931,7 +961,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 	} else if err := a.checkPullStackModes(ctx, client, state, through); err != nil {
 		return err
 	}
-	if err := a.pushLayers(ctx, state, through); err != nil {
+	if err := a.pushLayers(ctx, state, through, nil); err != nil {
 		return err
 	}
 	for i := range through {

@@ -216,7 +216,7 @@ func TestSyncRemoteLeaseContentSafety(t *testing.T) {
 			assert.Equal(t, local, trimLine(runGit(t, work, "rev-parse", "feature")), "sync preserves unpublished local commits")
 			if scenario != "topology-only" {
 				assert.Equal(t, accepted, state.Layers[0].RemoteSHA)
-				err := app.pushLayers(t.Context(), state, 1)
+				err := app.pushLayers(t.Context(), state, 1, nil)
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "remote branch feature moved")
 				assert.Equal(t, serverHead, trimLine(runGit(t, remote, "rev-parse", "feature")))
@@ -231,7 +231,7 @@ func TestSyncRemoteLeaseContentSafety(t *testing.T) {
 			require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
 			state, err = store.Load()
 			require.NoError(t, err)
-			require.NoError(t, app.pushLayers(t.Context(), state, 1))
+			require.NoError(t, app.pushLayers(t.Context(), state, 1, nil))
 			assert.Equal(t, "unpublished\n", runGit(t, remote, "show", "feature:local.txt"))
 			assert.Equal(t, "feature\n", runGit(t, remote, "show", "feature:feature.txt"))
 			assert.Equal(t, "parent\n", runGit(t, remote, "show", "feature:parent.txt"))
@@ -671,6 +671,8 @@ func TestMergeModePushAndSyncNeverRewrite(t *testing.T) {
 	assert.FileExists(t, filepath.Join(work, "other"))
 	assert.Equal(t, localLower, gitLine(t, work, "rev-parse", "layer-1"))
 
+	requireCommandError(t, app.push(t.Context(), nil), 3, "precondition")
+	assert.Equal(t, lower, gitLine(t, remote, "rev-parse", "layer-1"), "nothing is pushed while a layer lacks its parent head")
 	require.NoError(t, app.restack(t.Context(), []string{"--no-sign"}))
 	require.NoError(t, app.push(t.Context(), nil))
 	upperMerge := gitLine(t, work, "rev-parse", "layer-2")
