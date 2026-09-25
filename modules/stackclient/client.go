@@ -232,6 +232,13 @@ func (c *Client) AppendStack(ctx context.Context, number, revision int64, pullRe
 	return result, err
 }
 
+// InsertLayer inserts a pull request above the stack layer its base branch names.
+func (c *Client) InsertLayer(ctx context.Context, number, revision, pullRequest int64) (*api.PullRequestStack, error) {
+	result := new(api.PullRequestStack)
+	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks/"+strconv.FormatInt(number, 10)+"/insert"), &api.InsertPullRequestStackOption{Revision: revision, PullRequest: pullRequest}, result)
+	return result, err
+}
+
 func (c *Client) SynchronizeStack(ctx context.Context, number, revision int64, heads []api.PullRequestStackHead) (*api.PullRequestStack, error) {
 	result := new(api.PullRequestStack)
 	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks/"+strconv.FormatInt(number, 10)+"/sync"), &api.SynchronizePullRequestStackOption{Revision: revision, Heads: heads}, result)

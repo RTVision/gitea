@@ -7314,6 +7314,25 @@
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
       },
+      "InsertPullRequestStackOption": {
+        "properties": {
+          "pull_request": {
+            "description": "The pull request number to insert; its base branch must be the trunk or an open layer's branch",
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "PullRequest"
+          },
+          "revision": {
+            "description": "The expected stack revision",
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "Revision"
+          }
+        },
+        "title": "InsertPullRequestStackOption inserts a pull request above the stack layer its base branch names.",
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
       "InternalTracker": {
         "description": "InternalTracker represents settings for internal tracker",
         "properties": {
@@ -32889,6 +32908,67 @@
           }
         },
         "summary": "Append pull requests to a stack",
+        "tags": [
+          "repository"
+        ]
+      }
+    },
+    "/repos/{owner}/{repo}/stacks/{id}/insert": {
+      "post": {
+        "operationId": "repoInsertPullRequestStack",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "owner",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsertPullRequestStackOption"
+              }
+            }
+          },
+          "required": true,
+          "x-originalParamName": "body"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PullRequestStack"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/StackRevisionConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          }
+        },
+        "summary": "Insert a pull request into a stack above the layer its base branch names, retargeting the layer above it",
         "tags": [
           "repository"
         ]

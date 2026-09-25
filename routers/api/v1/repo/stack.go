@@ -107,7 +107,7 @@ func StackCapabilities(ctx *context.APIContext) {
 	}
 	ctx.JSON(http.StatusOK, &api.PullRequestStackCapabilities{
 		Enabled:         setting.Repository.PullRequest.EnableStacks,
-		Operations:      []string{"land", "rebase", "update"},
+		Operations:      []string{"land", "rebase", "update", "insert"},
 		Modes:           modes,
 		MergeStyles:     styles[issues_model.StackModeRebase],
 		ModeMergeStyles: styles,
@@ -284,6 +284,61 @@ func AppendPullRequestStack(ctx *context.APIContext) {
 	}
 	stackID := stack.ID
 	stack, err := pull_service.AppendStack(ctx, ctx.Doer, stackID, form.Revision, pullIDs)
+	if err != nil {
+		stackServiceError(ctx, stackID, err)
+		return
+	}
+	writeAPIStack(ctx, http.StatusOK, stack)
+}
+
+// InsertPullRequestStack inserts a pull request into a stack above the layer its base branch names.
+func InsertPullRequestStack(ctx *context.APIContext) {
+	// swagger:operation POST /repos/{owner}/{repo}/stacks/{id}/insert repository repoInsertPullRequestStack
+	// ---
+	// summary: Insert a pull request into a stack above the layer its base branch names, retargeting the layer above it
+	// consumes:
+	// - application/json
+	// produces:
+	// - application/json
+	// parameters:
+	// - name: owner
+	//   in: path
+	//   required: true
+	//   type: string
+	// - name: repo
+	//   in: path
+	//   required: true
+	//   type: string
+	// - name: id
+	//   in: path
+	//   required: true
+	//   type: integer
+	//   format: int64
+	// - name: body
+	//   in: body
+	//   required: true
+	//   schema:
+	//     "$ref": "#/definitions/InsertPullRequestStackOption"
+	// responses:
+	//   "200":
+	//     "$ref": "#/responses/PullRequestStack"
+	//   "404":
+	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/StackRevisionConflict"
+	//   "422":
+	//     "$ref": "#/responses/validationError"
+	stack := getRepositoryStack(ctx)
+	if stack == nil {
+		return
+	}
+	form := web.GetForm[*api.InsertPullRequestStackOption](ctx)
+	pullIDs, ok := resolveStackPullRequestIDs(ctx, []int64{form.PullRequest})
+	if !ok {
+		return
+	}
+	stackID := stack.ID
+	stack, err := pull_service.InsertStackLayer(ctx, ctx.Doer, stackID, form.Revision, pullIDs[0])
 	if err != nil {
 		stackServiceError(ctx, stackID, err)
 		return

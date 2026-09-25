@@ -5,6 +5,7 @@ package pull
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
@@ -131,6 +133,135 @@ func TestStackLifecycle(t *testing.T) {
 	membership, err = issues_model.GetPullRequestStack(ctx, 5)
 	require.NoError(t, err)
 	assert.Nil(t, membership)
+}
+
+func TestStackInsertLayer(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	defer test.MockVariableValue(&setting.Repository.PullRequest.EnableStacks, true)()
+	defer test.MockVariableValue(&setting.RepoRootPath, t.TempDir())()
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	work := t.TempDir()
+	run := stackTestGit(t, work)
+	branch := func(name, from string) {
+		run("checkout", "-b", name, from)
+		run("commit", "--allow-empty", "-m", name)
+	}
+	run("init", "--initial-branch=release")
+	run("commit", "--allow-empty", "-m", "trunk")
+	branch("under", "release")
+	branch("branch2", "under")
+	branch("pr-to-update", "branch2")
+	branch("upper", "pr-to-update")
+	branch("inserted", "pr-to-update")
+	branch("bottom", "release")
+	branch("fresh", "release")
+	bare := gitrepo.RepoLocalPath(repo)
+	require.NoError(t, os.MkdirAll(filepath.Dir(bare), 0o755))
+	run("clone", "--bare", work, bare)
+	bareRun := stackTestGit(t, bare)
+	newPull := func(head, base string) *issues_model.PullRequest {
+		pr := &issues_model.PullRequest{HeadRepoID: repo.ID, BaseRepoID: repo.ID, HeadBranch: head, BaseBranch: base}
+		require.NoError(t, issues_model.NewPullRequest(ctx, repo, &issues_model.Issue{RepoID: repo.ID, PosterID: owner.ID, Poster: owner, Title: head}, nil, nil, pr))
+		return pr
+	}
+	_, err := db.GetEngine(ctx).ID(2).Cols("base_branch").Update(&issues_model.PullRequest{BaseBranch: "release"})
+	require.NoError(t, err)
+	lower := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	upper := newPull("upper", "pr-to-update")
+	inserted := newPull("inserted", "pr-to-update")
+	bottom := newPull("bottom", "release")
+	under := newPull("under", "release")
+	for _, pr := range []*issues_model.PullRequest{lower, upper} { // retargeted layers
+		bareRun("update-ref", pr.GetGitHeadRefName(), "refs/heads/"+pr.HeadBranch)
+	}
+	for _, name := range []string{"inserted", "bottom", "fresh"} { // retarget destinations
+		require.NoError(t, db.Insert(ctx, &git_model.Branch{RepoID: repo.ID, Name: name, CommitID: bareRun("rev-parse", name), PusherID: owner.ID}))
+	}
+	chain := []int64{2, 5, upper.ID}
+
+	stack, err := CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", PullRequestIDs: chain})
+	require.NoError(t, err)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
+	require.ErrorIs(t, err, issues_model.ErrInvalidStack)
+	assert.ErrorContains(t, err, fmt.Sprintf("#%d must contain the current head of #%d (inserted); rebase upper onto it first", upper.Index, inserted.Index))
+	originalUpper := bareRun("rev-parse", "upper")
+	run("rebase", "--onto", "inserted", "pr-to-update", "upper")
+	run("push", "-f", bare, "upper")
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
+	require.NoError(t, err)
+	expect := func(id int64, head, parent string) StackHeadExpectation {
+		return StackHeadExpectation{PullRequestID: id, HeadSHA: bareRun("rev-parse", head), ParentSHA: bareRun("rev-parse", parent)}
+	}
+	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, []StackHeadExpectation{expect(2, "branch2", "release"), expect(5, "pr-to-update", "branch2"), expect(inserted.ID, "inserted", "pr-to-update"), expect(upper.ID, "upper", "inserted")})
+	require.NoError(t, err, "layers restacked before the insert synchronize afterwards")
+	require.NoError(t, Unstack(ctx, owner, stack.ID, 3))
+	run("push", "-f", bare, originalUpper+":refs/heads/upper")
+	_, err = db.GetEngine(ctx).ID(upper.ID).Cols("base_branch").Update(&issues_model.PullRequest{BaseBranch: "pr-to-update"})
+	require.NoError(t, err)
+
+	stack, err = CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", Mode: issues_model.StackModeMerge, PullRequestIDs: chain})
+	require.NoError(t, err)
+	candidates, err := StackInsertCandidates(ctx, stack, 0)
+	require.NoError(t, err)
+	offered := map[int64]int64{}
+	for _, candidate := range candidates {
+		offered[candidate.Pull.ID] = 0
+		if candidate.After != nil {
+			offered[candidate.Pull.ID] = candidate.After.ID
+		}
+	}
+	assert.Equal(t, map[int64]int64{under.ID: 0, inserted.ID: 5}, offered, "a trunk pull request unrelated to the bottom layer isn't offered")
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 0, inserted.ID)
+	require.ErrorIs(t, err, issues_model.ErrStackRevision)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, upper.ID)
+	require.ErrorContains(t, err, "already belongs to stack")
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, newPull("stray", "elsewhere").ID)
+	require.ErrorContains(t, err, "must target release or the branch of an open layer")
+	_, err = db.GetEngine(ctx).ID(stack.ID).Cols("active_operation_id").Update(&issues_model.PullRequestStack{ActiveOperationID: 1})
+	require.NoError(t, err)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
+	require.ErrorIs(t, err, issues_model.ErrStackRevision)
+	_, err = db.GetEngine(ctx).ID(stack.ID).Cols("active_operation_id").Update(&issues_model.PullRequestStack{})
+	require.NoError(t, err)
+
+	assertChain := func(pullIDs ...int64) {
+		t.Helper()
+		entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+		require.NoError(t, err)
+		require.Len(t, entries, len(pullIDs))
+		for i, entry := range entries {
+			assert.Equal(t, i+1, entry.Position)
+			assert.Equal(t, pullIDs[i], entry.PullRequestID)
+			if i > 0 {
+				assert.Equal(t, pullIDs[i-1], entry.ParentPullRequestID)
+			}
+		}
+	}
+	inserted2, err := InsertStackLayer(ctx, owner, stack.ID, 1, inserted.ID)
+	require.NoError(t, err)
+	assert.Equal(t, stack.ID, inserted2.ID)
+	assert.EqualValues(t, 2, inserted2.Revision)
+	assertChain(2, 5, inserted.ID, upper.ID)
+	assert.Equal(t, "inserted", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID}).BaseBranch, "a merge-mode layer may be behind the inserted parent")
+
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 2, bottom.ID)
+	require.NoError(t, err)
+	assertChain(bottom.ID, 2, 5, inserted.ID, upper.ID)
+	assert.Equal(t, "bottom", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).BaseBranch)
+
+	// A bottom layer whose base still names a landed branch is retargeted by position.
+	_, err = db.GetEngine(ctx).ID(bottom.ID).Cols("has_merged").Update(&issues_model.PullRequest{HasMerged: true})
+	require.NoError(t, err)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 3, newPull("fresh", "release").ID)
+	require.NoError(t, err)
+	assert.Equal(t, "fresh", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).BaseBranch)
+
+	_, err = db.GetEngine(ctx).ID(5).Cols("has_merged").Update(&issues_model.PullRequest{HasMerged: true})
+	require.NoError(t, err)
+	_, err = InsertStackLayer(ctx, owner, stack.ID, 4, newPull("late", "branch2").ID)
+	require.ErrorContains(t, err, "would be placed below landed pull request")
 }
 
 type stackSyncCollector struct {

@@ -1566,6 +1566,7 @@ func Routes() *web.Router {
 						m.Combo("").Get(repo.GetPullRequestStack).
 							Patch(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.EditPullRequestStackOption{}), repo.AppendPullRequestStack).
 							Delete(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackRevisionOption{}), repo.DeletePullRequestStack)
+						m.Post("/insert", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.InsertPullRequestStackOption{}), repo.InsertPullRequestStack)
 						m.Post("/rebase", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.RebasePullRequestStack)
 						m.Post("/update", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.UpdatePullRequestStack)
 						m.Post("/land", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.LandPullRequestStack)

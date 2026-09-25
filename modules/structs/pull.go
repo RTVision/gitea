@@ -250,6 +250,14 @@ type EditPullRequestStackOption struct {
 	PullRequests []int64 `json:"pull_requests" binding:"Required"`
 }
 
+// InsertPullRequestStackOption inserts a pull request above the stack layer its base branch names.
+type InsertPullRequestStackOption struct {
+	// The expected stack revision
+	Revision int64 `json:"revision" binding:"Required"`
+	// The pull request number to insert; its base branch must be the trunk or an open layer's branch
+	PullRequest int64 `json:"pull_request" binding:"Required"`
+}
+
 // PullRequestStackRevisionOption identifies an expected stack revision.
 type PullRequestStackRevisionOption struct {
 	// The expected stack revision

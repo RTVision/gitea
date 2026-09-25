@@ -28,6 +28,23 @@
 				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/{{if $merge}}update{{else}}rebase{{end}}"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_update"}}</h3>
 					<p class="help">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge_desc"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_update_rebase_desc"}}{{end}}</p>
 					<button type="submit" class="ui button">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebase"}}{{end}}</button></form>
+				{{if .CanInsertStack}}<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/insert" data-global-init="initRepoStackInsert"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_insert"}}</h3>
+					{{if .InsertCandidates}}<div class="field"><label for="stack-insert">{{ctx.Locale.Tr "repo.pulls.stack_insert_pull"}}</label>
+						<div class="ui search selection dropdown">
+							<input type="hidden" name="pull">
+							<input id="stack-insert" class="search" autocomplete="off">
+							<div class="default text">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</div>
+							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+							<div class="menu">
+								{{range .InsertCandidates}}<div class="item" data-value="{{.Pull.Index}}" data-text="#{{.Pull.Index}} {{.Pull.Issue.Title}} ({{.Pull.HeadBranch}} → {{.Pull.BaseBranch}})">
+									<div class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</div>
+									<div class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</div>
+								</div>{{end}}
+							</div>
+						</div>
+					</div>
+					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_insert_desc"}}</p>
+					<button type="submit" class="ui button" disabled>{{ctx.Locale.Tr "repo.pulls.stack_insert"}}</button>{{else}}<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_insert_none"}}</p>{{end}}</form>{{end}}
 				<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/unstack"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><button type="submit" class="ui basic red button">{{ctx.Locale.Tr "repo.pulls.unstack"}}</button></form>
 				{{end}}
 			</div>
