@@ -1,12 +1,11 @@
 import {GET} from '../modules/fetch.ts';
 import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {registerGlobalInitFunc} from '../modules/observer.ts';
-import {hideElem, toggleElem, toggleElemClass} from '../utils/dom.ts';
+import {toggleElem, toggleElemClass} from '../utils/dom.ts';
 
 export function initRepoStackNew() {
   registerGlobalInitFunc('initRepoStackNew', (form: HTMLFormElement) => {
     const findChain = form.querySelector<HTMLButtonElement>('.stack-new-find')!;
-    hideElem(findChain); // only needed without JS
     form.querySelector('input[name="pull"]')!.addEventListener('change', () => {
       form.querySelector('.stack-new-layers')!.classList.add('is-loading');
       form.requestSubmit(findChain);
@@ -19,6 +18,8 @@ export function initRepoStackNew() {
       const joined = layers.slice(start);
       for (const [i, layer] of layers.entries()) toggleElemClass(layer.querySelector('.checkbox')!, 'tw-opacity-50', i < start);
       form.querySelector('.stack-new-trunk')!.textContent = layers[start].getAttribute('data-base');
+      const buildsOn = form.querySelector('.stack-new-builds-on');
+      if (buildsOn) toggleElem(buildsOn, start === 0); // only the bottom layer's base can be another stack's layer
       rebase.disabled = joined.some((layer) => layer.hasAttribute('data-rebase-blocked'));
       if (rebase.disabled && rebase.checked) merge.checked = true;
       toggleElem(form.querySelector('.stack-new-rebase-blocked')!, rebase.disabled);

@@ -11,18 +11,15 @@
 					<div class="ui search selection dropdown ellipsis-text-items tw-flex-1 tw-min-w-0">
 						<input type="hidden" name="pull" value="{{if .TopPull}}{{.TopPull.Index}}{{end}}">
 						<input id="stack-top" type="text" class="search" autocomplete="off">
-						<div class="{{if not .TopPull}}default {{end}}text">{{with .TopPull}}#{{.Index}} {{.Issue.Title}} ({{.HeadBranch}} → {{.BaseBranch}}){{else}}{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}{{end}}</div>
+						<div class="{{if not .TopPull}}default {{end}}text">{{with .TopPull}}<span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span>{{else}}{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}{{end}}</div>
 						{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 						<div class="menu">
 							{{range .Candidates}}
-								<div class="item" data-value="{{.Index}}" data-text="#{{.Index}} {{.Issue.Title}} ({{.HeadBranch}} → {{.BaseBranch}})">
-									<div class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</div>
-									<div class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</div>
-								</div>
+								<div class="item tw-flex tw-flex-col" data-value="{{.Index}}"><span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></div>
 							{{end}}
 						</div>
 					</div>
-					<button type="submit" class="ui button stack-new-find" formmethod="get">{{ctx.Locale.Tr "repo.pulls.stack_find_chain"}}</button>
+					<button type="submit" class="ui button stack-new-find tw-hidden" formmethod="get">{{ctx.Locale.Tr "repo.pulls.stack_find_chain"}}</button>
 				</div>
 				<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_top_desc"}}</p>
 			</div>
@@ -47,8 +44,7 @@
 							</div>
 						{{end}}
 					</div>
-					{{if .ChainError}}<p class="tw-text-red tw-break-anywhere">{{.ChainError}}</p>{{end}}
-					{{if .BaseLayer}}<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_builds_on" .Base .BaseLayer.Position (printf "%s/pulls/stacks/%d" $.RepoLink .BaseLayer.StackID) .BaseLayer.StackID}}</p>{{end}}
+					{{if .BaseLayer}}<p class="help stack-new-builds-on{{if ne .Start 0}} tw-hidden{{end}}">{{ctx.Locale.Tr "repo.pulls.stack_builds_on" .Base .BaseLayer.Position (printf "%s/pulls/stacks/%d" $.RepoLink .BaseLayer.StackID) .BaseLayer.StackID}}</p>{{end}}
 					<div class="flex-text-block tw-my-2">{{svg "octicon-git-merge"}}<span class="tw-break-anywhere">{{ctx.Locale.Tr "repo.pulls.stack_trunk" (HTMLFormat `<strong class="stack-new-trunk">%s</strong>` .Trunk)}}</span></div>
 					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_pulls_desc"}}</p>
 				{{else}}

@@ -81,6 +81,7 @@ func (c *StackLayerCheck) err(mode string) error {
 
 // CheckStackChain checks each layer against its parent; an empty mode checks what either mode needs.
 // retargetID names a pull request checked as if already retargeted to its chain parent.
+// On error, the checks cover the layers below the one that failed.
 func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mode string, pullIDs []int64, retargetID int64) ([]*StackLayerCheck, error) {
 	if trunk == "" || len(pullIDs) == 0 {
 		return nil, issues_model.ErrInvalidStack
@@ -102,10 +103,10 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 	for i, id := range pullIDs {
 		pr, err := issues_model.GetPullRequestByID(ctx, id)
 		if err != nil {
-			return nil, err
+			return checks[:i], err
 		}
 		if err := pr.LoadIssue(ctx); err != nil {
-			return nil, err
+			return checks[:i], err
 		}
 		if id == retargetID {
 			pr.BaseBranch = parentBranch
@@ -117,17 +118,17 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 			return checks, nil // later layers have no parent to check against
 		}
 		if scheduled, _, err := pull_model.GetScheduledMergeByPullID(ctx, id); err != nil {
-			return nil, err
+			return checks[:i], err
 		} else if scheduled {
 			check.Invalid = fmt.Errorf("%w: pull request #%d is scheduled to auto-merge", issues_model.ErrStackRevision, pr.Index)
 		}
 		headSHA, err := gitRepo.GetBranchCommitID(ctx, pr.HeadBranch)
 		if err != nil {
-			return nil, err
+			return checks[:i], err
 		}
 		boundary, err := git.MergeBase(ctx, gitRepo, parentSHA, headSHA)
 		if err != nil {
-			return nil, err
+			return checks[:i], err
 		}
 		check.Behind = boundary != parentSHA
 		if boundary == headSHA && check.Invalid == nil {
@@ -136,14 +137,14 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		if mode == "" || (mode == issues_model.StackModeRebase && !check.Behind && check.Invalid == nil) {
 			merges, _, err := gitcmd.NewCommand("rev-list", "--merges", "--max-count=1").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
 			if err != nil {
-				return nil, err
+				return checks[:i], err
 			}
 			check.HasMerges = strings.TrimSpace(merges) != ""
 		}
 		// A head shared by another open PR has ambiguous rewrite ownership.
 		count, err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").Where("pull_request.head_repo_id = ? AND pull_request.head_branch = ? AND issue.is_closed = ? AND pull_request.id <> ?", repo.ID, pr.HeadBranch, false, id).Count(new(issues_model.PullRequest))
 		if err != nil {
-			return nil, err
+			return checks[:i], err
 		}
 		if count != 0 && check.Invalid == nil {
 			check.Invalid = fmt.Errorf("%w: branch %s has multiple open pull requests", issues_model.ErrInvalidStack, pr.HeadBranch)

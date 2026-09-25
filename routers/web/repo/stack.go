@@ -16,6 +16,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
+	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/svg"
 	"gitea.dev/modules/templates"
@@ -241,14 +242,51 @@ func stackErrorMessage(err error) string {
 	return msg
 }
 
-// suggestPullStack honors the form's start layer when it is in the chain.
-func suggestPullStack(ctx *context.Context, candidates issues_model.PullRequestList) ([]*issues_model.PullRequest, int) {
+// suggestPullStack honors the form's start layer, reporting false when it isn't in the chain.
+func suggestPullStack(ctx *context.Context, candidates issues_model.PullRequestList) ([]*issues_model.PullRequest, int, bool) {
 	chain, start := pull_service.SuggestStackChain(candidates, ctx.FormInt64("pull"), ctx.Repo.Repository.DefaultBranch)
 	wanted := ctx.FormInt64("start")
-	if i := slices.IndexFunc(chain, func(pr *issues_model.PullRequest) bool { return pr.Index == wanted }); i >= 0 {
-		start = i
+	if wanted == 0 {
+		return chain, start, true
 	}
-	return chain, start
+	i := slices.IndexFunc(chain, func(pr *issues_model.PullRequest) bool { return pr.Index == wanted })
+	if i < 0 {
+		return chain, start, false
+	}
+	return chain, i, true
+}
+
+// checkPullStackLayers checks every layer as a possible start, resuming above a layer that breaks the chain.
+func checkPullStackLayers(ctx *context.Context, chain []*issues_model.PullRequest) []*pullStackNewLayer {
+	layers := make([]*pullStackNewLayer, len(chain))
+	ids := make([]int64, len(chain))
+	for i, pr := range chain {
+		layers[i], ids[i] = &pullStackNewLayer{Pull: pr}, pr.ID
+	}
+	for from := 0; from < len(chain); {
+		checks, err := pull_service.CheckStackChain(ctx, ctx.Repo.Repository, chain[from].BaseBranch, "", ids[from:], 0)
+		for i, check := range checks {
+			layer := layers[from+i]
+			layer.Behind, layer.HasMerges = check.Behind, check.HasMerges
+			if check.Invalid != nil {
+				layer.Invalid = pullStackLayerError(ctx, check.Invalid)
+			}
+		}
+		from += len(checks)
+		if err != nil {
+			layers[from].Invalid = pullStackLayerError(ctx, err)
+			from++
+		}
+	}
+	return layers
+}
+
+func pullStackLayerError(ctx *context.Context, err error) string {
+	if errors.Is(err, issues_model.ErrInvalidStack) || errors.Is(err, issues_model.ErrStackRevision) {
+		return stackErrorMessage(err)
+	}
+	log.Error("CheckStackChain: %v", err)
+	return ctx.Locale.TrString("error.occurred")
 }
 
 func PullStackNew(ctx *context.Context) {
@@ -261,29 +299,15 @@ func PullStackNew(ctx *context.Context) {
 		ctx.ServerError("FindStackCandidatePulls", err)
 		return
 	}
-	chain, start := suggestPullStack(ctx, candidates)
-	layers := make([]*pullStackNewLayer, len(chain))
-	ids := make([]int64, len(chain))
-	for i, pr := range chain {
-		layers[i], ids[i] = &pullStackNewLayer{Pull: pr}, pr.ID
-	}
+	chain, start, _ := suggestPullStack(ctx, candidates)
+	layers := checkPullStackLayers(ctx, chain)
 	rebaseBlocked, startBlocked := false, false
 	if len(chain) > 0 {
+		for _, layer := range layers[start:] {
+			rebaseBlocked = rebaseBlocked || layer.Behind || layer.HasMerges
+			startBlocked = startBlocked || layer.Invalid != ""
+		}
 		base := chain[0].BaseBranch
-		checks, err := pull_service.CheckStackChain(ctx, ctx.Repo.Repository, base, "", ids, 0)
-		if err != nil {
-			ctx.Data["ChainError"] = stackErrorMessage(err)
-		}
-		for i, check := range checks {
-			if check.Invalid != nil {
-				layers[i].Invalid = stackErrorMessage(check.Invalid)
-			}
-			layers[i].Behind, layers[i].HasMerges = check.Behind, check.HasMerges
-			if i >= start {
-				rebaseBlocked = rebaseBlocked || check.Behind || check.HasMerges
-				startBlocked = startBlocked || check.Invalid != nil
-			}
-		}
 		if base != ctx.Repo.Repository.DefaultBranch {
 			baseLayer, err := issues_model.GetOpenStackLayerByBranch(ctx, ctx.Repo.Repository.ID, base)
 			if err != nil {
@@ -309,7 +333,7 @@ func PullStackNew(ctx *context.Context) {
 	ctx.Data["Start"] = start
 	ctx.Data["Mode"] = mode
 	ctx.Data["RebaseBlocked"] = rebaseBlocked
-	ctx.Data["StartBlocked"] = startBlocked || ctx.Data["ChainError"] != nil
+	ctx.Data["StartBlocked"] = startBlocked
 	ctx.HTML(http.StatusOK, tplPullStackNew)
 }
 
@@ -323,10 +347,15 @@ func PullStackNewPost(ctx *context.Context) {
 		ctx.ServerError("FindStackCandidatePulls", err)
 		return
 	}
-	chain, start := suggestPullStack(ctx, candidates)
+	chain, start, ok := suggestPullStack(ctx, candidates)
 	if len(chain) == 0 {
 		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_no_chain"))
 		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new")
+		return
+	}
+	if !ok {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_changed"))
+		redirectPullStackNew(ctx)
 		return
 	}
 	ids := make([]int64, 0, len(chain)-start)
@@ -337,12 +366,16 @@ func PullStackNewPost(ctx *context.Context) {
 	_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: chain[start].BaseBranch, Mode: ctx.FormTrim("mode"), PullRequestIDs: ids})
 	if err != nil {
 		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_create_error", stackErrorMessage(err)))
-		query := url.Values{"pull": {ctx.FormString("pull")}, "start": {ctx.FormString("start")}, "mode": {ctx.FormString("mode")}}
-		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?" + query.Encode())
+		redirectPullStackNew(ctx)
 		return
 	}
 	ctx.Flash.Success(ctx.Tr("repo.pulls.stack_created"))
 	ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks")
+}
+
+func redirectPullStackNew(ctx *context.Context) {
+	query := url.Values{"pull": {ctx.FormString("pull")}, "start": {ctx.FormString("start")}, "mode": {ctx.FormString("mode")}}
+	ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?" + query.Encode())
 }
 
 func PullStackAction(ctx *context.Context) {

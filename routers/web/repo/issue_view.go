@@ -389,9 +389,10 @@ func ViewIssue(ctx *context.Context) {
 		if ctx.Written() {
 			return
 		}
-		canCreateStack := setting.Repository.PullRequest.EnableStacks && canManagePullStack(ctx) && ctx.Data["PullStackData"] == nil
+		stackable := !issue.IsClosed && issue.PullRequest.HeadRepoID == ctx.Repo.Repository.ID && issue.PullRequest.Flow == issues_model.PullRequestFlowGithub
+		canCreateStack := stackable && setting.Repository.PullRequest.EnableStacks && canManagePullStack(ctx) && ctx.Data["PullStackData"] == nil
 		ctx.Data["CanCreateStack"] = canCreateStack
-		if canCreateStack && !issue.IsClosed {
+		if canCreateStack {
 			baseLayer, err := issues_model.GetOpenStackLayerByBranch(ctx, ctx.Repo.Repository.ID, issue.PullRequest.BaseBranch)
 			if err != nil {
 				ctx.ServerError("GetOpenStackLayerByBranch", err)

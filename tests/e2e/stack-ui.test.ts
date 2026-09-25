@@ -1,5 +1,5 @@
 import {env} from 'node:process';
-import {expect, test} from '@playwright/test';
+import {expect, test, type Locator} from '@playwright/test';
 import {apiCreateFiles, apiCreatePR, apiCreateRepo, login, randomString} from './utils.ts';
 
 const owner = env.GITEA_TEST_E2E_USER;
@@ -7,6 +7,14 @@ const owner = env.GITEA_TEST_E2E_USER;
 test('stack pages create and render a pull request chain', async ({page, request}, testInfo) => {
   test.setTimeout(30_000);
   const repo = `e2e-stack-${randomString(8)}`;
+  const unsafeTitle = 'Unsafe <img src=x onerror="window.stackXss=1">';
+  const expectEscapedSelection = async (dropdown: Locator) => {
+    await dropdown.getByRole('combobox').pressSequentially('Unsafe');
+    await dropdown.getByRole('option', {name: /Unsafe/}).click();
+    await expect(dropdown.locator('.text')).toContainText(unsafeTitle);
+    await expect(dropdown.locator('.text img')).toHaveCount(0);
+    expect(await page.evaluate(() => 'stackXss' in window)).toBe(false);
+  };
   const createStack = (async () => {
     await apiCreateRepo(request, {name: repo});
     await apiCreateFiles(request, owner, repo, [{path: 'one.txt', content: 'one\n'}], {branch: 'main', newBranch: 'layer-one'});
@@ -18,12 +26,16 @@ test('stack pages create and render a pull request chain', async ({page, request
     const two = await apiCreatePR(request, owner, repo, 'layer-two', 'layer-one', 'Layer two');
     const three = await apiCreatePR(request, owner, repo, 'layer-three', 'layer-two', 'Layer three');
     await apiCreatePR(request, owner, repo, 'solo', 'main', 'Unstacked change');
-    return {one, two, three};
+    await apiCreateFiles(request, owner, repo, [{path: 'unsafe.txt', content: 'unsafe\n'}], {branch: 'layer-three', newBranch: 'unsafe'});
+    const unsafe = await apiCreatePR(request, owner, repo, 'unsafe', 'layer-three', unsafeTitle);
+    return {one, two, three, unsafe};
   })();
-  const [{two, three}] = await Promise.all([createStack, login(page)]);
+  const [{two, three, unsafe}] = await Promise.all([createStack, login(page)]);
   const stackURL = `/${owner}/${repo}/pulls/stacks`;
   await page.goto(`/${owner}/${repo}/pulls/${two}`);
   await page.screenshot({path: testInfo.outputPath('pull-before-stack.png'), fullPage: true});
+  await page.goto(`${stackURL}/new?pull=${unsafe}`); // reselecting it doesn't reload the page
+  await expectEscapedSelection(page.locator('.ui.dropdown', {has: page.getByLabel('Last pull request in the chain')}));
   await page.goto(`${stackURL}/new`);
   await expect(page.getByRole('button', {name: 'Create stack'})).toBeDisabled();
   await expect(page.getByRole('button', {name: 'Find chain'})).toBeHidden();
@@ -56,7 +68,9 @@ test('stack pages create and render a pull request chain', async ({page, request
   await expect(page.getByLabel('Merge method').locator('option')).toHaveText(['Create merge commit', 'Create squash commit', 'Fast-forward only']);
   await page.screenshot({path: testInfo.outputPath('stack-desktop.png'), fullPage: true});
 
-  await page.getByRole('combobox', {name: 'Pull request'}).pressSequentially('inserted');
+  const insertPicker = page.locator('.ui.dropdown', {has: page.getByRole('combobox', {name: 'Pull request'})});
+  await expectEscapedSelection(insertPicker);
+  await insertPicker.getByRole('combobox').pressSequentially('inserted');
   await expect(page.getByRole('option', {name: /Layer inserted.*inserted after #1/})).toBeVisible();
   await page.screenshot({path: testInfo.outputPath('stack-insert.png'), fullPage: true});
   await page.getByRole('option', {name: /Layer inserted/}).click();
@@ -91,6 +105,7 @@ test('stack pages create and render a pull request chain', async ({page, request
   await layers.click();
   await expect(layerTwo).not.toBeChecked(); // collapsed layers stay out of batch actions
   await unstacked.uncheck();
+  await page.getByRole('checkbox', {name: /Unsafe/}).uncheck();
   await page.screenshot({path: testInfo.outputPath('pr-list-after.png'), fullPage: true});
 
   await page.setViewportSize({width: 375, height: 812});
