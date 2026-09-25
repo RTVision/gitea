@@ -11,12 +11,10 @@
 	</div>
 	<div class="item-main">
 		<div class="item-header">
-			<div class="flex-text-inline tw-flex-wrap">
-				<a class="list-item-large-title" href="{{$root.RepoLink}}/pulls/stacks/{{$stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" $stack.ID}}</a>
-				<a class="list-item-large-title tw-font-normal" href="{{$root.Link}}/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
-			</div>
+			<a class="list-item-large-title" href="{{$root.Link}}/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
 		</div>
 		<div class="item-body">
+			<a class="flex-text-inline" href="{{$root.RepoLink}}/pulls/stacks/{{$stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" $stack.ID}}</a>
 			{{template "repo/stack/mode_label" $stack}}
 			<span>{{ctx.Locale.TrN $size "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" $size}}</span>
 			{{if $stack.Operation}}<span class="ui basic label">{{ctx.Locale.Tr "repo.pulls.stack_operation" $stack.Operation}}</span>{{end}}

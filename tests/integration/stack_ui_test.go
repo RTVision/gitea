@@ -74,7 +74,8 @@ func TestPullListGroupsStacks(t *testing.T) {
 	doc := list("")
 	assert.Equal(t, 2, doc.Find("#issue-list > .item").Length())
 	stackRow := doc.Find("#issue-list > .item:has(details)")
-	assert.Equal(t, fmt.Sprintf("Stack #%d issue3", stack.ID), strings.Join(strings.Fields(stackRow.Find(".item-header").First().Text()), " ")) // lowest open layer; #2 has merged
+	assert.Equal(t, "issue3", strings.TrimSpace(stackRow.Find(".item-header").First().Text())) // lowest open layer; #2 has merged
+	assert.Equal(t, fmt.Sprintf("Stack #%d", stack.ID), strings.TrimSpace(stackRow.Find(".item-body "+stackLink).First().Text()))
 	assert.Contains(t, stackRow.Find(".item-body").First().Text(), "Operation: blocked")
 	assert.Equal(t, 3, stackRow.Find(".stack-status-bar > span").Length())
 	assert.Equal(t, "3 of 3 layers", strings.TrimSpace(stackRow.Find("details[open] > summary").Text())) // few layers start expanded
