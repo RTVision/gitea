@@ -4,65 +4,69 @@
 	<div class="ui container">
 		{{template "base/alert" .}}
 		<h1>{{ctx.Locale.Tr "repo.pulls.new_stack"}}</h1>
-		<form class="ui form" method="get" action="{{.RepoLink}}/pulls/stacks/new" data-global-init="initRepoStackNew">
+		<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/new" data-global-init="initRepoStackNew">
 			<div class="field">
 				<label for="stack-top">{{ctx.Locale.Tr "repo.pulls.stack_top"}}</label>
 				<div class="flex-text-block">
-					<select id="stack-top" name="pull" class="tw-flex-1 tw-min-w-0">
-						<option value="">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</option>
-						{{range .Candidates}}<option value="{{.Index}}"{{if eq .Index $.Top}} selected{{end}}>#{{.Index}} {{.Issue.Title}} ({{.HeadBranch}} → {{.BaseBranch}})</option>{{end}}
-					</select>
-					<button type="submit" class="ui button">{{ctx.Locale.Tr "repo.pulls.stack_find_chain"}}</button>
+					<div class="ui search selection dropdown ellipsis-text-items tw-flex-1 tw-min-w-0">
+						<input type="hidden" name="pull" value="{{if .TopPull}}{{.TopPull.Index}}{{end}}">
+						<input id="stack-top" type="text" class="search" autocomplete="off">
+						<div class="{{if not .TopPull}}default {{end}}text">{{with .TopPull}}<span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span>{{else}}{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}{{end}}</div>
+						{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+						<div class="menu">
+							{{range .Candidates}}
+								<div class="item tw-flex tw-flex-col" data-value="{{.Index}}"><span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></div>
+							{{end}}
+						</div>
+					</div>
+					<button type="submit" class="ui button stack-new-find tw-hidden" formmethod="get">{{ctx.Locale.Tr "repo.pulls.stack_find_chain"}}</button>
 				</div>
 				<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_top_desc"}}</p>
 			</div>
-		</form>
-		<form class="ui form tw-mt-4" method="post" action="{{.RepoLink}}/pulls/stacks/new">
-			<input type="hidden" name="pull" value="{{if .Top}}{{.Top}}{{end}}">
-			<fieldset>
+			<fieldset class="stack-new-layers tw-p-0 tw-mx-0">
 				<legend>{{ctx.Locale.Tr "repo.pulls.stack_pulls"}}</legend>
-				{{if .Chain}}
-					{{range .Chain}}
-						<div class="field">
-							<div class="ui checkbox">
-								<input id="stack-pull-{{.Index}}" type="checkbox" name="pulls" value="{{.Index}}" checked>
-								<label for="stack-pull-{{.Index}}">#{{.Index}} {{.Issue.Title}} <span class="tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></label>
+				{{if .Layers}}
+					<div class="ui segments">
+						<div class="ui segment flex-text-block tw-text-text-light">{{svg "octicon-git-branch"}}<span class="tw-break-anywhere">{{.Base}}</span></div>
+						{{range $i, $layer := .Layers}}
+							<div class="ui segment stack-new-layer" data-base="{{.Pull.BaseBranch}}"{{if or .Behind .HasMerges}} data-rebase-blocked{{end}}{{if .Invalid}} data-invalid{{end}}>
+								<div class="ui radio checkbox tw-max-w-full{{if lt $i $.Start}} tw-opacity-50{{end}}">
+									<input type="radio" name="start" value="{{.Pull.Index}}"{{if eq $i $.Start}} checked{{end}}>
+									<label><span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span><span class="tw-block tw-text-12 tw-text-text-light tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</span></label>
+								</div>
+								{{if or .Invalid .Behind .HasMerges}}
+									<div class="flex-text-block tw-flex-wrap tw-mt-2">
+										{{if .Invalid}}<span class="ui basic red label">{{ctx.Locale.Tr "repo.pulls.stack_blocked"}}</span><span class="tw-text-red tw-break-anywhere">{{.Invalid}}</span>{{end}}
+										{{if .Behind}}<span class="ui basic orange label">{{ctx.Locale.Tr "repo.pulls.stack_layer_behind" .Pull.BaseBranch}}</span><span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_layer_behind_desc"}}</span>{{end}}
+										{{if .HasMerges}}<span class="ui basic orange label">{{ctx.Locale.Tr "repo.pulls.stack_layer_merges"}}</span><span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_layer_merges_desc"}}</span>{{end}}
+									</div>
+								{{end}}
 							</div>
-						</div>
-					{{end}}
+						{{end}}
+					</div>
+					{{if .BaseLayer}}<p class="help stack-new-builds-on{{if ne .Start 0}} tw-hidden{{end}}">{{ctx.Locale.Tr "repo.pulls.stack_builds_on" .Base .BaseLayer.Position (printf "%s/pulls/stacks/%d" $.RepoLink .BaseLayer.StackID) .BaseLayer.StackID}}</p>{{end}}
+					<div class="flex-text-block tw-my-2">{{svg "octicon-git-merge"}}<span class="tw-break-anywhere">{{ctx.Locale.Tr "repo.pulls.stack_trunk" (HTMLFormat `<strong class="stack-new-trunk">%s</strong>` .Trunk)}}</span></div>
 					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_pulls_desc"}}</p>
 				{{else}}
 					<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_no_chain"}}</p>
 				{{end}}
 			</fieldset>
-			<div class="field">
-				<label>{{ctx.Locale.Tr "repo.pulls.stack_base_label"}}</label>
-				<div class="ui search selection dropdown">
-					<input type="hidden" name="trunk" value="{{.Trunk}}">
-					<div class="text">{{.Trunk}}</div>
-					{{svg "octicon-triangle-down" 14 "dropdown icon"}}
-					<div class="menu">
-						{{range .Branches}}<div class="item" data-value="{{.}}">{{.}}</div>{{end}}
-					</div>
-				</div>
-				<p class="help">{{ctx.Locale.Tr "repo.pulls.stack_base_desc"}}</p>
-			</div>
-			<fieldset class="grouped fields">
+			<fieldset class="grouped fields tw-p-0 tw-mx-0">
 				<legend>{{ctx.Locale.Tr "repo.pulls.stack_mode"}}</legend>
 				<div class="field">
 					<div class="ui radio checkbox">
-						<input id="stack-mode-merge" type="radio" name="mode" value="merge" checked>
-						<label for="stack-mode-merge"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge_desc"}}</span></label>
+						<input type="radio" name="mode" value="merge"{{if eq .Mode "merge"}} checked{{end}}>
+						<label><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_merge_desc"}}</span></label>
 					</div>
 				</div>
 				<div class="field">
 					<div class="ui radio checkbox">
-						<input id="stack-mode-rebase" type="radio" name="mode" value="rebase">
-						<label for="stack-mode-rebase"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase_desc"}}</span></label>
+						<input type="radio" name="mode" value="rebase"{{if eq .Mode "rebase"}} checked{{end}}{{if .RebaseBlocked}} disabled{{end}}>
+						<label><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase"}}</span><span class="tw-block tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase_desc"}}</span><span class="stack-new-rebase-blocked tw-block tw-text-red{{if not .RebaseBlocked}} tw-hidden{{end}}">{{ctx.Locale.Tr "repo.pulls.stack_mode_rebase_blocked"}}</span></label>
 					</div>
 				</div>
 			</fieldset>
-			<button type="submit" class="ui primary button"{{if not .Chain}} disabled{{end}}>{{ctx.Locale.Tr "repo.pulls.create_stack"}}</button>
+			<button type="submit" class="ui primary button stack-new-create"{{if or (not .Layers) .StartBlocked}} disabled{{end}}>{{ctx.Locale.Tr "repo.pulls.create_stack"}}</button>
 			<a class="ui button" href="{{.RepoLink}}/pulls/stacks">{{ctx.Locale.Tr "cancel"}}</a>
 		</form>
 	</div>

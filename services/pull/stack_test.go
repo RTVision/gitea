@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -276,31 +277,43 @@ func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_
 }
 
 func TestSuggestStackChain(t *testing.T) {
-	release := &issues_model.PullRequest{ID: 1, Index: 10, HeadBranch: "release", BaseBranch: "main"}
-	lower := &issues_model.PullRequest{ID: 2, Index: 11, HeadBranch: "lower", BaseBranch: "release"}
-	middle := &issues_model.PullRequest{ID: 3, Index: 12, HeadBranch: "middle", BaseBranch: "lower"}
-	upper := &issues_model.PullRequest{ID: 4, Index: 13, HeadBranch: "upper", BaseBranch: "middle"}
-	candidates := []*issues_model.PullRequest{upper, release, middle, lower}
-	chain, trunk := SuggestStackChain(candidates, 13, "release")
-	assert.Equal(t, []*issues_model.PullRequest{lower, middle, upper}, chain, "the default branch is the trunk")
-	assert.Equal(t, "release", trunk)
-	chain, trunk = SuggestStackChain(candidates, 12, "main")
-	assert.Equal(t, []*issues_model.PullRequest{release, lower, middle}, chain)
-	assert.Equal(t, "main", trunk)
-	chain, trunk = SuggestStackChain(append(candidates, &issues_model.PullRequest{ID: 5, Index: 14, HeadBranch: "other", BaseBranch: "release"}), 13, "main")
-	assert.Equal(t, []*issues_model.PullRequest{lower, middle, upper}, chain, "a branch several pull requests build on is the trunk")
-	assert.Equal(t, "release", trunk)
-	chain, trunk = SuggestStackChain(candidates, 99, "main")
-	assert.Empty(t, chain)
-	assert.Empty(t, trunk)
-	duplicate := &issues_model.PullRequest{ID: 7, Index: 16, HeadBranch: "lower", BaseBranch: "main"}
-	chain, trunk = SuggestStackChain(append(candidates, duplicate), 13, "main")
-	assert.Equal(t, []*issues_model.PullRequest{middle, upper}, chain, "an ambiguous head branch ends the chain")
-	assert.Equal(t, "lower", trunk)
-	chain, _ = SuggestStackChain(append(candidates, duplicate), 11, "main")
-	assert.Empty(t, chain, "a top pull request sharing its head branch is not suggested")
-	cycle := &issues_model.PullRequest{ID: 6, Index: 15, HeadBranch: "main", BaseBranch: "upper"}
-	chain, trunk = SuggestStackChain(append(candidates, cycle), 13, "")
-	assert.Equal(t, []*issues_model.PullRequest{release, lower, middle, upper}, chain, "a branch cycle stops before repeating a layer")
-	assert.Equal(t, "main", trunk)
+	release := &issues_model.PullRequest{Index: 10, HeadBranch: "release", BaseBranch: "main"}
+	lower := &issues_model.PullRequest{Index: 11, HeadBranch: "lower", BaseBranch: "release"}
+	middle := &issues_model.PullRequest{Index: 12, HeadBranch: "middle", BaseBranch: "lower"}
+	upper := &issues_model.PullRequest{Index: 13, HeadBranch: "upper", BaseBranch: "middle"}
+	chain := []*issues_model.PullRequest{upper, release, middle, lower}
+	with := func(extra ...*issues_model.PullRequest) []*issues_model.PullRequest {
+		return append(slices.Clone(chain), extra...)
+	}
+	onRelease := &issues_model.PullRequest{Index: 14, HeadBranch: "other", BaseBranch: "release"}
+	onMiddle := &issues_model.PullRequest{Index: 15, HeadBranch: "sibling", BaseBranch: "middle"}
+	duplicate := &issues_model.PullRequest{Index: 16, HeadBranch: "lower", BaseBranch: "main"}
+	cycle := &issues_model.PullRequest{Index: 17, HeadBranch: "main", BaseBranch: "upper"}
+	for _, tc := range []struct {
+		name          string
+		candidates    []*issues_model.PullRequest
+		top           int64
+		defaultBranch string
+		chain         []int64
+		start         int
+	}{
+		{"stops at the default branch", chain, 13, "release", []int64{11, 12, 13}, 0},
+		{"walks down to the trunk", chain, 12, "main", []int64{10, 11, 12}, 0},
+		{"starts above a branch several pull requests build on", with(onRelease), 13, "main", []int64{10, 11, 12, 13}, 1},
+		{"starts above the highest shared branch", with(onRelease, onMiddle), 13, "main", []int64{10, 11, 12, 13}, 3},
+		{"unknown top", chain, 99, "main", nil, 0},
+		{"stops at an ambiguous head branch", with(duplicate), 13, "main", []int64{12, 13}, 0},
+		{"top sharing its head branch", with(duplicate), 11, "main", nil, 0},
+		{"stops before repeating a layer", with(cycle), 13, "", []int64{10, 11, 12, 13}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, start := SuggestStackChain(tc.candidates, tc.top, tc.defaultBranch)
+			var indexes []int64
+			for _, pr := range got {
+				indexes = append(indexes, pr.Index)
+			}
+			assert.Equal(t, tc.chain, indexes)
+			assert.Equal(t, tc.start, start)
+		})
+	}
 }

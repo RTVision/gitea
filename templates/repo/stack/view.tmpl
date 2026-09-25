@@ -33,13 +33,10 @@
 						<div class="ui search selection dropdown">
 							<input type="hidden" name="pull">
 							<input id="stack-insert" class="search" autocomplete="off">
-							<div class="default text">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</div>
+							<div class="default text gt-ellipsis tw-max-w-full">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</div>
 							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 							<div class="menu">
-								{{range .InsertCandidates}}<div class="item" data-value="{{.Pull.Index}}">
-									<div class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</div>
-									<div class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</div>
-								</div>{{end}}
+								{{range .InsertCandidates}}<div class="item tw-flex tw-flex-col" data-value="{{.Pull.Index}}"><span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span> <span class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</span></div>{{end}}
 							</div>
 						</div>
 					</div>
