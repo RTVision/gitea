@@ -15,11 +15,14 @@ function initRepoIssueListCheckboxes() {
   const issueSelectAll = document.querySelector<HTMLInputElement>('.issue-checkbox-all');
   if (!issueSelectAll) return; // logged out state
   const issueCheckboxes = document.querySelectorAll<HTMLInputElement>('.issue-checkbox');
+  // layers inside a collapsed stack row are hidden, so batch actions must not reach them
+  const visibleCheckboxes = () => Array.from(issueCheckboxes).filter((el) => !el.closest('details:not([open])'));
 
   const syncIssueSelectionState = () => {
-    const checkedCheckboxes = Array.from(issueCheckboxes).filter((el) => el.checked);
+    const visible = visibleCheckboxes();
+    const checkedCheckboxes = visible.filter((el) => el.checked);
     const anyChecked = Boolean(checkedCheckboxes.length);
-    const allChecked = anyChecked && checkedCheckboxes.length === issueCheckboxes.length;
+    const allChecked = anyChecked && checkedCheckboxes.length === visible.length;
 
     if (allChecked) {
       issueSelectAll.checked = true;
@@ -46,11 +49,19 @@ function initRepoIssueListCheckboxes() {
   }
 
   issueSelectAll.addEventListener('change', () => {
-    for (const el of issueCheckboxes) {
+    for (const el of visibleCheckboxes()) {
       el.checked = issueSelectAll.checked;
     }
     syncIssueSelectionState();
   });
+
+  document.querySelector('#issue-list')!.addEventListener('toggle', (e) => {
+    const details = e.target as HTMLDetailsElement;
+    if (!details.open) {
+      for (const el of details.querySelectorAll<HTMLInputElement>('.issue-checkbox')) el.checked = false;
+    }
+    syncIssueSelectionState();
+  }, {capture: true}); // "toggle" does not bubble
 
   queryElems(document, '.issue-action', (el) => el.addEventListener('click',
     async (e: MouseEvent) => {
