@@ -321,7 +321,7 @@ func (a *application) client(state *localstate.State) (*stackclient.Client, erro
 	}
 	if client.Token == "" {
 		base, _ := url.Parse(client.BaseURL) // validated by FromRemote
-		client.Token = teaToken(base.Host, remoteHost(remoteURL))
+		client.Token = teaToken(base.Host)
 		if client.Token == "" {
 			return nil, fail(7, "missing_token", "set GITEA_TOKEN or add a tea login for %s", base.Host)
 		}
@@ -329,15 +329,8 @@ func (a *application) client(state *localstate.State) (*stackclient.Client, erro
 	return client, nil
 }
 
-func remoteHost(remoteURL string) string {
-	if u, err := url.Parse(remoteURL); err == nil && u.Host != "" {
-		return u.Hostname()
-	}
-	host, _, _ := strings.Cut(remoteURL[strings.LastIndex(remoteURL, "@")+1:], ":")
-	return host
-}
-
-func teaToken(serverHost, sshHost string) string {
+// teaToken only accepts a login for the server the request goes to, so a token never reaches another host.
+func teaToken(serverHost string) string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
@@ -355,7 +348,6 @@ func teaToken(serverHost, sshHost string) string {
 			URL     string `yaml:"url"`
 			Token   string `yaml:"token"`
 			Default bool   `yaml:"default"`
-			SSHHost string `yaml:"ssh_host"`
 		} `yaml:"logins"`
 	}
 	if yaml.Unmarshal(data, &config) != nil {
@@ -364,7 +356,7 @@ func teaToken(serverHost, sshHost string) string {
 	token := ""
 	for _, login := range config.Logins {
 		u, err := url.Parse(login.URL)
-		if login.Token == "" || !(err == nil && strings.EqualFold(u.Host, serverHost) || login.SSHHost != "" && strings.EqualFold(login.SSHHost, sshHost)) {
+		if login.Token == "" || err != nil || !strings.EqualFold(u.Host, serverHost) {
 			continue
 		}
 		if login.Default {
