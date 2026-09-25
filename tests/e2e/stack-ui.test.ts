@@ -12,6 +12,7 @@ test('stack pages create and render a pull request chain', async ({page, request
     await apiCreateFiles(request, owner, repo, [{path: 'one.txt', content: 'one\n'}], {branch: 'main', newBranch: 'layer-one'});
     await apiCreateFiles(request, owner, repo, [{path: 'two.txt', content: 'two\n'}], {branch: 'layer-one', newBranch: 'layer-two'});
     await apiCreateFiles(request, owner, repo, [{path: 'three.txt', content: 'three\n'}], {branch: 'layer-two', newBranch: 'layer-three'});
+    await apiCreateFiles(request, owner, repo, [{path: 'trunk.txt', content: 'trunk\n'}], {branch: 'main'});
     const one = await apiCreatePR(request, owner, repo, 'layer-one', 'main', 'Layer one');
     const two = await apiCreatePR(request, owner, repo, 'layer-two', 'layer-one', 'Layer two');
     const three = await apiCreatePR(request, owner, repo, 'layer-three', 'layer-two', 'Layer three');
@@ -23,11 +24,20 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.screenshot({path: testInfo.outputPath('pull-before-stack.png'), fullPage: true});
   await page.goto(`${stackURL}/new`);
   await expect(page.getByRole('button', {name: 'Create stack'})).toBeDisabled();
-  await page.getByLabel('Top pull request').selectOption(String(three));
-  for (const title of ['Layer one', 'Layer two', 'Layer three']) {
-    await expect(page.getByRole('checkbox', {name: new RegExp(title)})).toBeChecked();
-  }
-  await expect(page.getByRole('radio', {name: /^Merge/})).toBeChecked();
+  await expect(page.getByRole('button', {name: 'Find chain'})).toBeHidden();
+  await page.getByLabel('Last pull request in the chain').pressSequentially('three');
+  await expect(page.getByRole('option', {name: /Layer two/})).toBeHidden();
+  await page.getByRole('option', {name: /Layer three/}).click();
+  await expect(page).toHaveURL(new RegExp(`pull=${three}`));
+  await expect(page.getByRole('radio', {name: /Layer one/})).toBeChecked();
+  await expect(page.getByText('Lands into main')).toBeVisible();
+  await expect(page.getByText('Behind main')).toBeVisible();
+  await expect(page.getByRole('radio', {name: /^Rebase mode/})).toBeDisabled();
+  await page.getByRole('radio', {name: /Layer two/}).check();
+  await expect(page.getByText('Lands into layer-one')).toBeVisible();
+  await expect(page.getByRole('radio', {name: /^Rebase mode/})).toBeEnabled();
+  await page.getByRole('radio', {name: /Layer one/}).check();
+  await expect(page.getByRole('radio', {name: /^Merge mode/})).toBeChecked();
   await page.screenshot({path: testInfo.outputPath('stack-new.png'), fullPage: true});
   await page.getByRole('button', {name: 'Create stack'}).click();
   await expect(page.getByRole('link', {name: /Stack #\d+/})).toBeVisible();

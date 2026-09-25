@@ -26,11 +26,14 @@ Back up the database and repositories together before upgrading an instance.
 ## Create and review
 
 Create ordinary pull requests whose branches form a chain, then open **Stacks**
-from the repository's pull request list. Select **New stack** and pick the top
-pull request. The form follows base branches down to the trunk, stopping at the
-default branch or a branch that several pull requests build on, and lists the
-chain in landing order. Adjust the selection and trunk if needed, and choose the
-stack mode.
+from the repository's pull request list. Select **New stack** and search for the
+last pull request in the chain. The form follows base branches down, stopping at
+the default branch, a head branch shared by several open pull requests, or a
+layer of another open stack, and lists the chain in landing order. It starts the
+stack just above the highest branch that several pull requests build on; pick
+another start layer to include more or fewer layers. The stack lands into the
+start layer's base branch. Layers that are behind their parent or contain merge
+commits are flagged, since only merge mode accepts them. Choose the stack mode.
 
 For example, with `release` as the trunk:
 

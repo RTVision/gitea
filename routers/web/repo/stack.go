@@ -13,11 +13,9 @@ import (
 	"strings"
 
 	"gitea.dev/models/db"
-	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
-	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/svg"
 	"gitea.dev/modules/templates"
@@ -217,6 +215,32 @@ func pullStackNumbers(ctx *context.Context) ([]int64, error) {
 	return ids, nil
 }
 
+type pullStackNewLayer struct {
+	Pull      *issues_model.PullRequest
+	Invalid   string
+	Behind    bool
+	HasMerges bool
+}
+
+// stackErrorMessage drops the sentinel prefix, which reads as noise in the UI.
+func stackErrorMessage(err error) string {
+	msg := err.Error()
+	for _, sentinel := range []error{issues_model.ErrInvalidStack, issues_model.ErrStackRevision} {
+		msg = strings.TrimPrefix(msg, sentinel.Error()+": ")
+	}
+	return msg
+}
+
+// suggestPullStack honors the form's start layer when it is in the chain.
+func suggestPullStack(ctx *context.Context, candidates issues_model.PullRequestList) ([]*issues_model.PullRequest, int) {
+	chain, start := pull_service.SuggestStackChain(candidates, ctx.FormInt64("pull"), ctx.Repo.Repository.DefaultBranch)
+	wanted := ctx.FormInt64("start")
+	if i := slices.IndexFunc(chain, func(pr *issues_model.PullRequest) bool { return pr.Index == wanted }); i >= 0 {
+		start = i
+	}
+	return chain, start
+}
+
 func PullStackNew(ctx *context.Context) {
 	if !setting.Repository.PullRequest.EnableStacks || !canManagePullStack(ctx) {
 		ctx.HTTPError(http.StatusForbidden)
@@ -227,22 +251,55 @@ func PullStackNew(ctx *context.Context) {
 		ctx.ServerError("FindStackCandidatePulls", err)
 		return
 	}
-	branches, err := git_model.FindBranchNames(ctx, git_model.FindBranchOptions{RepoID: ctx.Repo.Repository.ID, ListOptions: db.ListOptionsAll, IsDeletedBranch: optional.Some(false)})
-	if err != nil {
-		ctx.ServerError("FindBranchNames", err)
-		return
+	chain, start := suggestPullStack(ctx, candidates)
+	layers := make([]*pullStackNewLayer, len(chain))
+	ids := make([]int64, len(chain))
+	for i, pr := range chain {
+		layers[i], ids[i] = &pullStackNewLayer{Pull: pr}, pr.ID
+	}
+	rebaseBlocked, startBlocked := false, false
+	if len(chain) > 0 {
+		base := chain[0].BaseBranch
+		checks, err := pull_service.CheckStackChain(ctx, ctx.Repo.Repository, base, "", ids)
+		if err != nil {
+			ctx.Data["ChainError"] = stackErrorMessage(err)
+		}
+		for i, check := range checks {
+			if check.Invalid != nil {
+				layers[i].Invalid = stackErrorMessage(check.Invalid)
+			}
+			layers[i].Behind, layers[i].HasMerges = check.Behind, check.HasMerges
+			if i >= start {
+				rebaseBlocked = rebaseBlocked || check.Behind || check.HasMerges
+				startBlocked = startBlocked || check.Invalid != nil
+			}
+		}
+		if base != ctx.Repo.Repository.DefaultBranch {
+			baseLayer, err := issues_model.GetOpenStackLayerByBranch(ctx, ctx.Repo.Repository.ID, base)
+			if err != nil {
+				ctx.ServerError("GetOpenStackLayerByBranch", err)
+				return
+			}
+			ctx.Data["BaseLayer"] = baseLayer
+		}
+		ctx.Data["Base"] = base
+		ctx.Data["Trunk"] = chain[start].BaseBranch
+	}
+	mode := ctx.FormTrim("mode")
+	if mode != issues_model.StackModeRebase || rebaseBlocked {
+		mode = issues_model.StackModeMerge
 	}
 	top := ctx.FormInt64("pull")
-	chain, trunk := pull_service.SuggestStackChain(candidates, top, ctx.Repo.Repository.DefaultBranch)
-	if trunk == "" {
-		trunk = ctx.Repo.Repository.DefaultBranch
+	if i := slices.IndexFunc(candidates, func(pr *issues_model.PullRequest) bool { return pr.Index == top }); i >= 0 {
+		ctx.Data["TopPull"] = candidates[i]
 	}
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.new_stack")
 	ctx.Data["Candidates"] = candidates
-	ctx.Data["Top"] = top
-	ctx.Data["Chain"] = chain
-	ctx.Data["Trunk"] = trunk
-	ctx.Data["Branches"] = branches
+	ctx.Data["Layers"] = layers
+	ctx.Data["Start"] = start
+	ctx.Data["Mode"] = mode
+	ctx.Data["RebaseBlocked"] = rebaseBlocked
+	ctx.Data["StartBlocked"] = startBlocked || ctx.Data["ChainError"] != nil
 	ctx.HTML(http.StatusOK, tplPullStackNew)
 }
 
@@ -251,13 +308,27 @@ func PullStackNewPost(ctx *context.Context) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
-	ids, err := pullStackNumbers(ctx)
-	if err == nil {
-		_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: ctx.FormTrim("trunk"), Mode: ctx.FormTrim("mode"), PullRequestIDs: ids})
-	}
+	candidates, err := issues_model.FindStackCandidatePulls(ctx, ctx.Repo.Repository.ID)
 	if err != nil {
-		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_create_error", err))
-		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?pull=" + url.QueryEscape(ctx.FormString("pull")))
+		ctx.ServerError("FindStackCandidatePulls", err)
+		return
+	}
+	chain, start := suggestPullStack(ctx, candidates)
+	if len(chain) == 0 {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_no_chain"))
+		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new")
+		return
+	}
+	ids := make([]int64, 0, len(chain)-start)
+	for _, pr := range chain[start:] {
+		ids = append(ids, pr.ID)
+	}
+	// The trunk follows from the start layer, so the form can't post an inconsistent one.
+	_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: chain[start].BaseBranch, Mode: ctx.FormTrim("mode"), PullRequestIDs: ids})
+	if err != nil {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_create_error", stackErrorMessage(err)))
+		query := url.Values{"pull": {ctx.FormString("pull")}, "start": {ctx.FormString("start")}, "mode": {ctx.FormString("mode")}}
+		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?" + query.Encode())
 		return
 	}
 	ctx.Flash.Success(ctx.Tr("repo.pulls.stack_created"))

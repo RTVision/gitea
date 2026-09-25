@@ -46,7 +46,32 @@ func checkStackAuthority(ctx context.Context, doer *user_model.User, repo *repo_
 	return nil
 }
 
-func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mode string, pullIDs []int64) ([]*issues_model.StackEntry, error) {
+// StackLayerCheck reports what keeps a pull request from stacking on its parent.
+type StackLayerCheck struct {
+	Pull         *issues_model.PullRequest
+	ParentBranch string
+	Entry        *issues_model.StackEntry
+	Invalid      error // rules the layer out in both modes
+	Behind       bool  // lacks the parent's head, which rebase mode requires
+	HasMerges    bool  // rebase mode keeps layer history linear
+}
+
+func (c *StackLayerCheck) err(mode string) error {
+	switch {
+	case c.Invalid != nil:
+		return c.Invalid
+	case mode == issues_model.StackModeMerge:
+		return nil // updating the stack merges a parent that moved ahead, so a layer only needs its own commits
+	case c.Behind:
+		return fmt.Errorf("%w: pull request #%d must contain the current head of %s; rebase %s onto it first", issues_model.ErrInvalidStack, c.Pull.Index, c.ParentBranch, c.Pull.HeadBranch)
+	case c.HasMerges:
+		return fmt.Errorf("%w: pull request #%d has merge commits; use a merge-mode stack or rebase %s", issues_model.ErrInvalidStack, c.Pull.Index, c.Pull.HeadBranch)
+	}
+	return nil
+}
+
+// CheckStackChain checks each layer against its parent; an empty mode checks what either mode needs.
+func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mode string, pullIDs []int64) ([]*StackLayerCheck, error) {
 	if trunk == "" || len(pullIDs) == 0 {
 		return nil, issues_model.ErrInvalidStack
 	}
@@ -63,7 +88,7 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 	var parentID int64
 	seenIDs := map[int64]bool{}
 	seenBranches := map[string]bool{trunk: true}
-	entries := make([]*issues_model.StackEntry, 0, len(pullIDs))
+	checks := make([]*StackLayerCheck, 0, len(pullIDs))
 	for i, id := range pullIDs {
 		pr, err := issues_model.GetPullRequestByID(ctx, id)
 		if err != nil {
@@ -72,13 +97,16 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		if err := pr.LoadIssue(ctx); err != nil {
 			return nil, err
 		}
+		check := &StackLayerCheck{Pull: pr, ParentBranch: parentBranch}
+		checks = append(checks, check)
 		if seenIDs[id] || seenBranches[pr.HeadBranch] || pr.HasMerged || pr.Issue.IsClosed || pr.HeadRepoID != repo.ID || pr.BaseRepoID != repo.ID || pr.BaseBranch != parentBranch || pr.Flow != issues_model.PullRequestFlowGithub {
-			return nil, fmt.Errorf("%w: pull request #%d does not form an open same-repository chain on %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
+			check.Invalid = fmt.Errorf("%w: pull request #%d does not form an open same-repository chain on %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
+			return checks, nil // later layers have no parent to check against
 		}
 		if scheduled, _, err := pull_model.GetScheduledMergeByPullID(ctx, id); err != nil {
 			return nil, err
 		} else if scheduled {
-			return nil, issues_model.ErrStackRevision
+			check.Invalid = fmt.Errorf("%w: pull request #%d is scheduled to auto-merge", issues_model.ErrStackRevision, pr.Index)
 		}
 		headSHA, err := gitRepo.GetBranchCommitID(ctx, pr.HeadBranch)
 		if err != nil {
@@ -88,39 +116,50 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		if err != nil {
 			return nil, err
 		}
-		if mode == issues_model.StackModeMerge {
-			// Updating the stack merges a parent that moved ahead, so a layer only needs its own commits.
-			if boundary == headSHA {
-				return nil, fmt.Errorf("%w: pull request #%d has no commits beyond %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
-			}
-		} else if boundary != parentSHA || headSHA == parentSHA {
-			return nil, fmt.Errorf("%w: pull request #%d must contain the current head of %s; rebase %s onto it first", issues_model.ErrInvalidStack, pr.Index, parentBranch, pr.HeadBranch)
-		} else {
-			merges, _, err := gitcmd.NewCommand("rev-list", "--merges").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
+		check.Behind = boundary != parentSHA
+		if boundary == headSHA && check.Invalid == nil {
+			check.Invalid = fmt.Errorf("%w: pull request #%d has no commits beyond %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
+		}
+		if mode == "" || (mode == issues_model.StackModeRebase && !check.Behind && check.Invalid == nil) {
+			merges, _, err := gitcmd.NewCommand("rev-list", "--merges", "--max-count=1").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
 			if err != nil {
 				return nil, err
 			}
-			if strings.TrimSpace(merges) != "" {
-				return nil, fmt.Errorf("%w: pull request #%d has merge commits; use a merge-mode stack or rebase %s", issues_model.ErrInvalidStack, pr.Index, pr.HeadBranch)
-			}
+			check.HasMerges = strings.TrimSpace(merges) != ""
 		}
 		// A head shared by another open PR has ambiguous rewrite ownership.
 		count, err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").Where("pull_request.head_repo_id = ? AND pull_request.head_branch = ? AND issue.is_closed = ? AND pull_request.id <> ?", repo.ID, pr.HeadBranch, false, id).Count(new(issues_model.PullRequest))
 		if err != nil {
 			return nil, err
 		}
-		if count != 0 {
-			return nil, fmt.Errorf("%w: branch %s has multiple open pull requests", issues_model.ErrInvalidStack, pr.HeadBranch)
+		if count != 0 && check.Invalid == nil {
+			check.Invalid = fmt.Errorf("%w: branch %s has multiple open pull requests", issues_model.ErrInvalidStack, pr.HeadBranch)
 		}
-		entries = append(entries, &issues_model.StackEntry{PullRequestID: id, Position: i + 1, ParentPullRequestID: parentID, OldParentSHA: boundary, HeadSHA: headSHA})
+		check.Entry = &issues_model.StackEntry{PullRequestID: id, Position: i + 1, ParentPullRequestID: parentID, OldParentSHA: boundary, HeadSHA: headSHA}
 		seenIDs[id], seenBranches[pr.HeadBranch] = true, true
 		parentID, parentBranch, parentSHA = id, pr.HeadBranch, headSHA
+	}
+	return checks, nil
+}
+
+func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mode string, pullIDs []int64) ([]*issues_model.StackEntry, error) {
+	checks, err := CheckStackChain(ctx, repo, trunk, mode, pullIDs)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]*issues_model.StackEntry, 0, len(checks))
+	for _, check := range checks {
+		if err := check.err(mode); err != nil {
+			return nil, err
+		}
+		entries = append(entries, check.Entry)
 	}
 	return entries, nil
 }
 
-// SuggestStackChain follows base branches down from the top pull request, returning the chain bottom first and its trunk.
-func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) ([]*issues_model.PullRequest, string) {
+// SuggestStackChain follows base branches down from the top pull request and returns the chain bottom first.
+// The suggested start is the layer just above the highest branch that several pull requests build on, like develop.
+func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) (chain []*issues_model.PullRequest, start int) {
 	byHead := make(map[string]*issues_model.PullRequest, len(candidates))
 	bases := make(map[string]int, len(candidates))
 	heads := make(map[string]int, len(candidates))
@@ -134,24 +173,28 @@ func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaul
 		}
 	}
 	if current == nil || heads[current.HeadBranch] > 1 {
-		return nil, "" // pull requests sharing a head branch can't be stacked
+		return nil, 0 // pull requests sharing a head branch can't be stacked
 	}
-	var chain []*issues_model.PullRequest
 	inChain := make(map[string]bool)
-	trunk := ""
+	shared := -1
 	for current != nil {
 		chain = append(chain, current)
 		inChain[current.HeadBranch] = true
-		trunk = current.BaseBranch
-		next := byHead[trunk]
-		// A branch several pull requests build on, like develop, is a trunk rather than a layer.
-		if next == nil || trunk == defaultBranch || bases[trunk] > 1 || heads[trunk] > 1 || inChain[next.BaseBranch] {
+		base := current.BaseBranch
+		if shared < 0 && bases[base] > 1 {
+			shared = len(chain) - 1
+		}
+		next := byHead[base]
+		if next == nil || base == defaultBranch || heads[base] > 1 || inChain[next.BaseBranch] {
 			break
 		}
 		current = next
 	}
 	slices.Reverse(chain)
-	return chain, trunk
+	if shared >= 0 {
+		start = len(chain) - 1 - shared
+	}
+	return chain, start
 }
 
 func insertStackEntries(ctx context.Context, stack *issues_model.PullRequestStack, entries []*issues_model.StackEntry) error {
