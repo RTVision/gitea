@@ -15,6 +15,7 @@ import (
 
 	"gitea.dev/contrib/gitea-stack/internal/gitx"
 	"gitea.dev/modules/json"
+	api "gitea.dev/modules/structs"
 )
 
 type Layer struct {
@@ -27,12 +28,13 @@ type Layer struct {
 }
 
 type State struct {
-	Remote             string  `json:"remote"`
-	Trunk              string  `json:"trunk"`
-	Stack              int64   `json:"stack,omitempty"`
-	Layers             []Layer `json:"layers"`
-	LastRevision       int64   `json:"last_revision,omitempty"`
-	LastSyncedTrunkSHA string  `json:"last_synced_trunk_sha"`
+	Remote             string        `json:"remote"`
+	Trunk              string        `json:"trunk"`
+	Mode               api.StackMode `json:"mode,omitempty"` // empty in files written before modes means rebase
+	Stack              int64         `json:"stack,omitempty"`
+	Layers             []Layer       `json:"layers"`
+	LastRevision       int64         `json:"last_revision,omitempty"`
+	LastSyncedTrunkSHA string        `json:"last_synced_trunk_sha"`
 }
 
 type RestackLayer struct {
@@ -48,6 +50,7 @@ type Restack struct {
 	Phase          string         `json:"phase"`
 	Stack          int64          `json:"stack,omitempty"`
 	Trunk          string         `json:"trunk"`
+	Mode           api.StackMode  `json:"mode,omitempty"`
 	Sign           string         `json:"sign,omitempty"`
 	Snapshot       string         `json:"snapshot"`
 	OriginalBranch string         `json:"original_branch"`

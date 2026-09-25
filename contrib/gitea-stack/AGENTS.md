@@ -8,5 +8,6 @@ Use explicit selectors and inspect before mutating:
 4. Run `gitea-stack restack` locally. If it exits `5`, resolve and stage conflicts, then run `restack --continue`; use `restack --abort` to restore the whole local operation.
 5. Run `gitea-stack push` after a successful local restack. It publishes with saved leases and synchronizes exact server boundaries.
 6. If an operation is blocked, inspect it with `op status`; use `op retry` only after resolving the reported condition. Cancellation does not roll back landed layers.
+7. Check the stack mode in `status --json` (`mode`). In merge mode, `restack` merges parents into layers, `push` never forces and refuses non-fast-forward layers, `rebase --server` starts an update, and `land` accepts only `merge`, `squash` or `fast-forward-only`. On a `non_fast_forward` refusal, run `sync`, merge the remote change, and push again. On `mode_mismatch`, the local stack disagrees with the server's mode; bind it with `adopt` instead of publishing.
 
 Do not edit `.git/gitea-stack/*.json`, delete `refs/gitea-stack/backup/*`, force-push outside the CLI, or guess a missing parent boundary. Use `--json` for automation and branch/PR/stack selectors exactly as printed.

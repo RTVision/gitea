@@ -16,6 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMain(m *testing.M) {
+	_ = os.Setenv("GIT_CONFIG_NOSYSTEM", "1") // host configs may force commit signing
+	_ = os.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	os.Exit(m.Run())
+}
+
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", dir}, args...)...)
