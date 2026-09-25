@@ -14,7 +14,7 @@
 					<div class="issue-item-icon">{{svg "octicon-stack"}}</div>
 					<div class="issue-item-main">
 						<div class="issue-item-top-row"><a class="title" href="{{$.RepoLink}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" .Stack.ID}}</a>
-							<span class="ui label">{{len .Entries}} {{ctx.Locale.Tr "repo.pulls.stack_entries"}}</span></div>
+							<span class="ui label">{{len .Entries}} {{ctx.Locale.Tr "repo.pulls.stack_entries"}}</span>{{template "repo/stack/mode_label" .Stack}}</div>
 						<div class="desc">{{ctx.Locale.Tr "repo.pulls.stack_base" .Stack.TrunkBranch}}</div>
 					</div>
 					{{if .Operation}}<span class="ui basic label">{{ctx.Locale.Tr "repo.pulls.stack_operation" .Operation.State}}</span>{{end}}

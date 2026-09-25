@@ -7,13 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
+	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/svg"
 	"gitea.dev/modules/templates"
@@ -35,10 +39,11 @@ type pullStackEntryData struct {
 }
 
 type pullStackData struct {
-	Stack      *issues_model.PullRequestStack
-	Entries    []*pullStackEntryData
-	Operation  *issues_model.StackOperation
-	Operations []*issues_model.StackOperation
+	Stack         *issues_model.PullRequestStack
+	Entries       []*pullStackEntryData
+	Operation     *issues_model.StackOperation
+	Operations    []*issues_model.StackOperation
+	LandingStyles []repo_model.MergeStyle
 }
 
 func canManagePullStack(ctx *context.Context) bool {
@@ -83,6 +88,12 @@ func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStac
 		}
 		data.Entries = append(data.Entries, &pullStackEntryData{Entry: entry, Pull: pr, Readiness: stackEntryReadiness(ctx, pr)})
 	}
+	prConfig := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
+	for _, style := range pull_service.StackLandingStyles(stack.Mode) {
+		if prConfig.IsMergeStyleAllowed(style) {
+			data.LandingStyles = append(data.LandingStyles, style)
+		}
+	}
 	data.Operations, err = issues_model.GetStackOperations(ctx, stack.ID)
 	if err != nil {
 		return nil, err
@@ -118,7 +129,15 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 	ctx.Data["PullStackData"] = data
 	if mergeData, ok := ctx.Data["PullMergeBoxData"].(*pullMergeBoxData); ok && !issue.PullRequest.HasMerged && !issue.IsClosed {
 		mergeData.MergeFormProps = nil
-		mergeData.ShowUpdatePullInfo = false
+		mergeData.ShowUpdatePullInfo = mergeData.ShowUpdatePullInfo && pull_service.CheckStackUpdateByMerge(ctx, issue.PullRequest) == nil
+		if mergeData.ShowUpdatePullInfo {
+			mergeData.UpdateStyleOptions = slices.DeleteFunc(mergeData.UpdateStyleOptions, func(action *pullUpdateAction) bool { return !strings.HasSuffix(action.URL, "style=merge") })
+			mergeData.ShowUpdatePullInfo = len(mergeData.UpdateStyleOptions) > 0
+		}
+		if mergeData.ShowUpdatePullInfo {
+			mergeData.UpdatePrimaryAction = mergeData.UpdateStyleOptions[0]
+			mergeData.UpdatePrimaryAction.Selected = true
+		}
 		mergeData.InfoSections = append([]*pullInfoSection{{InfoItems: []*pullMergeBoxInfoItem{{
 			SvgIconHTML: svg.RenderHTML("octicon-info"),
 			InfoHTML:    ctx.Locale.Tr("repo.pulls.stack_merge_disabled", stack.ID),
@@ -179,7 +198,7 @@ func PullStack(ctx *context.Context) {
 }
 
 func pullStackNumbers(ctx *context.Context) ([]int64, error) {
-	values := strings.FieldsFunc(ctx.FormString("pulls"), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
+	values := strings.FieldsFunc(strings.Join(ctx.FormStrings("pulls"), ","), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
 	if len(values) == 0 {
 		return nil, issues_model.ErrInvalidStack
 	}
@@ -203,9 +222,27 @@ func PullStackNew(ctx *context.Context) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
+	candidates, err := issues_model.FindStackCandidatePulls(ctx, ctx.Repo.Repository.ID)
+	if err != nil {
+		ctx.ServerError("FindStackCandidatePulls", err)
+		return
+	}
+	branches, err := git_model.FindBranchNames(ctx, git_model.FindBranchOptions{RepoID: ctx.Repo.Repository.ID, ListOptions: db.ListOptionsAll, IsDeletedBranch: optional.Some(false)})
+	if err != nil {
+		ctx.ServerError("FindBranchNames", err)
+		return
+	}
+	top := ctx.FormInt64("pull")
+	chain, trunk := pull_service.SuggestStackChain(candidates, top, ctx.Repo.Repository.DefaultBranch)
+	if trunk == "" {
+		trunk = ctx.Repo.Repository.DefaultBranch
+	}
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.new_stack")
-	ctx.Data["DefaultBranch"] = ctx.Repo.Repository.DefaultBranch
-	ctx.Data["Pulls"] = ctx.Req.URL.Query().Get("pull")
+	ctx.Data["Candidates"] = candidates
+	ctx.Data["Top"] = top
+	ctx.Data["Chain"] = chain
+	ctx.Data["Trunk"] = trunk
+	ctx.Data["Branches"] = branches
 	ctx.HTML(http.StatusOK, tplPullStackNew)
 }
 
@@ -216,11 +253,11 @@ func PullStackNewPost(ctx *context.Context) {
 	}
 	ids, err := pullStackNumbers(ctx)
 	if err == nil {
-		_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: ctx.FormTrim("trunk"), PullRequestIDs: ids})
+		_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: ctx.FormTrim("trunk"), Mode: ctx.FormTrim("mode"), PullRequestIDs: ids})
 	}
 	if err != nil {
 		ctx.Flash.Error(ctx.Tr("repo.pulls.stack_create_error", err))
-		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new")
+		ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?pull=" + url.QueryEscape(ctx.FormString("pull")))
 		return
 	}
 	ctx.Flash.Success(ctx.Tr("repo.pulls.stack_created"))

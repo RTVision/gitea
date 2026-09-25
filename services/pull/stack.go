@@ -6,6 +6,7 @@ package pull
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gitea.dev/models/db"
@@ -112,6 +113,41 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		parentID, parentBranch, parentSHA = id, pr.HeadBranch, headSHA
 	}
 	return entries, nil
+}
+
+// SuggestStackChain follows base branches down from the top pull request, returning the chain bottom first and its trunk.
+func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) ([]*issues_model.PullRequest, string) {
+	byHead := make(map[string]*issues_model.PullRequest, len(candidates))
+	bases := make(map[string]int, len(candidates))
+	heads := make(map[string]int, len(candidates))
+	var current *issues_model.PullRequest
+	for _, pr := range candidates {
+		byHead[pr.HeadBranch] = pr
+		bases[pr.BaseBranch]++
+		heads[pr.HeadBranch]++
+		if pr.Index == top {
+			current = pr
+		}
+	}
+	if current == nil || heads[current.HeadBranch] > 1 {
+		return nil, "" // pull requests sharing a head branch can't be stacked
+	}
+	var chain []*issues_model.PullRequest
+	inChain := make(map[string]bool)
+	trunk := ""
+	for current != nil {
+		chain = append(chain, current)
+		inChain[current.HeadBranch] = true
+		trunk = current.BaseBranch
+		next := byHead[trunk]
+		// A branch several pull requests build on, like develop, is a trunk rather than a layer.
+		if next == nil || trunk == defaultBranch || bases[trunk] > 1 || heads[trunk] > 1 || inChain[next.BaseBranch] {
+			break
+		}
+		current = next
+	}
+	slices.Reverse(chain)
+	return chain, trunk
 }
 
 func insertStackEntries(ctx context.Context, stack *issues_model.PullRequestStack, entries []*issues_model.StackEntry) error {
