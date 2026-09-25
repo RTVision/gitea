@@ -39,10 +39,12 @@ release ← feature/storage ← feature/api ← feature/ui
           PR 41             PR 42         PR 43
 ```
 
-Each branch must contain its current parent's head, with at least one additional
-commit. In rebase mode, layer history must be linear. Cross-repository branches, duplicate
-membership, multiple open pull requests sharing a head branch, and already
-scheduled ordinary auto-merges cannot be adopted.
+Each branch needs at least one commit beyond its parent. In rebase mode, each
+branch must also contain its current parent's head and have linear history. In
+merge mode, a branch may be behind its parent; **Update stack** merges the parent
+in. Cross-repository branches, duplicate membership, multiple open pull requests
+sharing a head branch, and already scheduled ordinary auto-merges cannot be
+adopted.
 
 The stack box on each pull request links the layers in landing order. Review the
 individual layer diff as usual. A closed but unmerged predecessor does not satisfy
@@ -70,9 +72,9 @@ adopt the chain again.
   force-push is disabled. Only push permission is needed.
 
 In merge mode, layers may contain merge commits, including merges of topic
-branches. Each layer must still contain its parent's current head. Content merged
-in from outside the stack shows up in the layer's diff, so bring outside branches
-in through the trunk.
+branches. Layers may fall behind their parents; updating or landing the stack
+merges each parent in. Content merged in from outside the stack shows up in the
+layer's diff, so bring outside branches in through the trunk.
 
 Merge-mode stacks land with `merge`, `squash` or `fast-forward-only`. A layer lands
 only once it contains the trunk head, so a squash commit carries exactly the

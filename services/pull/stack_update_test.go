@@ -129,14 +129,21 @@ func TestStackMergeModeUpdate(t *testing.T) {
 
 	opts := CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{2, 5}}
 	_, err = CreateStack(ctx, owner, repo, opts)
-	require.ErrorContains(t, err, "linear layer history")
+	require.ErrorContains(t, err, "#3 has merge commits")
 	opts.Mode = "bogus"
 	_, err = CreateStack(ctx, owner, repo, opts)
 	require.ErrorIs(t, err, issues_model.ErrInvalidStack)
+	run("checkout", "release")
+	commit("trunk-2")
+	run("push", bare, "release")
+	trunk := bareRun("rev-parse", "release")
 	opts.Mode = issues_model.StackModeMerge
 	stack, err := CreateStack(ctx, owner, repo, opts)
 	require.NoError(t, err)
 	assert.Equal(t, issues_model.StackModeMerge, stack.Mode)
+	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bareRun("rev-parse", "release~1"), entries[0].OldParentSHA, "a layer behind its parent records the merge base")
 
 	_, err = StartStackOperation(ctx, owner, StackOperationOptions{StackID: stack.ID, ExpectedRevision: 1, Kind: "rebase"})
 	require.ErrorContains(t, err, "update by merging")
@@ -148,10 +155,6 @@ func TestStackMergeModeUpdate(t *testing.T) {
 	upper.BaseBranch = "release"
 	require.ErrorIs(t, CheckStackUpdateByMerge(ctx, upper), ErrPullRequestStacked)
 
-	run("checkout", "release")
-	commit("trunk-2")
-	run("push", bare, "release")
-	trunk := bareRun("rev-parse", "release")
 	oldLower, oldUpper := bareRun("rev-parse", "branch2"), bareRun("rev-parse", "pr-to-update")
 	op, err := StartStackOperation(ctx, owner, StackOperationOptions{StackID: stack.ID, ExpectedRevision: 1, Kind: "update"})
 	require.NoError(t, err)
@@ -162,7 +165,7 @@ func TestStackMergeModeUpdate(t *testing.T) {
 	assert.Equal(t, "Merge branch 'branch2' into pr-to-update", bareRun("log", "-1", "--format=%s", "pr-to-update"))
 	op = unittest.AssertExistsAndLoadBean(t, &issues_model.StackOperation{ID: op.ID})
 	assert.Equal(t, "completed", op.State, op.LastError)
-	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	entries, err = issues_model.GetStackEntries(ctx, stack.ID)
 	require.NoError(t, err)
 	assert.Equal(t, trunk, entries[0].OldParentSHA)
 	assert.Equal(t, lower, entries[1].OldParentSHA)

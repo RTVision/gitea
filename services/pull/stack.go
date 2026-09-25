@@ -73,7 +73,7 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 			return nil, err
 		}
 		if seenIDs[id] || seenBranches[pr.HeadBranch] || pr.HasMerged || pr.Issue.IsClosed || pr.HeadRepoID != repo.ID || pr.BaseRepoID != repo.ID || pr.BaseBranch != parentBranch || pr.Flow != issues_model.PullRequestFlowGithub {
-			return nil, fmt.Errorf("%w: pull request %d does not form an open same-repository chain", issues_model.ErrInvalidStack, id)
+			return nil, fmt.Errorf("%w: pull request #%d does not form an open same-repository chain on %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
 		}
 		if scheduled, _, err := pull_model.GetScheduledMergeByPullID(ctx, id); err != nil {
 			return nil, err
@@ -88,16 +88,20 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		if err != nil {
 			return nil, err
 		}
-		if boundary != parentSHA || headSHA == parentSHA {
-			return nil, fmt.Errorf("%w: pull request %d must contain its current parent head", issues_model.ErrInvalidStack, id)
-		}
-		if mode != issues_model.StackModeMerge {
+		if mode == issues_model.StackModeMerge {
+			// Updating the stack merges a parent that moved ahead, so a layer only needs its own commits.
+			if boundary == headSHA {
+				return nil, fmt.Errorf("%w: pull request #%d has no commits beyond %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
+			}
+		} else if boundary != parentSHA || headSHA == parentSHA {
+			return nil, fmt.Errorf("%w: pull request #%d must contain the current head of %s; rebase %s onto it first", issues_model.ErrInvalidStack, pr.Index, parentBranch, pr.HeadBranch)
+		} else {
 			merges, _, err := gitcmd.NewCommand("rev-list", "--merges").AddDynamicArguments(parentSHA + ".." + headSHA).WithRepo(gitRepo).RunStdString(ctx)
 			if err != nil {
 				return nil, err
 			}
 			if strings.TrimSpace(merges) != "" {
-				return nil, fmt.Errorf("%w: pull request %d must have linear layer history", issues_model.ErrInvalidStack, id)
+				return nil, fmt.Errorf("%w: pull request #%d has merge commits; use a merge-mode stack or rebase %s", issues_model.ErrInvalidStack, pr.Index, pr.HeadBranch)
 			}
 		}
 		// A head shared by another open PR has ambiguous rewrite ownership.
@@ -108,7 +112,7 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 		if count != 0 {
 			return nil, fmt.Errorf("%w: branch %s has multiple open pull requests", issues_model.ErrInvalidStack, pr.HeadBranch)
 		}
-		entries = append(entries, &issues_model.StackEntry{PullRequestID: id, Position: i + 1, ParentPullRequestID: parentID, OldParentSHA: parentSHA, HeadSHA: headSHA})
+		entries = append(entries, &issues_model.StackEntry{PullRequestID: id, Position: i + 1, ParentPullRequestID: parentID, OldParentSHA: boundary, HeadSHA: headSHA})
 		seenIDs[id], seenBranches[pr.HeadBranch] = true, true
 		parentID, parentBranch, parentSHA = id, pr.HeadBranch, headSHA
 	}
