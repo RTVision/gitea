@@ -36,7 +36,7 @@
 							<div class="default text">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</div>
 							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 							<div class="menu">
-								{{range .InsertCandidates}}<div class="item" data-value="{{.Pull.Index}}" data-text="#{{.Pull.Index}} {{.Pull.Issue.Title}} ({{.Pull.HeadBranch}} → {{.Pull.BaseBranch}})">
+								{{range .InsertCandidates}}<div class="item" data-value="{{.Pull.Index}}">
 									<div class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</div>
 									<div class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</div>
 								</div>{{end}}
