@@ -93,6 +93,12 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.screenshot({path: testInfo.outputPath('pull-stack-mobile.png'), fullPage: true});
   await page.setViewportSize({width: 1280, height: 720});
   await page.screenshot({path: testInfo.outputPath('pull-after-stack.png'), fullPage: true});
+  const stackHeader = page.getByRole('menu').filter({has: page.getByText(/^Stack #\d+ · 3\/4$/)});
+  await stackHeader.click();
+  await expect(stackHeader.getByRole('menuitem', {name: /Layer two/})).toHaveAttribute('aria-current', 'page');
+  await page.screenshot({path: testInfo.outputPath('pull-stack-header.png')});
+  await stackHeader.getByRole('menuitem', {name: '#1 Layer one'}).click();
+  await expect(page.getByRole('menu').filter({has: page.getByText(/^Stack #\d+ · 1\/4$/)})).toBeVisible();
 
   await page.goto(`/${owner}/${repo}/pulls?view=grouped`); // explicit, the preference is shared with parallel projects
   const layers = page.getByText('4 of 4 layers');
