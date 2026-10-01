@@ -385,6 +385,10 @@ func ViewIssue(ctx *context.Context) {
 		}
 	}
 	if issue.IsPull {
+		attachPullStackHeader(ctx, issue.PullRequest)
+		if ctx.Written() {
+			return
+		}
 		attachPullStackData(ctx, issue)
 		if ctx.Written() {
 			return

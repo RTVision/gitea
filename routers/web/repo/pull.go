@@ -643,6 +643,10 @@ func ViewPullCommits(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
+	attachPullStackHeader(ctx, issue.PullRequest)
+	if ctx.Written() {
+		return
+	}
 	prCompareInfo := &prViewInfo.CompareInfo
 	if prCompareInfo.HeadCommitID == "" {
 		ctx.NotFound(nil)
@@ -694,6 +698,10 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 
 	prViewInfo := newPullRequestViewInfo()
 	prViewInfo.prepareViewInfo(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+	attachPullStackHeader(ctx, issue.PullRequest)
 	if ctx.Written() {
 		return
 	}

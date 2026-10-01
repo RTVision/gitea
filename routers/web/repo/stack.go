@@ -37,6 +37,12 @@ type pullStackEntryData struct {
 	Readiness string
 }
 
+type pullStackHeaderData struct {
+	Stack    *issues_model.PullRequestStack
+	Entries  []*pullStackEntryData
+	Position int
+}
+
 type pullStackData struct {
 	Stack         *issues_model.PullRequestStack
 	Entries       []*pullStackEntryData
@@ -68,12 +74,12 @@ func stackEntryReadiness(ctx *context.Context, pr *issues_model.PullRequest) str
 	return ""
 }
 
-func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStack) (*pullStackData, error) {
-	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+func loadPullStackEntries(ctx *context.Context, stackID int64) ([]*pullStackEntryData, error) {
+	entries, err := issues_model.GetStackEntries(ctx, stackID)
 	if err != nil {
 		return nil, err
 	}
-	data := &pullStackData{Stack: stack, Entries: make([]*pullStackEntryData, 0, len(entries))}
+	data := make([]*pullStackEntryData, 0, len(entries))
 	for _, entry := range entries {
 		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
 		if err != nil {
@@ -85,7 +91,23 @@ func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStac
 		if err := pr.Issue.LoadRepo(ctx); err != nil {
 			return nil, err
 		}
-		data.Entries = append(data.Entries, &pullStackEntryData{Entry: entry, Pull: pr, Readiness: stackEntryReadiness(ctx, pr)})
+		data = append(data, &pullStackEntryData{Entry: entry, Pull: pr})
+	}
+	return data, nil
+}
+
+func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStack) (*pullStackData, error) {
+	entries, err := loadPullStackEntries(ctx, stack.ID)
+	if err != nil {
+		return nil, err
+	}
+	return completePullStackData(ctx, stack, entries)
+}
+
+func completePullStackData(ctx *context.Context, stack *issues_model.PullRequestStack, entries []*pullStackEntryData) (*pullStackData, error) {
+	data := &pullStackData{Stack: stack, Entries: entries}
+	for _, entry := range entries {
+		entry.Readiness = stackEntryReadiness(ctx, entry.Pull)
 	}
 	prConfig := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
 	for _, style := range pull_service.StackLandingStyles(stack.Mode) {
@@ -93,6 +115,7 @@ func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStac
 			data.LandingStyles = append(data.LandingStyles, style)
 		}
 	}
+	var err error
 	data.Operations, err = issues_model.GetStackOperations(ctx, stack.ID)
 	if err != nil {
 		return nil, err
@@ -108,11 +131,9 @@ func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStac
 	return data, nil
 }
 
-func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
-	if issue.PullRequest == nil {
-		return
-	}
-	stack, err := issues_model.GetPullRequestStack(ctx, issue.PullRequest.ID)
+// attachPullStackHeader loads what every pull request tab shows in its title, without the stack box's per-layer merge checks.
+func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil {
 		ctx.ServerError("GetPullRequestStack", err)
 		return
@@ -120,9 +141,23 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 	if stack == nil {
 		return
 	}
-	data, err := loadPullStackData(ctx, stack)
+	entries, err := loadPullStackEntries(ctx, stack.ID)
 	if err != nil {
-		ctx.ServerError("loadPullStackData", err)
+		ctx.ServerError("loadPullStackEntries", err)
+		return
+	}
+	position := slices.IndexFunc(entries, func(entry *pullStackEntryData) bool { return entry.Pull.ID == pr.ID }) + 1
+	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Stack: stack, Entries: entries, Position: position}
+}
+
+func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
+	header, _ := ctx.Data["PullStackHeader"].(*pullStackHeaderData)
+	if header == nil {
+		return
+	}
+	data, err := completePullStackData(ctx, header.Stack, header.Entries)
+	if err != nil {
+		ctx.ServerError("completePullStackData", err)
 		return
 	}
 	ctx.Data["PullStackData"] = data
@@ -139,7 +174,7 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 		}
 		mergeData.InfoSections = append([]*pullInfoSection{{InfoItems: []*pullMergeBoxInfoItem{{
 			SvgIconHTML: svg.RenderHTML("octicon-info"),
-			InfoHTML:    ctx.Locale.Tr("repo.pulls.stack_merge_disabled", stack.ID),
+			InfoHTML:    ctx.Locale.Tr("repo.pulls.stack_merge_disabled", header.Stack.ID),
 		}}}}, mergeData.InfoSections...)
 	}
 }

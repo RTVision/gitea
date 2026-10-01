@@ -1,7 +1,7 @@
 {{$data := .PullStackData}}
 {{$op := $data.Operation}}
 {{$active := and $op (or (eq $op.State "queued") (eq $op.State "running") (eq $op.State "waiting") (eq $op.State "cancelling"))}}
-<div aria-live="polite" {{if $active}}data-global-init="initRepoStackStatus" data-stack-status-url="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/status" data-reloading-interval="3000"{{else}}data-status-final="true"{{end}}>
+<div aria-live="polite" {{if $active}}data-stack-status-url="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/status" data-reloading-interval="3000"{{else}}data-status-final="true"{{end}}>
 	{{if $op}}
 		{{if eq $op.State "completed"}}
 			<div class="ui positive message">{{if eq $op.Kind "update"}}{{ctx.Locale.Tr "repo.pulls.stack_updated"}}{{else if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebased"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_landed" $op.Completed}}{{end}}</div>
