@@ -95,8 +95,10 @@ func TestPullListGroupsStacks(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("Stack #%d", stack.ID), strings.TrimSpace(stackRow.Find(".item-body "+stackLink).First().Text()))
 	assert.Contains(t, stackRow.Find(".item-body").First().Text(), "Operation: blocked")
 	assert.Equal(t, 3, stackRow.Find(".stack-status-bar > span").Length())
-	assert.Equal(t, "3 of 3 layers", strings.TrimSpace(stackRow.Find("details[open] > summary").Text())) // few layers start expanded
+	assert.Zero(t, stackRow.Find("details[open]").Length(), "unfiltered stacks start collapsed")
+	assert.Equal(t, "3 of 3 layers", strings.TrimSpace(stackRow.Find("details > summary").Text()))
 	assert.Equal(t, 3, stackRow.Find("details .index").Length())
+	assert.Zero(t, stackRow.Find("details "+stackLink).Length(), "grouped layers do not repeat the stack badge")
 	assert.Equal(t, "4 Open", strings.Join(strings.Fields(doc.Find(".small-menu-items .item").First().Text()), " ")) // counts individual pulls
 
 	doc = list("?view=flat")
@@ -118,5 +120,5 @@ func TestPullListGroupsStacks(t *testing.T) {
 	assert.Equal(t, []string{"#6"}, indexes(doc))
 	assert.Positive(t, doc.Find(`.pagination a[href*="page=2"]`).Length())
 	assert.Zero(t, doc.Find(`.pagination a[href*="page=3"]`).Length(), "a stack takes one page slot")
-	assert.Equal(t, []string{"#2", "#3", "#5"}, indexes(list("?view=grouped&page=2")))
+	assert.Equal(t, []string{"#5", "#3", "#2"}, indexes(list("?view=grouped&page=2")))
 }

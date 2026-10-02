@@ -8,6 +8,7 @@ test('stack pages create and render a pull request chain', async ({page, request
   test.setTimeout(30_000);
   const repo = `e2e-stack-${randomString(8)}`;
   const unsafeTitle = 'Unsafe <img src=x onerror="window.stackXss=1">';
+  const thirdTitle = 'Layer three with a long title that wraps on narrow screens and keeps the stack dropdown within the pull request page';
   const expectEscapedSelection = async (dropdown: Locator) => {
     await dropdown.getByRole('combobox').pressSequentially('Unsafe');
     await dropdown.getByRole('option', {name: /Unsafe/}).click();
@@ -24,7 +25,7 @@ test('stack pages create and render a pull request chain', async ({page, request
     await apiCreateFiles(request, owner, repo, [{path: 'trunk.txt', content: 'trunk\n'}], {branch: 'main'});
     const one = await apiCreatePR(request, owner, repo, 'layer-one', 'main', 'Layer one');
     const two = await apiCreatePR(request, owner, repo, 'layer-two', 'layer-one', 'Layer two');
-    const three = await apiCreatePR(request, owner, repo, 'layer-three', 'layer-two', 'Layer three');
+    const three = await apiCreatePR(request, owner, repo, 'layer-three', 'layer-two', thirdTitle);
     await apiCreatePR(request, owner, repo, 'solo', 'main', 'Unstacked change');
     await apiCreateFiles(request, owner, repo, [{path: 'unsafe.txt', content: 'unsafe\n'}], {branch: 'layer-three', newBranch: 'unsafe'});
     const unsafe = await apiCreatePR(request, owner, repo, 'unsafe', 'layer-three', unsafeTitle);
@@ -77,7 +78,7 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.getByRole('option', {name: /Layer inserted/}).click();
   await page.getByRole('button', {name: 'Insert pull request'}).click();
   await expect(page.getByText(`Inserted #${inserted}. Select Update stack`)).toBeVisible();
-  await expect(page.getByRole('list', {name: 'entries'}).getByRole('link')).toHaveText(['#1 Layer one', `#${inserted} Layer inserted`, '#2 Layer two', '#3 Layer three']);
+  await expect(page.getByRole('list', {name: 'entries'}).getByRole('link')).toHaveText([`#3 ${thirdTitle}`, '#2 Layer two', `#${inserted} Layer inserted`, '#1 Layer one']);
 
   await page.setViewportSize({width: 375, height: 812});
   await expect.poll(() => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.scrollingElement!.scrollWidth) - innerWidth)).toBeLessThanOrEqual(0);
@@ -87,18 +88,27 @@ test('stack pages create and render a pull request chain', async ({page, request
   expect(pageWidth.scrolling).toBeLessThanOrEqual(pageWidth.viewport);
 
   await page.goto(`/${owner}/${repo}/pulls/${two}`);
-  await expect(page.getByRole('heading', {name: /Part of Stack #\d+/})).toBeVisible();
+  const pullStack = page.locator('details').filter({has: page.getByText(/^Part of Stack #\d+$/)});
+  await expect(pullStack).not.toHaveAttribute('open', '');
+  await expect(pullStack.getByRole('link', {name: '#2 Layer two', exact: true})).toBeHidden();
+  await pullStack.locator('summary').click();
+  await expect(pullStack.getByRole('link', {name: '#2 Layer two', exact: true})).toBeVisible();
   await expect(page.getByRole('link', {name: 'View stack'})).toBeVisible();
   await expect(page.locator('#pull-request-merge-form')).toHaveCount(0);
+  const stackHeader = page.getByRole('menu').filter({has: page.getByText(/^4 layers$/)});
+  await stackHeader.click();
+  await expect(stackHeader.getByRole('menuitem', {name: `#3 ${thirdTitle}`, exact: true})).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.scrollingElement!.scrollWidth) - innerWidth)).toBeLessThanOrEqual(0);
   await page.screenshot({path: testInfo.outputPath('pull-stack-mobile.png'), fullPage: true});
+  await stackHeader.press('Escape');
+  await expect(stackHeader).toHaveAttribute('aria-expanded', 'false');
   await page.setViewportSize({width: 1280, height: 720});
   await page.screenshot({path: testInfo.outputPath('pull-after-stack.png'), fullPage: true});
-  const stackHeader = page.getByRole('menu').filter({has: page.getByText(/^Stack #\d+ · 3\/4$/)});
   await stackHeader.click();
   await expect(stackHeader.getByRole('menuitem', {name: /Layer two/})).toHaveAttribute('aria-current', 'page');
   await page.screenshot({path: testInfo.outputPath('pull-stack-header.png')});
   await stackHeader.getByRole('menuitem', {name: '#1 Layer one'}).click();
-  await expect(page.getByRole('menu').filter({has: page.getByText(/^Stack #\d+ · 1\/4$/)})).toBeVisible();
+  await expect(stackHeader.getByRole('menuitem', {name: '#1 Layer one', includeHidden: true})).toHaveAttribute('aria-current', 'page');
 
   await page.goto(`/${owner}/${repo}/pulls?view=grouped`); // explicit, the preference is shared with parallel projects
   const layers = page.getByText('4 of 4 layers');
@@ -106,10 +116,11 @@ test('stack pages create and render a pull request chain', async ({page, request
   const unstacked = page.getByRole('checkbox', {name: /Unstacked change/});
   await expect(page.getByRole('link', {name: /^Stack #\d+$/})).toBeVisible();
   await expect(page.getByRole('img', {name: '0 merged, 4 open, 0 closed'})).toBeVisible();
-  await expect(layerTwo).toBeHidden(); // more than three layers start collapsed
+  await expect(layerTwo).toBeHidden();
   await page.getByTitle('Check/Uncheck all items').check();
   await expect(unstacked).toBeChecked();
   await layers.click();
+  await expect(layerTwo).toBeVisible();
   await expect(layerTwo).not.toBeChecked(); // collapsed layers stay out of batch actions
   await unstacked.uncheck();
   await page.getByRole('checkbox', {name: /Unsafe/}).uncheck();

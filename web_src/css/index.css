@@ -65,6 +65,7 @@
 @import "./repo/issue-card.css";
 @import "./repo/issue-label.css";
 @import "./repo/issue-list.css";
+@import "./repo/stack.css";
 @import "./repo/list-header.css";
 @import "./repo/file-view.css";
 @import "./repo/wiki.css";

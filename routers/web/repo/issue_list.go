@@ -6,6 +6,7 @@ package repo
 import (
 	"bytes"
 	"errors"
+	"iter"
 	"maps"
 	"net/http"
 	"slices"
@@ -738,7 +739,9 @@ type pullListRow struct {
 	Expanded bool
 }
 
-const pullListStackCollapseAbove = 3
+func (row *pullListRow) TopDownLayers() iter.Seq2[int, *issues_model.Issue] {
+	return slices.Backward(row.Layers)
+}
 
 func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGroup, stacks *issues_model.OpenStacks, filtered bool) []*pullListRow {
 	byID := make(map[int64]*issues_model.Issue, len(issues))
@@ -759,7 +762,7 @@ func pullListRows(issues issues_model.IssueList, groups []issues_model.IssueGrou
 		if row.Stack == nil {
 			row.Issue = row.Layers[0]
 		}
-		row.Expanded = filtered || len(row.Layers) <= pullListStackCollapseAbove // a filter points at exact layers
+		row.Expanded = filtered // a filter points at exact layers
 		rows = append(rows, row)
 	}
 	return rows

@@ -33,9 +33,9 @@
 					{{ctx.Locale.Tr "repo.pulls.stack_layers_listed" (len $row.Layers) $size}}
 				{{end}}
 			</summary>
-			<div class="flex-divided-list items-with-main">
-				{{range $row.Layers}}
-					{{template "shared/issuelist_item" dict "Root" $root "Issue" .}}
+			<div class="stack-layer-list flex-divided-list items-with-main {{if $root.CanWriteIssuesOrPulls}}stack-layer-checkboxes{{end}}">
+				{{range $_, $layer := $row.TopDownLayers}}
+					{{template "shared/issuelist_item" dict "Root" $root "Issue" . "StackLayer" true}}
 				{{end}}
 			</div>
 		</details>

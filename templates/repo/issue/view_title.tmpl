@@ -53,13 +53,14 @@
 			<div class="ui green label issue-state-label">{{svg "octicon-issue-opened"}} {{ctx.Locale.Tr "repo.issues.open_title"}}</div>
 		{{end}}
 		{{with .PullStackHeader}}
-			<div class="ui small basic jump dropdown button tw-m-0">
-				<span class="flex-text-inline">{{svg "octicon-stack"}}{{ctx.Locale.Tr "repo.pulls.stack_badge" .Stack.ID .Position (len .Entries)}}</span>
+			<div class="ui small basic jump dropdown stack-dropdown button tw-m-0">
+				<span class="flex-text-inline">{{svg "octicon-stack"}}{{ctx.Locale.TrN (len .Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len .Entries)}}</span>
 				{{svg "octicon-triangle-down" 14 "dropdown icon"}}
-				<div class="menu flex-items-menu items-width-limit">
-					{{range .Entries}}
-						<a class="item{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>{{template "shared/issueicon" .Pull.Issue}}<span class="gt-ellipsis">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
+				<div class="menu stack-menu stack-layer-list flex-items-menu items-width-limit">
+					{{range $_, $entry := .TopDownEntries}}
+						<a class="item stack-layer{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>{{template "shared/issueicon" .Pull.Issue}}<span class="gt-ellipsis">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
 					{{end}}
+					<div class="header flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="gt-ellipsis">{{.Stack.TrunkBranch}}</span></div>
 					<div class="divider"></div>
 					<a class="item" href="{{$.RepoLink}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
 				</div>

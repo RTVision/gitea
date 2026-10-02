@@ -1,7 +1,8 @@
 {{$root := .Root}}
 {{$approvalCounts := $root.ApprovalCounts}}
+{{$stackLayer := .StackLayer}}
 {{with .Issue}}
-<div class="item">
+<div class="item{{if $stackLayer}} stack-layer{{end}}">
 
 	<div class="item-leading">
 		{{/* using some tw helpers is the only way to align the checkbox */}}
@@ -76,7 +77,7 @@
 					{{end}}
 				</div>
 			{{end}}
-			{{if $root.OpenStacks}}{{with index $root.OpenStacks.Layers .ID}}
+			{{if and $root.OpenStacks (not $stackLayer)}}{{with index $root.OpenStacks.Layers .ID}}
 				<a class="flex-text-inline" href="{{$root.RepoLink}}/pulls/stacks/{{.StackID}}">
 					{{svg "octicon-stack" 14}}
 					{{ctx.Locale.Tr "repo.pulls.stack_badge" .StackID .Position (len .Stack.Layers)}}

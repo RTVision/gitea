@@ -6,6 +6,7 @@ package repo
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"net/http"
 	"net/url"
 	"slices"
@@ -38,9 +39,8 @@ type pullStackEntryData struct {
 }
 
 type pullStackHeaderData struct {
-	Stack    *issues_model.PullRequestStack
-	Entries  []*pullStackEntryData
-	Position int
+	Stack   *issues_model.PullRequestStack
+	Entries []*pullStackEntryData
 }
 
 type pullStackData struct {
@@ -49,6 +49,14 @@ type pullStackData struct {
 	Operation     *issues_model.StackOperation
 	Operations    []*issues_model.StackOperation
 	LandingStyles []repo_model.MergeStyle
+}
+
+func (data *pullStackHeaderData) TopDownEntries() iter.Seq2[int, *pullStackEntryData] {
+	return slices.Backward(data.Entries)
+}
+
+func (data *pullStackData) TopDownEntries() iter.Seq2[int, *pullStackEntryData] {
+	return slices.Backward(data.Entries)
 }
 
 func canManagePullStack(ctx *context.Context) bool {
@@ -146,8 +154,7 @@ func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
 		ctx.ServerError("loadPullStackEntries", err)
 		return
 	}
-	position := slices.IndexFunc(entries, func(entry *pullStackEntryData) bool { return entry.Pull.ID == pr.ID }) + 1
-	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Stack: stack, Entries: entries, Position: position}
+	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Stack: stack, Entries: entries}
 }
 
 func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {

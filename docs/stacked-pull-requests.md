@@ -49,14 +49,15 @@ in. Cross-repository branches, duplicate membership, multiple open pull requests
 sharing a head branch, and already scheduled ordinary auto-merges cannot be
 adopted.
 
-The stack box on each pull request links the layers in landing order. Review the
+The collapsible stack box on each pull request shows connected layers from top to
+bottom, with the trunk branch below them. Review the
 individual layer diff as usual. A closed but unmerged predecessor does not satisfy
 the stack's landing order.
 
 The repository's pull request list shows each open stack as one expandable row
 with its mode, size and a per-layer status bar, listing the layers that match the
-current filters. Rows start expanded while a filter or search is active, or when
-three or fewer layers match. Selecting all rows skips layers of collapsed stacks.
+current filters. Rows start collapsed and expand while a filter or search is active.
+Selecting all rows skips layers of collapsed stacks.
 Choose **Flat** to list every pull request with a stack badge instead; the choice
 is remembered per user.
 

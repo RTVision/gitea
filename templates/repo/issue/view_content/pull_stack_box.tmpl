@@ -3,9 +3,19 @@
 <div class="timeline-item comment">
 	<div class="timeline-avatar">{{svg "octicon-stack" 40}}</div>
 	<div class="content"><div class="ui segment fitted avatar-content-left-arrow"><div class="merge-section flex-divided-list items-px-default">
-		<div class="item flex-left-right"><h3>{{ctx.Locale.Tr "repo.pulls.part_of_stack" $data.Stack.ID}}</h3>
-			<a href="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a></div>
-		<div class="item"><ol class="tw-pl-5">{{range $data.Entries}}<li class="flex-left-right {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}><a href="{{.Pull.Issue.Link}}">#{{.Pull.Index}} {{.Pull.Issue.Title}}</a><span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span></li>{{end}}</ol></div>
+		<details class="item">
+			<summary class="tw-cursor-pointer"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.part_of_stack" $data.Stack.ID}}</span> <span class="tw-text-text-light">{{ctx.Locale.TrN (len $data.Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len $data.Entries)}}</span></summary>
+			<ul class="stack-layer-list flex-divided-list tw-mt-3">
+				{{range $_, $entry := $data.TopDownEntries}}
+					<li class="item stack-layer flex-left-right tw-items-start {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}>
+						<a class="flex-text-block tw-items-start tw-min-w-0" href="{{.Pull.Issue.Link}}">{{template "shared/issueicon" .Pull.Issue}}<span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
+						<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span>
+					</li>
+				{{end}}
+			</ul>
+			<div class="flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="tw-break-anywhere">{{$data.Stack.TrunkBranch}}</span></div>
+			<a class="flex-text-inline tw-mt-3" href="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
+		</details>
 		{{if $data.Operation}}{{template "repo/stack/status" $}}{{end}}
 	</div></div></div>
 </div>
