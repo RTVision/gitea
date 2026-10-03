@@ -247,6 +247,11 @@ func hookPostReceiveHandlePullRequestMerging(ctx *gitea_context.PrivateContext, 
 		pr.MergedBaseCommitID = update.OldCommitID
 	}
 
+	if err := pull_service.PrepareStackMergedReceipt(ctx, pr, ctx.Repo.Repository.ID, update.RefFullName.BranchName(), update.OldCommitID, update.NewCommitID); err != nil {
+		ctx.PrivateInternalErrorf("failed to record stack landing destination for pr %d: %v", pr.ID, err)
+		return false
+	}
+
 	// FIXME: Maybe we need a `PullRequestStatusMerged` status for PRs that are merged, currently we use the previous status
 	// here to keep it as before, that maybe PullRequestStatusMergeable
 	_, err = pull_service.SetMerged(ctx, pr, updates[len(updates)-1].NewCommitID, timeutil.TimeStampNow(), ctx.Doer, pr.Status)

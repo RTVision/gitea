@@ -16,6 +16,7 @@ import (
 	activities_model "gitea.dev/models/activities"
 	audit_model "gitea.dev/models/audit"
 	"gitea.dev/models/db"
+	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
@@ -1149,6 +1150,8 @@ func Delete(ctx *context.APIContext) {
 	//     "$ref": "#/responses/forbidden"
 	//   "404":
 	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/conflict"
 
 	owner := ctx.Repo.Owner
 	repo := ctx.Repo.Repository
@@ -1158,7 +1161,11 @@ func Delete(ctx *context.APIContext) {
 	}
 
 	if err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true); err != nil {
-		ctx.APIErrorInternal(err)
+		if errors.Is(err, issues_model.ErrStackRevision) {
+			ctx.APIError(http.StatusConflict, "Finish or cancel the stack operation before deleting this repository.")
+		} else {
+			ctx.APIErrorInternal(err)
+		}
 		return
 	}
 

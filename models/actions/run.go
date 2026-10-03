@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitea.dev/models/db"
@@ -110,8 +111,22 @@ func (run *ActionRun) WorkflowLink() string {
 	return fmt.Sprintf("%s/actions/?workflow=%s", run.Repo.Link(), url.QueryEscape(run.WorkflowID))
 }
 
+func (run *ActionRun) stackPullRequest() *api.PullRequest {
+	if !strings.HasPrefix(run.Ref, "refs/stack-pulls/") {
+		return nil
+	}
+	payload, err := run.GetPullRequestEventPayload()
+	if err != nil || payload == nil || payload.PullRequest == nil || payload.PullRequest.Index <= 0 || payload.PullRequest.HTMLURL == "" {
+		return nil
+	}
+	return payload.PullRequest
+}
+
 // RefLink return the url of run's ref
 func (run *ActionRun) RefLink() string {
+	if pr := run.stackPullRequest(); pr != nil {
+		return pr.HTMLURL
+	}
 	refName := git.RefName(run.Ref)
 	if refName.IsPull() {
 		return run.Repo.Link() + "/pulls/" + refName.ShortName()
@@ -121,6 +136,9 @@ func (run *ActionRun) RefLink() string {
 
 // PrettyRef return #id for pull ref or ShortName for others
 func (run *ActionRun) PrettyRef() string {
+	if pr := run.stackPullRequest(); pr != nil {
+		return "#" + strconv.FormatInt(pr.Index, 10)
+	}
 	refName := git.RefName(run.Ref)
 	if refName.IsPull() {
 		if pullIndex, ok := refName.PullIndex(); ok {

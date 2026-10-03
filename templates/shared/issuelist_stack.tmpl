@@ -11,7 +11,7 @@
 	</div>
 	<div class="item-main">
 		<div class="item-header">
-			<a class="list-item-large-title" href="{{$root.Link}}/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
+			<a class="list-item-large-title" href="{{$stack.Bottom.Repo.Link}}/pulls/{{$stack.Bottom.Index}}">{{$stack.Bottom.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
 		</div>
 		<div class="item-body">
 			<a class="flex-text-inline" href="{{$root.RepoLink}}/pulls/stacks/{{$stack.ID}}">{{ctx.Locale.Tr "repo.pulls.stack_number" $stack.ID}}</a>

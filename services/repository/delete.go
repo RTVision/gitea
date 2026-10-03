@@ -73,6 +73,10 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		}
 	}
 
+	if err := issues_model.DeleteStacksByRepoID(ctx, repoID); err != nil {
+		return err
+	}
+
 	// Query the action tasks of this repo, they will be needed after they have been deleted to remove the logs
 	tasks, err := db.Find[actions_model.ActionTask](ctx, actions_model.FindTaskOptions{RepoID: repoID})
 	if err != nil {
@@ -201,9 +205,6 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 	}
 
 	// Delete Pulls and related objects
-	if err := issues_model.DeleteStacksByRepoID(ctx, repoID); err != nil {
-		return err
-	}
 	if err := issues_model.DeletePullsByBaseRepoID(ctx, repoID); err != nil {
 		return err
 	}

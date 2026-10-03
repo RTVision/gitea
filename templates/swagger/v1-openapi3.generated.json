@@ -4682,6 +4682,13 @@
             ],
             "description": "How layers take parent updates, fixed at creation; defaults to rebase"
           },
+          "pull_request_refs": {
+            "items": {
+              "$ref": "#/components/schemas/PullRequestReference"
+            },
+            "type": "array",
+            "x-go-name": "PullRequestRefs"
+          },
           "pull_requests": {
             "description": "Ordered pull request numbers, starting at the trunk",
             "items": {
@@ -6015,6 +6022,13 @@
       },
       "EditPullRequestStackOption": {
         "properties": {
+          "pull_request_refs": {
+            "items": {
+              "$ref": "#/components/schemas/PullRequestReference"
+            },
+            "type": "array",
+            "x-go-name": "PullRequestRefs"
+          },
           "pull_requests": {
             "description": "Ordered pull request numbers to append",
             "items": {
@@ -7321,6 +7335,9 @@
             "format": "int64",
             "type": "integer",
             "x-go-name": "PullRequest"
+          },
+          "pull_request_ref": {
+            "$ref": "#/components/schemas/PullRequestReference"
           },
           "revision": {
             "description": "The expected stack revision",
@@ -9114,8 +9131,17 @@
             "type": "string",
             "x-go-name": "Merged"
           },
+          "merged_branch": {
+            "type": "string",
+            "x-go-name": "MergedBranch"
+          },
           "merged_by": {
             "$ref": "#/components/schemas/User"
+          },
+          "merged_repo_id": {
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "MergedRepoID"
           },
           "milestone": {
             "$ref": "#/components/schemas/Milestone"
@@ -9297,6 +9323,23 @@
         "type": "object",
         "x-go-package": "gitea.dev/modules/structs"
       },
+      "PullRequestReference": {
+        "properties": {
+          "pull_request": {
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "PullRequest"
+          },
+          "repository_id": {
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "RepositoryID"
+          }
+        },
+        "title": "PullRequestReference identifies a pull request within its repository.",
+        "type": "object",
+        "x-go-package": "gitea.dev/modules/structs"
+      },
       "PullRequestStack": {
         "properties": {
           "active_operation": {
@@ -9327,6 +9370,9 @@
             "type": "integer",
             "x-go-name": "Number"
           },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
+          },
           "revision": {
             "description": "The revision used for optimistic locking",
             "format": "int64",
@@ -9354,6 +9400,9 @@
             "description": "The trunk branch",
             "type": "string",
             "x-go-name": "Ref"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
           },
           "sha": {
             "description": "The trunk commit SHA",
@@ -9430,6 +9479,9 @@
             "type": "integer",
             "x-go-name": "ParentPullRequest"
           },
+          "parent_pull_request_ref": {
+            "$ref": "#/components/schemas/PullRequestReference"
+          },
           "parent_sha": {
             "description": "The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained",
             "type": "string",
@@ -9466,6 +9518,11 @@
             "format": "int64",
             "type": "integer",
             "x-go-name": "PullRequest"
+          },
+          "repository_id": {
+            "format": "int64",
+            "type": "integer",
+            "x-go-name": "RepositoryID"
           }
         },
         "title": "PullRequestStackHead identifies one locally restacked layer.",
@@ -9591,6 +9648,9 @@
             "format": "int64",
             "type": "integer",
             "x-go-name": "Position"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
           },
           "size": {
             "description": "The number of pull requests in the stack",
@@ -17514,6 +17574,9 @@
           },
           "404": {
             "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
           }
         },
         "summary": "Delete a repository",

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	actions_model "gitea.dev/models/actions"
+	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
@@ -17,6 +18,8 @@ import (
 	actions_module "gitea.dev/modules/actions"
 	"gitea.dev/modules/actions/jobparser"
 	api "gitea.dev/modules/structs"
+	webhook_module "gitea.dev/modules/webhook"
+	"gitea.dev/services/convert"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,10 +124,15 @@ func TestWorkflowMatchPayloadUsesStackTrunkWithoutChangingEvent(t *testing.T) {
 }
 
 func TestValidateStackWorkflowPayloadFailsClosed(t *testing.T) {
-	stack := &issues_model.PullRequestStack{TrunkBranch: "release"}
-	assert.Error(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Base: &api.PRBranchInfo{Ref: "feature"}}}))
-	assert.Error(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release"}}}}))
-	assert.NoError(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{PullRequest: &api.PullRequest{Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}}}}))
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "release"}
+	payload := &api.PullRequestPayload{PullRequest: &api.PullRequest{Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Ref: "release", Sha: "trunk-sha"}}}}
+	assert.Error(t, validateStackWorkflowPayload(stack, payload))
+	payload.PullRequest.Stack.Base.Repository = &api.Repository{ID: 2}
+	assert.Error(t, validateStackWorkflowPayload(stack, payload))
+	payload.PullRequest.Stack.Base.Repository.ID = stack.RepoID
+	assert.NoError(t, validateStackWorkflowPayload(stack, payload))
+	payload.PullRequest.Stack.Base.Sha = ""
+	assert.Error(t, validateStackWorkflowPayload(stack, payload))
 }
 
 func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
@@ -136,6 +144,9 @@ func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
 	input := newPullRequestReviewNotifyInput(&repo_model.Repository{ID: 1}, &user_model.User{ID: 2}, actions_module.GithubEventPullRequest, "refs/pull/1/head", forkPR)
 
 	assert.True(t, isForkPullRequestInput(input))
+	forkPR.BaseRepoID = forkPR.HeadRepoID
+	assert.False(t, forkPR.IsFromFork())
+	assert.True(t, isForkPullRequestInput(input), "a fork-owned upper PR still crosses the workflow destination")
 	assert.Equal(t, "refs/pull/1/head", input.Ref.String())
 	assert.False(t, shouldCreateSkippedCommitStatusForFilteredWorkflow(input, &actions_module.DetectedWorkflow{
 		TriggerEvent: &jobparser.Event{Name: actions_module.GithubEventPullRequest},
@@ -147,6 +158,78 @@ func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
 	assert.True(t, shouldCreateSkippedCommitStatusForFilteredWorkflow(newNotifyInput(&repo_model.Repository{ID: 1}, &user_model.User{ID: 2}, actions_module.GithubEventPullRequest), &actions_module.DetectedWorkflow{
 		TriggerEvent: &jobparser.Event{Name: actions_module.GithubEventPullRequest},
 	}))
+}
+
+func TestForkStackWorkflowDestination(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 4})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: pr.BaseRepoID})
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}))
+	payload := &api.PullRequestPayload{Repository: &api.Repository{ID: repo.ID}, PullRequest: &api.PullRequest{
+		Base:  &api.PRBranchInfo{RepoID: repo.ID, Ref: pr.BaseBranch},
+		Head:  &api.PRBranchInfo{Sha: "event-source-sha"},
+		Stack: &api.PullRequestStackRef{Base: &api.PullRequestStackBase{Repository: &api.Repository{ID: stack.RepoID}, Ref: stack.TrunkBranch, Sha: "trunk-sha"}},
+	}}
+	input := newNotifyInput(repo, doer, webhook_module.HookEventPullRequest).WithPayload(payload).WithPullRequest(pr)
+	resolved, err := resolvePullRequestWorkflowInput(ctx, input)
+	require.NoError(t, err)
+	assert.Equal(t, stack.RepoID, resolved.Repo.ID)
+	assert.Equal(t, issues_model.StackHeadRefName(pr.ID), resolved.Ref.String())
+	commitRef, err := pullRequestWorkflowCommitRef(resolved, resolved.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, payload.PullRequest.Head.Sha, commitRef.String())
+	assert.False(t, pr.IsFromFork())
+	assert.True(t, isForkPullRequestInput(resolved))
+	assert.Equal(t, repo.ID, input.Repo.ID)
+	assert.Equal(t, pr.GetGitHeadRefName(), input.Ref.String())
+	assert.Equal(t, repo.ID, payload.Repository.ID)
+	resolvedPayload, ok := resolved.Payload.(*api.PullRequestPayload)
+	require.True(t, ok)
+	assert.Equal(t, stack.RepoID, resolvedPayload.Repository.ID)
+	assert.Equal(t, repo.ID, resolvedPayload.PullRequest.Base.RepoID)
+	require.NoError(t, issues_model.ReleaseStackBranchClaims(ctx, stack.ID))
+	pr.HasMerged, pr.MergedRepoID, pr.MergedBranch = true, stack.RepoID, stack.TrunkBranch
+	input.WithRef("landed-commit")
+	resolved, err = resolvePullRequestWorkflowInput(ctx, input)
+	require.NoError(t, err)
+	assert.Equal(t, stack.RepoID, resolved.Repo.ID)
+	assert.Equal(t, "landed-commit", resolved.Ref.String())
+	commitRef, err = pullRequestWorkflowCommitRef(resolved, resolved.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, "landed-commit", commitRef.String())
+}
+
+func TestPrivateForkStackWorkflowDestination(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: pr.BaseRepoID})
+	main := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+	require.True(t, main.IsPrivate)
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+	stack := &issues_model.PullRequestStack{RepoID: main.ID, TrunkBranch: main.DefaultBranch, State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx,
+		&issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1},
+		&issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)},
+	))
+	anonymous := convert.ToAPIPullRequest(ctx, pr, nil)
+	require.NotNil(t, anonymous)
+	assert.Nil(t, anonymous.Stack)
+	converted := convert.ToAPIPullRequestForNotification(ctx, pr)
+	require.NotNil(t, converted)
+	require.NotNil(t, converted.Stack)
+	assert.Equal(t, main.ID, converted.Stack.Base.Repository.ID)
+	assert.NotEmpty(t, converted.Stack.Base.Sha)
+	payload := &api.PullRequestPayload{Repository: anonymous.Base.Repository, PullRequest: converted}
+	resolved, err := resolvePullRequestWorkflowInput(ctx, newNotifyInput(repo, doer, webhook_module.HookEventPullRequest).WithPayload(payload).WithPullRequest(pr))
+	require.NoError(t, err)
+	assert.Equal(t, main.ID, resolved.Repo.ID)
+	assert.Equal(t, issues_model.StackHeadRefName(pr.ID), resolved.Ref.String())
 }
 
 func TestScopedWorkflowFiltersUseStackTrunk(t *testing.T) {

@@ -8,7 +8,6 @@ import (
 	"errors"
 
 	issues_model "gitea.dev/models/issues"
-	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
@@ -30,7 +29,7 @@ func stackAncestor(ctx context.Context, repo git.RepositoryFacade, parent, head 
 	return false, err
 }
 
-func reconcileStackCancellation(ctx context.Context, op *issues_model.StackOperation, actor *user_model.User, repo *repo_model.Repository) error {
+func reconcileStackCancellation(ctx context.Context, op *issues_model.StackOperation, actor *user_model.User) error {
 	journal := new(stackJournal)
 	if err := json.Unmarshal([]byte(op.JournalJSON), journal); err != nil {
 		return err
@@ -64,18 +63,22 @@ func reconcileStackCancellation(ctx context.Context, op *issues_model.StackOpera
 			}
 			continue
 		}
-		head, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+layer.HeadBranch)
+		source, err := stackLayerSource(ctx, layer)
 		if err != nil {
 			return err
 		}
-		published, err := stackAncestor(ctx, repo, layer.NewHead, head)
+		head, err := git.GetFullCommitID(ctx, source, git.BranchPrefix+layer.HeadBranch)
+		if err != nil {
+			return err
+		}
+		published, err := stackAncestor(ctx, source, layer.NewHead, head)
 		if err != nil {
 			return err
 		}
 		if published {
 			layer.OldParent = layer.NewParent
 		}
-		knownBoundary, err := stackAncestor(ctx, repo, layer.OldParent, head)
+		knownBoundary, err := stackAncestor(ctx, source, layer.OldParent, head)
 		if err != nil {
 			return err
 		}
@@ -99,7 +102,7 @@ func reconcileStackCancellation(ctx context.Context, op *issues_model.StackOpera
 		if err != nil {
 			return err
 		}
-		if pr.BaseBranch != stack.TrunkBranch {
+		if pr.BaseRepoID == stack.RepoID && pr.BaseBranch != stack.TrunkBranch {
 			if err := changeTargetBranchForStack(ctx, pr, actor, stack.TrunkBranch, 0); err != nil {
 				log.Warn("Cancelled stack %d requires target repair before synchronizing: %v", stack.ID, err)
 			}

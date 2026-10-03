@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	issues_model "gitea.dev/models/issues"
+	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
@@ -28,7 +29,7 @@ func (p *stackMergePublication) prepare(ctx context.Context, tmp *mergeContext, 
 		return ErrSHADoesNotMatch{GivenSHA: p.layer.LandingBaseSHA, CurrentSHA: base}
 	}
 	ref := fmt.Sprintf("refs/stack-operations/%d/merge-%d", p.op.ID, p.layer.EntryID)
-	if err := gitcmd.NewCommand("fetch", "--no-tags", "--no-write-fetch-head").AddDashesAndList(tmp.tmpBasePath, "+"+candidate+":"+ref).WithRepo(tmp.pr.BaseRepo).Run(ctx); err != nil {
+	if err := gitcmd.NewCommand("fetch", "--no-tags", "--no-write-fetch-head").AddDashesAndList(tmp.tmpBasePath, "+"+candidate+":"+ref).WithRepo(tmp.target.Repo).Run(ctx); err != nil {
 		return err
 	}
 	p.layer.MergeCandidateSHA = candidate
@@ -36,7 +37,7 @@ func (p *stackMergePublication) prepare(ctx context.Context, tmp *mergeContext, 
 }
 
 // CheckStackMergePublication fences the final Git publication against the durable intent.
-func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, branch, oldSHA, newSHA string) error {
+func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, branch, oldSHA, newSHA string, repoIDs ...int64) error {
 	pr, err := issues_model.GetPullRequestByID(ctx, pullID)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, bran
 	if err != nil || stack == nil {
 		return err
 	}
-	if stack.TrunkBranch != branch {
+	if stack.TrunkBranch != branch || (len(repoIDs) > 0 && stack.RepoID != repoIDs[0]) {
 		return ErrPullRequestStacked
 	}
 	if err := validateStackOperation(ctx, pr, stack.ActiveOperationID, actorID); err != nil {
@@ -67,6 +68,9 @@ func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, bran
 		return issues_model.ErrStackRevision
 	}
 	layer := layers[0]
+	if (layer.HeadRepoID != 0 && layer.HeadRepoID != pr.HeadRepoID) || (layer.LandingRepoID != 0 && (layer.LandingRepoID != stack.RepoID || layer.LandingBranch != branch)) {
+		return issues_model.ErrStackRevision
+	}
 	if layer.PullID != pullID || layer.Phase != "merging" || layer.LandingBaseSHA != oldSHA || layer.MergeCandidateSHA != newSHA {
 		return issues_model.ErrStackRevision
 	}
@@ -83,24 +87,75 @@ func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, bran
 	return nil
 }
 
+func PrepareStackMergedReceipt(ctx context.Context, pr *issues_model.PullRequest, repoID int64, branch, oldSHA, newSHA string) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || stack == nil {
+		return err
+	}
+	if stack.RepoID != repoID || stack.TrunkBranch != branch {
+		return ErrPullRequestStacked
+	}
+	op, err := issues_model.GetStackOperation(ctx, stack.ActiveOperationID)
+	if err != nil {
+		return err
+	}
+	journal := new(stackJournal)
+	if err := json.Unmarshal([]byte(op.JournalJSON), journal); err != nil {
+		return err
+	}
+	layers := remainingStackLayers(journal)
+	if journal.Stage != "confirm" || len(layers) == 0 {
+		return issues_model.ErrStackRevision
+	}
+	layer := layers[0]
+	if layer.PullID != pr.ID || layer.Phase != "merging" || layer.LandingBaseSHA != oldSHA || layer.MergeCandidateSHA != newSHA {
+		return issues_model.ErrStackRevision
+	}
+	pr.MergedRepoID, pr.MergedBranch, pr.MergedBaseCommitID, pr.MergeBase = repoID, branch, oldSHA, layer.OldParent
+	return nil
+}
+
 func reconcileStackMerge(ctx context.Context, layer *stackLayerJournal, pr *issues_model.PullRequest, actor *user_model.User) (bool, error) {
+	repoID, branch := layer.LandingRepoID, layer.LandingBranch
+	if repoID == 0 {
+		repoID, branch = pr.BaseRepoID, pr.BaseBranch
+	}
 	if pr.HasMerged {
+		repo, targetBranch, err := pr.GetMergedTarget(ctx)
+		if err != nil {
+			return false, err
+		}
+		if repo.ID != repoID || targetBranch != branch || (layer.MergeCandidateSHA != "" && pr.MergedCommitID != layer.MergeCandidateSHA) {
+			return false, issues_model.ErrStackRevision
+		}
 		return pr.MergedCommitID != "", nil
 	}
 	if layer.MergeCandidateSHA == "" {
 		return false, nil
 	}
-	if err := pr.LoadBaseRepo(ctx); err != nil {
+	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
+	if err != nil {
 		return false, err
 	}
-	err := gitcmd.NewCommand("merge-base", "--is-ancestor").AddDynamicArguments(layer.MergeCandidateSHA, git.BranchPrefix+pr.BaseBranch).WithRepo(pr.BaseRepo).Run(ctx)
+	err = gitcmd.NewCommand("merge-base", "--is-ancestor").AddDynamicArguments(layer.MergeCandidateSHA, git.BranchPrefix+branch).WithRepo(repo).Run(ctx)
 	if err != nil {
 		if gitcmd.IsErrorExitCode(err, 1) {
 			return false, nil
 		}
 		return false, err
 	}
-	pr.MergedBaseCommitID = layer.LandingBaseSHA
+	source, err := stackLayerSource(ctx, layer)
+	if err != nil {
+		return false, err
+	}
+	head, err := git.GetFullCommitID(ctx, source, git.BranchPrefix+layer.HeadBranch)
+	if err != nil {
+		return false, err
+	}
+	if head != layer.ExpectedHead {
+		return false, ErrSHADoesNotMatch{GivenSHA: layer.ExpectedHead, CurrentSHA: head}
+	}
+	pr.MergedRepoID, pr.MergedBranch, pr.MergedBaseCommitID, pr.MergeBase = repoID, branch, layer.LandingBaseSHA, layer.OldParent
 	merged, err := SetMerged(ctx, pr, layer.MergeCandidateSHA, timeutil.TimeStampNow(), actor, pr.Status)
 	if err != nil {
 		return false, err

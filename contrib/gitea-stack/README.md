@@ -28,6 +28,39 @@ gitea-stack list
 gitea-stack adopt --trunk main --prs '#41,#42'
 ```
 
+### Fork workflow
+
+Keep the source branches in one fork and choose the main repository's remote with
+`--upstream`. Fetch its trunk before initializing the stack:
+
+```sh
+git fetch upstream main
+gitea-stack init --remote origin --upstream upstream --trunk main feat/api feat/ui
+gitea-stack submit
+```
+
+The first PR targets the main repository's trunk. Later PRs belong to the fork
+and target the preceding source branch. The stack belongs to the main repository;
+landing publishes each layer into its trunk while retaining the fork PR's number,
+discussion and immediate base. `sync` fetches the trunk from `upstream` and source
+branches from `origin`; `push` publishes source branches only to `origin`.
+
+A contributor can manage a stack when they authored every layer and can push to
+every fork source branch. Landing requires merge permission on the main
+repository's trunk.
+
+Adopt existing layers with repository-qualified PR selectors:
+
+```sh
+gitea-stack adopt --remote origin --upstream upstream --trunk main \
+  --prs 'main-owner/repo#41,fork-owner/repo#7'
+gitea-stack checkout 'fork-owner/repo#7'
+```
+
+A bare `#7` selector is accepted when it identifies exactly one layer. When a lower
+layer has landed, `adopt` takes the remaining open PRs and preserves the landed
+prefix. Without `--upstream`, existing same-repository workflows keep one remote.
+
 `sync` fetches named stack refs and refreshes server state. It never rewrites branches. It adopts a changed remote head as a new push lease only when the local branch already matches it, or when the server records that exact head and its complete Git tree equals the tree of the previously accepted remote head. This permits topology-only server rewrites while preserving unpublished local commits. A server-recorded head alone is not trusted: changed content (including whitespace), an unknown prior lease, or unavailable objects retain the old lease and require explicit Git reconciliation before pushing. JSON output lists remote divergence in `needs_reconciliation` and local layers whose saved parent no longer matches the previous local head in `needs_restack`.
 
 ```sh

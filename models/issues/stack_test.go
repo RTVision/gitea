@@ -21,7 +21,7 @@ func TestStackMembershipPolicyAndRevision(t *testing.T) {
 	branch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
 	require.NoError(t, err)
 	assert.Equal(t, pr.BaseBranch, branch)
-	stack := &issues_model.PullRequestStack{RepoID: pr.BaseRepoID, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
+	stack := &issues_model.PullRequestStack{RepoID: pr.BaseRepoID + 1, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
 	require.NoError(t, db.Insert(ctx, stack))
 	claim := &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}
 	require.NoError(t, db.Insert(ctx, claim))
@@ -30,6 +30,10 @@ func TestStackMembershipPolicyAndRevision(t *testing.T) {
 	branch, err = issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
 	require.NoError(t, err)
 	assert.Equal(t, "release", branch)
+	repoID, _, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
+	require.NoError(t, err)
+	assert.Equal(t, stack.RepoID, repoID)
+	assert.NotEqual(t, stack.RepoID, pr.BaseRepoID)
 	assert.NotEqual(t, "release", pr.BaseBranch)
 	require.NoError(t, issues_model.AdvanceStackRevision(ctx, stack.ID, 1))
 	require.ErrorIs(t, issues_model.AdvanceStackRevision(ctx, stack.ID, 1), issues_model.ErrStackRevision)
@@ -57,6 +61,11 @@ func TestStackMembershipPolicyAndRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "saved-parent", entries[0].OldParentSHA)
+	pr.MergedRepoID, pr.MergedBranch = stack.RepoID, stack.TrunkBranch
+	repoID, branch, err = issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
+	require.NoError(t, err)
+	assert.Equal(t, stack.RepoID, repoID)
+	assert.Equal(t, stack.TrunkBranch, branch)
 }
 
 func TestStackClaimsRejectAmbiguousMembership(t *testing.T) {

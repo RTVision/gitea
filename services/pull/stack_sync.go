@@ -33,7 +33,10 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 		if err != nil {
 			return err
 		}
-		if err := checkStackAuthority(ctx, doer, repo); err != nil {
+		if err := checkStackManagement(ctx, doer, stack); err != nil {
+			return err
+		}
+		if err := checkStackMemberRead(ctx, doer, stack.ID); err != nil {
 			return err
 		}
 		entries, err := issues_model.GetStackEntries(ctx, stack.ID)

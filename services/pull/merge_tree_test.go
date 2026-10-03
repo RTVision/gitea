@@ -4,12 +4,16 @@
 package pull
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
 
+	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/unittest"
+	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
 	"gitea.dev/modules/git/gitrepo"
 
@@ -152,4 +156,67 @@ base
 `, baseBranch, headBranch, emptyFile)
 	err := gitcmd.NewCommand("fast-import").WithRepo(repo).WithStdinBytes([]byte(stdin)).RunWithStderr(t.Context())
 	require.NoError(t, err)
+}
+
+func TestStackPatchCheckerPreservesComparisonBase(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	require.NoError(t, pr.LoadBaseRepo(ctx))
+	require.NoError(t, pr.LoadHeadRepo(ctx))
+	pr.BaseBranch, pr.HeadBranch = "stack-old-parent", "stack-new-head"
+	input := `commit refs/heads/stack-old-parent
+mark :1
+committer Test <test@example.com> 0 +0000
+data 1
+a
+from refs/heads/master
+M 100644 inline parent.txt
+data 6
+parent
+
+commit refs/heads/stack-squashed-parent
+mark :2
+committer Test <test@example.com> 0 +0000
+data 1
+s
+from refs/heads/master
+M 100644 inline parent.txt
+data 6
+parent
+
+commit refs/heads/stack-new-head
+mark :3
+committer Test <test@example.com> 0 +0000
+data 1
+b
+from :2
+M 100644 inline layer.txt
+data 5
+layer
+`
+	require.NoError(t, gitcmd.NewCommand("fast-import").WithRepo(pr.BaseRepo).WithStdinBytes([]byte(input)).Run(ctx))
+	boundary, err := git.GetFullCommitID(ctx, pr.BaseRepo, "refs/heads/stack-squashed-parent")
+	require.NoError(t, err)
+	head, err := git.GetFullCommitID(ctx, pr.BaseRepo, "refs/heads/stack-new-head")
+	require.NoError(t, err)
+	require.NoError(t, git.UpdateRef(ctx, pr.BaseRepo, pr.GetGitHeadRefName(), head))
+	stack := &issues_model.PullRequestStack{RepoID: pr.BaseRepoID, TrunkBranch: "master", State: issues_model.StackStateOpen}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1, OldParentSHA: boundary, HeadSHA: head}))
+	require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}))
+	require.NoError(t, db.Insert(ctx, &git_model.ProtectedBranch{RepoID: pr.BaseRepoID, RuleName: "master", ProtectedFilePatterns: "parent.txt;layer.txt"}))
+	for name, check := range map[string]func(context.Context, *issues_model.PullRequest) error{"merge-tree": checkPullRequestMergeableByMergeTree, "temporary-repo": checkPullRequestMergeableByTmpRepo} {
+		t.Run(name, func(t *testing.T) {
+			pr.MergeBase, pr.Status = "", issues_model.PullRequestStatusChecking
+			require.NoError(t, check(ctx, pr))
+			assert.Equal(t, boundary, pr.MergeBase)
+			assert.Equal(t, []string{"layer.txt"}, pr.ChangedProtectedFiles)
+			assert.Equal(t, issues_model.PullRequestStatusMergeable, pr.Status)
+			var diff bytes.Buffer
+			require.NoError(t, DownloadDiffOrPatch(ctx, pr, &diff, false, false))
+			assert.Contains(t, diff.String(), "layer.txt")
+			assert.NotContains(t, diff.String(), "parent.txt")
+		})
+	}
 }

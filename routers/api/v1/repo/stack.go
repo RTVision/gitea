@@ -7,8 +7,11 @@ import (
 	"errors"
 	"net/http"
 
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unit"
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/util"
@@ -19,6 +22,43 @@ import (
 	pull_service "gitea.dev/services/pull"
 )
 
+func checkStackAPIPullRead(ctx *context.APIContext, pr *issues_model.PullRequest) error {
+	for _, repoID := range []int64{pr.BaseRepoID, pr.HeadRepoID} {
+		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
+		if err != nil {
+			return err
+		}
+		if !ctx.TokenCanAccessRepo(repo) {
+			return util.ErrNotExist
+		}
+		permission, err := access_model.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+		if err != nil {
+			return err
+		}
+		if !permission.CanRead(unit.TypeCode) || repoID == pr.BaseRepoID && !permission.CanRead(unit.TypePullRequests) {
+			return util.ErrNotExist
+		}
+	}
+	return nil
+}
+
+func checkStackAPIRead(ctx *context.APIContext, stack *issues_model.PullRequestStack) error {
+	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
+		if err != nil {
+			return err
+		}
+		if err := checkStackAPIPullRead(ctx, pr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func getRepositoryStack(ctx *context.APIContext) *issues_model.PullRequestStack {
 	stack, err := issues_model.GetStackByID(ctx, ctx.PathParamInt64("id"))
 	if err != nil {
@@ -27,6 +67,10 @@ func getRepositoryStack(ctx *context.APIContext) *issues_model.PullRequestStack 
 	}
 	if stack.RepoID != ctx.Repo.Repository.ID {
 		ctx.APIErrorNotFound()
+		return nil
+	}
+	if err := checkStackAPIRead(ctx, stack); err != nil {
+		ctx.APIErrorAuto(err)
 		return nil
 	}
 	return stack
@@ -57,11 +101,48 @@ func stackServiceError(ctx *context.APIContext, stackID int64, err error) {
 	ctx.APIError(http.StatusUnprocessableEntity, err.Error())
 }
 
-func resolveStackPullRequestIDs(ctx *context.APIContext, indexes []int64) ([]int64, bool) {
-	ids := make([]int64, 0, len(indexes))
+func resolveStackPullRequestIDs(ctx *context.APIContext, indexes []int64, references []api.PullRequestReference) ([]int64, bool) {
+	if len(indexes) != 0 && len(references) != 0 || len(indexes) == 0 && len(references) == 0 {
+		ctx.APIError(http.StatusUnprocessableEntity, "provide either pull_requests or pull_request_refs")
+		return nil, false
+	}
 	for _, index := range indexes {
-		pr, err := issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, index)
+		references = append(references, api.PullRequestReference{PullRequest: index})
+	}
+	ids := make([]int64, 0, len(references))
+	for _, reference := range references {
+		repoID := reference.RepositoryID
+		if repoID == 0 {
+			repoID = ctx.Repo.Repository.ID
+		}
+		if reference.PullRequest <= 0 || repoID < 0 {
+			ctx.APIError(http.StatusUnprocessableEntity, "invalid pull request reference")
+			return nil, false
+		}
+		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 		if err != nil {
+			ctx.APIErrorAuto(err)
+			return nil, false
+		}
+		if !ctx.TokenCanAccessRepo(repo) {
+			ctx.APIErrorNotFound()
+			return nil, false
+		}
+		permission, err := access_model.GetDoerRepoPermission(ctx, repo, ctx.Doer)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return nil, false
+		}
+		if !permission.CanRead(unit.TypeCode) || !permission.CanRead(unit.TypePullRequests) {
+			ctx.APIErrorNotFound()
+			return nil, false
+		}
+		pr, err := issues_model.GetPullRequestByIndex(ctx, repoID, reference.PullRequest)
+		if err != nil {
+			ctx.APIErrorAuto(err)
+			return nil, false
+		}
+		if err := checkStackAPIPullRead(ctx, pr); err != nil {
 			ctx.APIErrorAuto(err)
 			return nil, false
 		}
@@ -72,6 +153,10 @@ func resolveStackPullRequestIDs(ctx *context.APIContext, indexes []int64) ([]int
 
 func writeAPIStack(ctx *context.APIContext, status int, stack *issues_model.PullRequestStack) {
 	converted, err := convert.ToAPIPullRequestStack(ctx, stack, ctx.Doer)
+	if errors.Is(err, util.ErrNotExist) {
+		ctx.APIErrorNotFound()
+		return
+	}
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
@@ -142,19 +227,39 @@ func ListPullRequestStacks(ctx *context.APIContext) {
 	//   "500":
 	//     "$ref": "#/responses/error"
 	opts := utils.GetListOptions(ctx)
-	stacks, total, err := issues_model.ListStacks(ctx, ctx.Repo.Repository.ID, opts)
+	stacks, _, err := issues_model.ListStacks(ctx, ctx.Repo.Repository.ID, db.ListOptionsAll)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	converted := make([]*api.PullRequestStack, 0, len(stacks))
+	readable := make([]*issues_model.PullRequestStack, 0, len(stacks))
 	for _, stack := range stacks {
+		if err := checkStackAPIRead(ctx, stack); err != nil {
+			if errors.Is(err, util.ErrNotExist) {
+				continue
+			}
+			ctx.APIErrorAuto(err)
+			return
+		}
+		readable = append(readable, stack)
+	}
+	skip, take := opts.GetSkipTake()
+	total := int64(len(readable))
+	converted := make([]*api.PullRequestStack, 0, min(take, len(readable)))
+	for _, stack := range readable[min(skip, len(readable)):] {
 		apiStack, err := convert.ToAPIPullRequestStack(ctx, stack, ctx.Doer)
+		if errors.Is(err, util.ErrNotExist) {
+			total--
+			continue
+		}
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
 		converted = append(converted, apiStack)
+		if len(converted) == take {
+			break
+		}
 	}
 	ctx.SetLinkHeader(total, opts.PageSize)
 	ctx.SetTotalCountHeader(total)
@@ -192,7 +297,7 @@ func CreatePullRequestStack(ctx *context.APIContext) {
 	//   "422":
 	//     "$ref": "#/responses/validationError"
 	form := web.GetForm[*api.CreatePullRequestStackOption](ctx)
-	pullIDs, ok := resolveStackPullRequestIDs(ctx, form.PullRequests)
+	pullIDs, ok := resolveStackPullRequestIDs(ctx, form.PullRequests, form.PullRequestRefs)
 	if !ok {
 		return
 	}
@@ -278,7 +383,7 @@ func AppendPullRequestStack(ctx *context.APIContext) {
 		return
 	}
 	form := web.GetForm[*api.EditPullRequestStackOption](ctx)
-	pullIDs, ok := resolveStackPullRequestIDs(ctx, form.PullRequests)
+	pullIDs, ok := resolveStackPullRequestIDs(ctx, form.PullRequests, form.PullRequestRefs)
 	if !ok {
 		return
 	}
@@ -333,7 +438,15 @@ func InsertPullRequestStack(ctx *context.APIContext) {
 		return
 	}
 	form := web.GetForm[*api.InsertPullRequestStackOption](ctx)
-	pullIDs, ok := resolveStackPullRequestIDs(ctx, []int64{form.PullRequest})
+	var indexes []int64
+	var references []api.PullRequestReference
+	if form.PullRequest != 0 {
+		indexes = []int64{form.PullRequest}
+	}
+	if form.PullRequestRef != nil {
+		references = []api.PullRequestReference{*form.PullRequestRef}
+	}
+	pullIDs, ok := resolveStackPullRequestIDs(ctx, indexes, references)
 	if !ok {
 		return
 	}
@@ -561,12 +674,11 @@ func SynchronizePullRequestStack(ctx *context.APIContext) {
 	stackID := stack.ID
 	expectations := make([]pull_service.StackHeadExpectation, 0, len(form.Heads))
 	for _, head := range form.Heads {
-		pr, err := issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, head.PullRequest)
-		if err != nil {
-			ctx.APIErrorAuto(err)
+		ids, ok := resolveStackPullRequestIDs(ctx, nil, []api.PullRequestReference{{RepositoryID: head.RepositoryID, PullRequest: head.PullRequest}})
+		if !ok {
 			return
 		}
-		expectations = append(expectations, pull_service.StackHeadExpectation{PullRequestID: pr.ID, HeadSHA: head.HeadSHA, ParentSHA: head.ParentSHA})
+		expectations = append(expectations, pull_service.StackHeadExpectation{PullRequestID: ids[0], HeadSHA: head.HeadSHA, ParentSHA: head.ParentSHA})
 	}
 	stack, err := pull_service.SynchronizeStack(ctx, ctx.Doer, stackID, form.Revision, expectations)
 	if err != nil {

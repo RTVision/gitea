@@ -429,9 +429,13 @@ func viewPullRequestFromRun(ctx context.Context, run *actions_model.ActionRun, p
 		}
 	}
 	if prPayload != nil && prPayload.Index > 0 {
+		link := fmt.Sprintf("%s/pulls/%d", run.Repo.Link(), prPayload.Index)
+		if prPayload.PullRequest != nil && prPayload.PullRequest.HTMLURL != "" {
+			link = prPayload.PullRequest.HTMLURL
+		}
 		return &ViewPullRequest{
 			Index: fmt.Sprintf("#%d", prPayload.Index),
-			Link:  fmt.Sprintf("%s/pulls/%d", run.Repo.Link(), prPayload.Index),
+			Link:  link,
 		}
 	}
 	// Push-triggered run: surface an open PR whose head matches this branch so

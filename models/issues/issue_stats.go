@@ -129,11 +129,7 @@ func getIssueStatsChunk(ctx context.Context, opts *IssuesOptions, issueIDs []int
 }
 
 func applyIssuesOptions(sess db.Session, opts *IssuesOptions, issueIDs []int64) db.Session {
-	if len(opts.RepoIDs) > 1 {
-		sess.In("issue.repo_id", opts.RepoIDs)
-	} else if len(opts.RepoIDs) == 1 {
-		sess.And("issue.repo_id = ?", opts.RepoIDs[0])
-	}
+	applyRepoConditions(sess, opts)
 
 	if len(issueIDs) > 0 {
 		sess.In("issue.id", issueIDs)

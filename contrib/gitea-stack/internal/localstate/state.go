@@ -19,16 +19,19 @@ import (
 )
 
 type Layer struct {
-	Branch      string `json:"branch"`
-	PullRequest int64  `json:"pr,omitempty"`
-	HeadSHA     string `json:"head_sha"`
-	ParentSHA   string `json:"parent_sha"`
-	RemoteSHA   string `json:"remote_sha,omitempty"`
-	LandedSHA   string `json:"landed_sha,omitempty"`
+	Branch       string `json:"branch"`
+	PullRequest  int64  `json:"pr,omitempty"`
+	RepositoryID int64  `json:"repository_id,omitempty"`
+	Repository   string `json:"repository,omitempty"`
+	HeadSHA      string `json:"head_sha"`
+	ParentSHA    string `json:"parent_sha"`
+	RemoteSHA    string `json:"remote_sha,omitempty"`
+	LandedSHA    string `json:"landed_sha,omitempty"`
 }
 
 type State struct {
 	Remote             string        `json:"remote"`
+	UpstreamRemote     string        `json:"upstream_remote,omitempty"`
 	Trunk              string        `json:"trunk"`
 	Mode               api.StackMode `json:"mode,omitempty"` // empty in files written before modes means rebase
 	Stack              int64         `json:"stack,omitempty"`

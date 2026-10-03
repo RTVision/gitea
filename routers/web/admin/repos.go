@@ -4,11 +4,13 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"gitea.dev/models/db"
+	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
@@ -48,7 +50,11 @@ func DeleteRepo(ctx *context.Context) {
 	}
 
 	if err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true); err != nil {
-		ctx.ServerError("DeleteRepository", err)
+		if errors.Is(err, issues_model.ErrStackRevision) {
+			ctx.JSON(http.StatusConflict, map[string]any{"errorMessage": ctx.Tr("repo.settings.deletion_blocked_by_stack"), "renderFormat": "text"})
+		} else {
+			ctx.ServerError("DeleteRepository", err)
+		}
 		return
 	}
 	log.Trace("Repository deleted: %s", repo.FullName())

@@ -179,6 +179,31 @@ func (prInfo *pullRequestViewInfo) setTemplateDataMergeTarget(ctx *context.Conte
 	}
 	ctx.Data["HeadBranchLink"] = headBranchLink
 	ctx.Data["BaseBranchLink"] = pull.GetBaseBranchLink(ctx)
+	if pull.HasMerged {
+		target, branch, err := pull.GetMergedTarget(ctx)
+		if err != nil {
+			if repo_model.IsErrRepoNotExist(err) {
+				ctx.Data["BaseTarget"], ctx.Data["BaseBranchLink"] = pull.MergedBranch, ""
+				return
+			}
+			ctx.ServerError("GetMergedTarget", err)
+			return
+		}
+		if _, err := readableStackRepository(ctx, target.ID); err != nil {
+			if errors.Is(err, issues_model.ErrStackNotExist) {
+				ctx.Data["BaseTarget"], ctx.Data["BaseBranchLink"] = branch, ""
+			} else {
+				ctx.ServerError("readableStackRepository", err)
+			}
+			return
+		}
+		ctx.Data["MergedCommitLink"] = target.Link() + "/commit/" + util.PathEscapeSegments(pull.MergedCommitID)
+		ctx.Data["BaseTarget"] = branch
+		if target.ID != pull.BaseRepoID {
+			ctx.Data["BaseTarget"] = target.FullName() + ":" + branch
+		}
+		ctx.Data["BaseBranchLink"] = target.Link() + "/src/branch/" + util.PathEscapeSegments(branch)
+	}
 }
 
 // GetPullDiffStats get Pull Requests diff stats
@@ -556,14 +581,25 @@ func getViewPullHeadBranchCommitID(ctx *context.Context, pull *issues_model.Pull
 
 func (prInfo *pullRequestViewInfo) prepareViewOpenPullInfo(ctx *context.Context) {
 	pull := prInfo.issue.PullRequest
-	if exist, _ := git_model.IsBranchExist(ctx, pull.BaseRepo.ID, pull.BaseBranch); !exist {
-		// if base branch doesn't exist, prepare from the merge base
+	baseRef := git.RefNameFromBranch(pull.BaseBranch)
+	stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
+	if err != nil {
+		ctx.ServerError("GetPullRequestStack", err)
+		return
+	}
+	if stack != nil {
+		boundary, err := issues_model.StackComparisonBase(ctx, pull)
+		if err != nil {
+			ctx.ServerError("StackComparisonBase", err)
+			return
+		}
+		baseRef = git.RefName(boundary)
+	} else if exist, _ := git_model.IsBranchExist(ctx, pull.BaseRepo.ID, pull.BaseBranch); !exist {
 		ctx.Data["BaseBranchNotExist"] = true
 		prInfo.prepareViewFillInfo(ctx, git.RefName(pull.MergeBase))
 		return
 	}
-
-	prInfo.prepareViewFillInfo(ctx, git.RefNameFromBranch(pull.BaseBranch))
+	prInfo.prepareViewFillInfo(ctx, baseRef)
 	if ctx.Written() {
 		return
 	}

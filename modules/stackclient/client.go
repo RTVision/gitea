@@ -332,3 +332,32 @@ func (c *Client) EditPull(ctx context.Context, index int64, option api.EditPullR
 	err := c.request(ctx, http.MethodPatch, c.repositoryPath("/pulls/"+strconv.FormatInt(index, 10)), &option, result)
 	return result, err
 }
+
+// ForRepository uses the same server and credentials for another repository.
+func (c *Client) ForRepository(repository string) (*Client, error) {
+	owner, repo, ok := strings.Cut(repository, "/")
+	if !ok || owner == "" || repo == "" || strings.ContainsAny(owner+repo, "/\\") {
+		return nil, fmt.Errorf("invalid repository %q", repository)
+	}
+	client := *c
+	client.Owner, client.Repo = owner, repo
+	return &client, nil
+}
+
+func (c *Client) CreateStackReferences(ctx context.Context, trunk string, mode api.StackMode, references []api.PullRequestReference) (*api.PullRequestStack, error) {
+	result := new(api.PullRequestStack)
+	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks"), &api.CreatePullRequestStackOption{Trunk: trunk, Mode: mode, PullRequestRefs: references}, result)
+	return result, err
+}
+
+func (c *Client) AppendStackReferences(ctx context.Context, number, revision int64, references []api.PullRequestReference) (*api.PullRequestStack, error) {
+	result := new(api.PullRequestStack)
+	err := c.request(ctx, http.MethodPatch, c.repositoryPath("/stacks/"+strconv.FormatInt(number, 10)), &api.EditPullRequestStackOption{Revision: revision, PullRequestRefs: references}, result)
+	return result, err
+}
+
+func (c *Client) InsertLayerReference(ctx context.Context, number, revision int64, reference api.PullRequestReference) (*api.PullRequestStack, error) {
+	result := new(api.PullRequestStack)
+	err := c.request(ctx, http.MethodPost, c.repositoryPath("/stacks/"+strconv.FormatInt(number, 10)+"/insert"), &api.InsertPullRequestStackOption{Revision: revision, PullRequestRef: &reference}, result)
+	return result, err
+}

@@ -5524,6 +5524,9 @@
           },
           "404": {
             "$ref": "#/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/responses/conflict"
           }
         }
       },
@@ -28774,6 +28777,13 @@
           "x-go-enum-desc": "rebase StackModeRebase replays layers onto their updated parents\nmerge StackModeMerge merges updated parents into layers without force-pushing",
           "x-go-name": "Mode"
         },
+        "pull_request_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PullRequestReference"
+          },
+          "x-go-name": "PullRequestRefs"
+        },
         "pull_requests": {
           "description": "Ordered pull request numbers, starting at the trunk",
           "type": "array",
@@ -30139,6 +30149,13 @@
       "type": "object",
       "title": "EditPullRequestStackOption appends pull requests to a stack.",
       "properties": {
+        "pull_request_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PullRequestReference"
+          },
+          "x-go-name": "PullRequestRefs"
+        },
         "pull_requests": {
           "description": "Ordered pull request numbers to append",
           "type": "array",
@@ -31448,6 +31465,9 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "PullRequest"
+        },
+        "pull_request_ref": {
+          "$ref": "#/definitions/PullRequestReference"
         },
         "revision": {
           "description": "The expected stack revision",
@@ -33228,8 +33248,17 @@
           "format": "date-time",
           "x-go-name": "Merged"
         },
+        "merged_branch": {
+          "type": "string",
+          "x-go-name": "MergedBranch"
+        },
         "merged_by": {
           "$ref": "#/definitions/User"
+        },
+        "merged_repo_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MergedRepoID"
         },
         "milestone": {
           "$ref": "#/definitions/Milestone"
@@ -33407,6 +33436,23 @@
       },
       "x-go-package": "gitea.dev/modules/structs"
     },
+    "PullRequestReference": {
+      "type": "object",
+      "title": "PullRequestReference identifies a pull request within its repository.",
+      "properties": {
+        "pull_request": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PullRequest"
+        },
+        "repository_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RepositoryID"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
     "PullRequestStack": {
       "type": "object",
       "title": "PullRequestStack represents an ordered pull request stack.",
@@ -33441,6 +33487,9 @@
           "format": "int64",
           "x-go-name": "Number"
         },
+        "repository": {
+          "$ref": "#/definitions/Repository"
+        },
         "revision": {
           "description": "The revision used for optimistic locking",
           "type": "integer",
@@ -33468,6 +33517,9 @@
           "description": "The trunk branch",
           "type": "string",
           "x-go-name": "Ref"
+        },
+        "repository": {
+          "$ref": "#/definitions/Repository"
         },
         "sha": {
           "description": "The trunk commit SHA",
@@ -33549,6 +33601,9 @@
           "format": "int64",
           "x-go-name": "ParentPullRequest"
         },
+        "parent_pull_request_ref": {
+          "$ref": "#/definitions/PullRequestReference"
+        },
         "parent_sha": {
           "description": "The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained",
           "type": "string",
@@ -33585,6 +33640,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "PullRequest"
+        },
+        "repository_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RepositoryID"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"
@@ -33712,6 +33772,9 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "Position"
+        },
+        "repository": {
+          "$ref": "#/definitions/Repository"
         },
         "size": {
           "description": "The number of pull requests in the stack",

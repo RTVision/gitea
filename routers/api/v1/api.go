@@ -1561,22 +1561,22 @@ func Routes() *web.Router {
 				m.Group("/stacks", func() {
 					m.Get("/capabilities", repo.StackCapabilities)
 					m.Combo("").Get(repo.ListPullRequestStacks).
-						Post(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.CreatePullRequestStackOption{}), repo.CreatePullRequestStack)
+						Post(reqToken(), mustNotBeArchived, bind(api.CreatePullRequestStackOption{}), repo.CreatePullRequestStack)
 					m.Group("/{id}", func() {
 						m.Combo("").Get(repo.GetPullRequestStack).
-							Patch(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.EditPullRequestStackOption{}), repo.AppendPullRequestStack).
-							Delete(reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackRevisionOption{}), repo.DeletePullRequestStack)
-						m.Post("/insert", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.InsertPullRequestStackOption{}), repo.InsertPullRequestStack)
-						m.Post("/rebase", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.RebasePullRequestStack)
-						m.Post("/update", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.UpdatePullRequestStack)
+							Patch(reqToken(), mustNotBeArchived, bind(api.EditPullRequestStackOption{}), repo.AppendPullRequestStack).
+							Delete(reqToken(), mustNotBeArchived, bind(api.PullRequestStackRevisionOption{}), repo.DeletePullRequestStack)
+						m.Post("/insert", reqToken(), mustNotBeArchived, bind(api.InsertPullRequestStackOption{}), repo.InsertPullRequestStack)
+						m.Post("/rebase", reqToken(), mustNotBeArchived, bind(api.PullRequestStackOperationOption{}), repo.RebasePullRequestStack)
+						m.Post("/update", reqToken(), mustNotBeArchived, bind(api.PullRequestStackOperationOption{}), repo.UpdatePullRequestStack)
 						m.Post("/land", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.PullRequestStackOperationOption{}), repo.LandPullRequestStack)
-						m.Post("/sync", reqToken(), mustNotBeArchived, reqRepoWriter(unit.TypeCode), bind(api.SynchronizePullRequestStackOption{}), repo.SynchronizePullRequestStack)
+						m.Post("/sync", reqToken(), mustNotBeArchived, bind(api.SynchronizePullRequestStackOption{}), repo.SynchronizePullRequestStack)
 						m.Group("/operations", func() {
 							m.Get("", repo.ListPullRequestStackOperations)
 							m.Group("/{operation}", func() {
 								m.Get("", repo.GetPullRequestStackOperation)
-								m.Post("/cancel", reqToken(), reqRepoWriter(unit.TypeCode), repo.CancelPullRequestStackOperation)
-								m.Post("/retry", reqToken(), reqRepoWriter(unit.TypeCode), repo.RetryPullRequestStackOperation)
+								m.Post("/cancel", reqToken(), repo.CancelPullRequestStackOperation)
+								m.Post("/retry", reqToken(), repo.RetryPullRequestStackOperation)
 							})
 						})
 					})

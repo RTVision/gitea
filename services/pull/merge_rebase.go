@@ -24,7 +24,7 @@ func getRebaseAmendMessage(ctx *mergeContext, baseGitRepo *git.Repository) (mess
 	commitTitle, commitBody, _ := strings.Cut(commitMessage, "\n")
 	extraVars := map[string]string{"CommitTitle": strings.TrimSpace(commitTitle), "CommitBody": strings.TrimSpace(commitBody)}
 
-	message, body, err := getMergeMessage(ctx, baseGitRepo, ctx.pr, repo_model.MergeStyleRebase, extraVars)
+	message, body, err := getMergeMessage(ctx, baseGitRepo, ctx.pr, repo_model.MergeStyleRebase, extraVars, ctx.target)
 	if err != nil || message == "" {
 		return "", err
 	}
@@ -58,7 +58,7 @@ func doMergeRebaseFastForward(ctx *mergeContext) error {
 	}
 
 	// Original repo to read template from.
-	baseGitRepo, err := git.OpenRepository(ctx, ctx.pr.BaseRepo)
+	baseGitRepo, err := git.OpenRepository(ctx, ctx.target.Repo)
 	if err != nil {
 		log.Error("Unable to get Git repo for rebase: %v", err)
 		return err

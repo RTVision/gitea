@@ -5,6 +5,7 @@ package convert
 
 import (
 	"context"
+	"errors"
 
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
@@ -27,7 +28,16 @@ import (
 // Required - Issue
 // Optional - Merger
 func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User) *api.PullRequest {
-	return toAPIPullRequest(ctx, pr, doer, ToAPIPullRequestStackRef)
+	return toAPIPullRequest(ctx, pr, doer, func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
+		return ToAPIPullRequestStackRef(ctx, pr, doer)
+	})
+}
+
+// ToAPIPullRequestForNotification includes stack provenance for trusted internal events.
+func ToAPIPullRequestForNotification(ctx context.Context, pr *issues_model.PullRequest) *api.PullRequest {
+	return toAPIPullRequest(ctx, pr, nil, func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
+		return toAPIPullRequestStackRef(ctx, pr, nil, false)
+	})
 }
 
 func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, stackRef func(context.Context, *issues_model.PullRequest) (*api.PullRequestStackRef, error)) *api.PullRequest {
@@ -272,11 +282,13 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 		apiPullRequest.Merged = pr.MergedUnix.AsTimePtr()
 		apiPullRequest.MergedCommitID = &pr.MergedCommitID
 		apiPullRequest.MergedBaseCommitID = pr.MergedBaseCommitID
+		apiPullRequest.MergedRepoID = pr.MergedRepoID
+		apiPullRequest.MergedBranch = pr.MergedBranch
 		apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 	}
 
 	apiPullRequest.Stack, err = stackRef(ctx, pr)
-	if err != nil {
+	if err != nil && !errors.Is(err, util.ErrNotExist) {
 		log.Error("ToAPIPullRequestStackRef[%d]: %v", pr.ID, err)
 	}
 
@@ -492,6 +504,8 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 			apiPullRequest.Merged = pr.MergedUnix.AsTimePtr()
 			apiPullRequest.MergedCommitID = &pr.MergedCommitID
 			apiPullRequest.MergedBaseCommitID = pr.MergedBaseCommitID
+			apiPullRequest.MergedRepoID = pr.MergedRepoID
+			apiPullRequest.MergedBranch = pr.MergedBranch
 			apiPullRequest.MergedBy = ToUser(ctx, pr.Merger, nil)
 		}
 

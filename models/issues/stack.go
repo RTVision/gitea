@@ -119,20 +119,50 @@ func GetPullRequestStack(ctx context.Context, pullID int64) (*PullRequestStack, 
 	return GetStackByID(ctx, claim.StackID)
 }
 
+type PullRequestPolicyTarget struct {
+	RepoID int64
+	Branch string
+}
+
+func ResolvePullRequestPolicyTarget(ctx context.Context, pr *PullRequest) (int64, string, error) {
+	targets, err := ResolvePullRequestPolicyTargets(ctx, PullRequestList{pr})
+	if err != nil {
+		return 0, "", err
+	}
+	target := targets[pr.ID]
+	return target.RepoID, target.Branch, nil
+}
+
 func ResolvePullRequestPolicyBranch(ctx context.Context, pr *PullRequest) (string, error) {
-	branches, err := ResolvePullRequestPolicyBranches(ctx, PullRequestList{pr})
-	return branches[pr.ID], err
+	_, branch, err := ResolvePullRequestPolicyTarget(ctx, pr)
+	return branch, err
 }
 
 func ResolvePullRequestPolicyBranches(ctx context.Context, prs PullRequestList) (map[int64]string, error) {
-	branches := make(map[int64]string, len(prs))
+	targets, err := ResolvePullRequestPolicyTargets(ctx, prs)
+	if err != nil {
+		return nil, err
+	}
+	branches := make(map[int64]string, len(targets))
+	for id, target := range targets {
+		branches[id] = target.Branch
+	}
+	return branches, nil
+}
+
+func ResolvePullRequestPolicyTargets(ctx context.Context, prs PullRequestList) (map[int64]PullRequestPolicyTarget, error) {
+	targets := make(map[int64]PullRequestPolicyTarget, len(prs))
 	if len(prs) == 0 {
-		return branches, nil
+		return targets, nil
 	}
 	pullIDs := make([]int64, 0, len(prs))
 	for _, pr := range prs {
 		pullIDs = append(pullIDs, pr.ID)
-		branches[pr.ID] = pr.BaseBranch
+		target := PullRequestPolicyTarget{RepoID: pr.BaseRepoID, Branch: pr.BaseBranch}
+		if pr.HasMerged && pr.MergedRepoID != 0 && pr.MergedBranch != "" {
+			target = PullRequestPolicyTarget{RepoID: pr.MergedRepoID, Branch: pr.MergedBranch}
+		}
+		targets[pr.ID] = target
 	}
 	var memberships []struct {
 		PullRequestID int64
@@ -148,20 +178,16 @@ func ResolvePullRequestPolicyBranches(ctx context.Context, prs PullRequestList) 
 		Find(&memberships); err != nil {
 		return nil, err
 	}
-	prsByID := make(map[int64]*PullRequest, len(prs))
-	for _, pr := range prs {
-		prsByID[pr.ID] = pr
-	}
 	for _, membership := range memberships {
 		if membership.StackID == 0 {
 			return nil, ErrStackNotExist
 		}
-		if membership.RepoID != prsByID[membership.PullRequestID].BaseRepoID {
+		if membership.RepoID <= 0 || membership.TrunkBranch == "" {
 			return nil, ErrInvalidStack
 		}
-		branches[membership.PullRequestID] = membership.TrunkBranch
+		targets[membership.PullRequestID] = PullRequestPolicyTarget{RepoID: membership.RepoID, Branch: membership.TrunkBranch}
 	}
-	return branches, nil
+	return targets, nil
 }
 
 func ListStacks(ctx context.Context, repoID int64, opts db.ListOptions) ([]*PullRequestStack, int64, error) {
@@ -191,7 +217,7 @@ func FindStackInsertCandidatePulls(ctx context.Context, repoID int64, baseBranch
 func findStackCandidatePulls(ctx context.Context, repoID int64, cond builder.Cond, limit int) (PullRequestList, error) {
 	prs := make(PullRequestList, 0)
 	sess := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").
-		Where("pull_request.base_repo_id = ? AND pull_request.head_repo_id = ? AND pull_request.flow = ? AND pull_request.has_merged = ? AND issue.is_closed = ?", repoID, repoID, PullRequestFlowGithub, false, false).
+		Where("((pull_request.base_repo_id = ? AND pull_request.head_repo_id = ?) OR (pull_request.base_repo_id = ? AND pull_request.head_repo_id IN (SELECT id FROM repository WHERE fork_id = ? AND is_fork = ?)) OR (pull_request.base_repo_id = pull_request.head_repo_id AND pull_request.base_repo_id IN (SELECT id FROM repository WHERE fork_id = ? AND is_fork = ?))) AND pull_request.flow = ? AND pull_request.has_merged = ? AND issue.is_closed = ?", repoID, repoID, repoID, repoID, true, repoID, true, PullRequestFlowGithub, false, false).
 		And(builder.NotIn("pull_request.id", builder.Select("pull_request_id").From("stack_branch_claim"))).And(cond).
 		Desc("pull_request.index")
 	if limit > 0 {

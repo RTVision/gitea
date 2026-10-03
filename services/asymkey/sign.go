@@ -271,12 +271,23 @@ Loop:
 // SignMerge determines if we should sign a PR merge commit to the base repository.
 // baseRef and headRef must resolve in gitRepo. Callers pass the temporary merge repo's own
 // refs for an update by merge, whose fake reverse PR has no head ref in the base repository.
-func SignMerge(ctx context.Context, pr *issues_model.PullRequest, u *user_model.User, gitRepo *git.Repository, baseRef, headRef string) (bool, *git.SigningKey, *git.Signature, error) {
-	if err := pr.LoadBaseRepo(ctx); err != nil {
-		log.Error("Unable to get Base Repo for pull request")
+func SignMerge(ctx context.Context, pr *issues_model.PullRequest, u *user_model.User, gitRepo *git.Repository, baseRef, headRef string, targetRepos ...*repo_model.Repository) (bool, *git.SigningKey, *git.Signature, error) {
+	repoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
+	if err != nil {
 		return false, nil, nil, err
 	}
-	repo := pr.BaseRepo
+	var repo *repo_model.Repository
+	if len(targetRepos) > 0 {
+		repo = targetRepos[0]
+		if repo.ID != repoID {
+			policyBranch = pr.BaseBranch
+		}
+	} else {
+		repo, err = repo_model.GetRepositoryByID(ctx, repoID)
+		if err != nil {
+			return false, nil, nil, err
+		}
+	}
 
 	baseCommit, err := gitRepo.GetCommit(ctx, baseRef)
 	if err != nil {
@@ -317,10 +328,6 @@ Loop:
 				return false, nil, nil, &ErrWontSign{twofa}
 			}
 		case approved:
-			policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
-			if err != nil {
-				return false, nil, nil, err
-			}
 			protectedBranch, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repo.ID, policyBranch)
 			if err != nil {
 				return false, nil, nil, err
@@ -356,12 +363,16 @@ Loop:
 
 // AllHeadCommitsVerified checks that every new commit in the PR head has a
 // verified signature.
-func AllHeadCommitsVerified(ctx context.Context, pr *issues_model.PullRequest, gitRepo *git.Repository) (bool, error) {
-	baseCommit, err := gitRepo.GetCommit(ctx, pr.BaseBranch)
+func AllHeadCommitsVerified(ctx context.Context, pr *issues_model.PullRequest, gitRepo *git.Repository, refs ...string) (bool, error) {
+	baseRef, headRef := pr.BaseBranch, pr.GetGitHeadRefName()
+	if len(refs) == 2 {
+		baseRef, headRef = refs[0], refs[1]
+	}
+	baseCommit, err := gitRepo.GetCommit(ctx, baseRef)
 	if err != nil {
 		return false, err
 	}
-	headCommit, err := gitRepo.GetCommit(ctx, pr.GetGitHeadRefName())
+	headCommit, err := gitRepo.GetCommit(ctx, headRef)
 	if err != nil {
 		return false, err
 	}

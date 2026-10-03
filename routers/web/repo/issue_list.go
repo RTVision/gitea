@@ -433,6 +433,51 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	}
 
 	repo := ctx.Repo.Repository
+	var openStacks *issues_model.OpenStacks
+	var foreignIDs, searchRepoIDs []int64
+	searchRepoIDs = []int64{repo.ID}
+	if isPullOption.Value() {
+		layers, err := issues_model.FindOpenStackLayers(ctx, repo.ID)
+		if err != nil {
+			ctx.ServerError("FindOpenStackLayers", err)
+			return
+		}
+		visible := layers[:0]
+		inaccessible := map[int64]bool{}
+		repos := map[int64]*repo_model.Repository{}
+		for _, layer := range layers {
+			memberRepo, ok := repos[layer.RepoID]
+			if !ok {
+				memberRepo, err = readableStackRepository(ctx, layer.RepoID)
+				if err != nil && !errors.Is(err, issues_model.ErrStackNotExist) {
+					ctx.ServerError("readableStackRepository", err)
+					return
+				}
+				repos[layer.RepoID] = memberRepo
+			}
+			layer.Repo = memberRepo
+			if memberRepo == nil {
+				inaccessible[layer.StackID] = true
+			}
+		}
+		for _, layer := range layers {
+			if inaccessible[layer.StackID] {
+				continue
+			}
+			visible = append(visible, layer)
+			if layer.RepoID != repo.ID {
+				foreignIDs = append(foreignIDs, layer.IssueID)
+				if !slices.Contains(searchRepoIDs, layer.RepoID) {
+					searchRepoIDs = append(searchRepoIDs, layer.RepoID)
+				}
+			}
+		}
+		if len(visible) > 0 {
+			openStacks = issues_model.NewOpenStacks(visible)
+			ctx.Data["PullListView"] = preparePullListView(ctx)
+		}
+	}
+	repoScope := builder.Eq{"issue.repo_id": repo.ID}.Or(builder.In("issue.id", foreignIDs))
 	keyword := strings.Trim(ctx.FormString("q"), " ")
 	if bytes.Contains([]byte(keyword), []byte{0x00}) {
 		keyword = ""
@@ -453,7 +498,7 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	var keywordMatchedIssueIDs []int64
 	var issueStats *issues_model.IssueStats
 	statsOpts := &issues_model.IssuesOptions{
-		RepoIDs:           []int64{repo.ID},
+		RepoCond:          repoScope,
 		LabelIDs:          preparedLabelFilter.SelectedLabelIDs,
 		MilestoneIDs:      mileIDs,
 		ProjectIDs:        projectIDs,
@@ -467,7 +512,7 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 	}
 
 	if keyword != "" {
-		keywordMatchedIssueIDs, _, err = issue_indexer.SearchIssues(ctx, issue_indexer.ToSearchOptions(keyword, statsOpts))
+		keywordMatchedIssueIDs, _, err = issue_indexer.SearchIssues(ctx, issue_indexer.ToSearchOptions(keyword, statsOpts.Copy(func(opts *issues_model.IssuesOptions) { opts.RepoIDs = searchRepoIDs })))
 		if err != nil {
 			if issue_indexer.IsAvailable(ctx) {
 				ctx.ServerError("issueIDsFromSearch", err)
@@ -511,18 +556,6 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 		ctx.Data["TotalTrackedTime"] = totalTrackedTime
 	}
 
-	var openStacks *issues_model.OpenStacks
-	if isPullOption.Value() {
-		layers, err := issues_model.FindOpenStackLayers(ctx, repo.ID)
-		if err != nil {
-			ctx.ServerError("FindOpenStackLayers", err)
-			return
-		}
-		if len(layers) > 0 {
-			openStacks = issues_model.NewOpenStacks(layers)
-			ctx.Data["PullListView"] = preparePullListView(ctx)
-		}
-	}
 	grouped := ctx.Data["PullListView"] == pullListViewGrouped
 
 	total := issueStats.OpenCount + issueStats.ClosedCount
@@ -530,7 +563,7 @@ func prepareIssueFilterAndList(ctx *context.Context, milestoneID int64, projectI
 		total = util.Iif(isShowClosed.Value(), issueStats.ClosedCount, issueStats.OpenCount)
 	}
 	findOpts := &issues_model.IssuesOptions{
-		RepoIDs:           []int64{repo.ID},
+		RepoCond:          repoScope,
 		AssigneeID:        assigneeID,
 		PosterID:          posterUserID,
 		MentionedID:       mentionedID,

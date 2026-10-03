@@ -45,3 +45,26 @@ func TestStackDeletionCleanup(t *testing.T) {
 	unittest.AssertNotExistsBean(t, &issues_model.StackOperation{StackID: other.ID})
 	unittest.AssertNotExistsBean(t, &issues_model.StackBranchClaim{StackID: other.ID})
 }
+
+func TestStackDeletionFromFork(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	for i, id := range []int64{1, 6} {
+		require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: id, Position: i + 1}))
+		require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: id, BranchKey: issues_model.StackBranchKey(int64(i+1), "layer")}))
+	}
+	op := &issues_model.StackOperation{StackID: stack.ID, ExpectedRevision: 1, Kind: "land", State: "queued"}
+	require.NoError(t, issues_model.CreateStackOperation(ctx, op))
+	require.ErrorIs(t, issues_model.DeleteStacksByRepoID(ctx, 3), issues_model.ErrStackRevision)
+	unittest.AssertExistsAndLoadBean(t, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 1})
+	op.State = "cancelled"
+	require.NoError(t, issues_model.FinishStackOperation(ctx, op))
+	require.NoError(t, issues_model.DeleteStacksByRepoID(ctx, 3))
+	unittest.AssertNotExistsBean(t, &issues_model.PullRequestStack{ID: stack.ID})
+	unittest.AssertNotExistsBean(t, &issues_model.StackEntry{StackID: stack.ID})
+	unittest.AssertNotExistsBean(t, &issues_model.StackBranchClaim{StackID: stack.ID})
+	unittest.AssertNotExistsBean(t, &issues_model.StackOperation{StackID: stack.ID})
+	unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1, HasMerged: true})
+}

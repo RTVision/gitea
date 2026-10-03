@@ -80,10 +80,11 @@ func IsPullCommitStatusPass(ctx context.Context, pr *issues_model.PullRequest) (
 	}
 	if !pb.EnableStatusCheck {
 		// The branch's own status check is off, but required scoped checks (mandated by the owner or instance admin) still gate the merge.
-		if err := pr.LoadBaseRepo(ctx); err != nil {
+		repo, err := getPullPolicyRepository(ctx, pr)
+		if err != nil {
 			return false, err
 		}
-		required, err := EffectiveRequiredContexts(ctx, pr.BaseRepo, pb)
+		required, err := EffectiveRequiredContexts(ctx, repo, pb)
 		if err != nil {
 			return false, err
 		}
@@ -135,11 +136,12 @@ func GetPullRequestCommitStatusState(ctx context.Context, pr *issues_model.PullR
 		return "", err
 	}
 
-	if err := pr.LoadBaseRepo(ctx); err != nil {
-		return "", fmt.Errorf("LoadBaseRepo: %w", err)
+	repo, err := getPullPolicyRepository(ctx, pr)
+	if err != nil {
+		return "", fmt.Errorf("get pull policy repository: %w", err)
 	}
 
-	commitStatuses, err := git_model.GetLatestCommitStatus(ctx, pr.BaseRepo.ID, sha, db.ListOptionsAll)
+	commitStatuses, err := git_model.GetLatestCommitStatus(ctx, repo.ID, sha, db.ListOptionsAll)
 	if err != nil {
 		return "", fmt.Errorf("GetLatestCommitStatus: %w", err)
 	}
@@ -148,7 +150,7 @@ func GetPullRequestCommitStatusState(ctx context.Context, pr *issues_model.PullR
 	if err != nil {
 		return "", fmt.Errorf("LoadProtectedBranch: %w", err)
 	}
-	requiredContexts, err := EffectiveRequiredContexts(ctx, pr.BaseRepo, pb)
+	requiredContexts, err := EffectiveRequiredContexts(ctx, repo, pb)
 	if err != nil {
 		return "", err
 	}

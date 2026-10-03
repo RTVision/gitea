@@ -80,6 +80,10 @@ func workflowMatchPayload(payload api.Payloader) api.Payloader {
 	matchedBase := *pullPayload.PullRequest.Base
 	matchedBase.Ref = pullPayload.PullRequest.Stack.Base.Ref
 	matchedBase.Sha = pullPayload.PullRequest.Stack.Base.Sha
+	if repo := pullPayload.PullRequest.Stack.Base.Repository; repo != nil {
+		matchedBase.RepoID = repo.ID
+		matchedBase.Repository = repo
+	}
 	matchedPull.Base = &matchedBase
 	matchedPayload.PullRequest = &matchedPull
 	return &matchedPayload
@@ -90,10 +94,61 @@ func validateStackWorkflowPayload(stack *issues_model.PullRequestStack, payload 
 		return nil
 	}
 	pullPayload, ok := payload.(*api.PullRequestPayload)
-	if !ok || pullPayload.PullRequest == nil || pullPayload.PullRequest.Stack == nil || pullPayload.PullRequest.Stack.Base == nil || pullPayload.PullRequest.Stack.Base.Ref != stack.TrunkBranch || pullPayload.PullRequest.Stack.Base.Sha == "" {
+	if !ok || pullPayload.PullRequest == nil || pullPayload.PullRequest.Stack == nil || pullPayload.PullRequest.Stack.Base == nil || pullPayload.PullRequest.Stack.Base.Ref != stack.TrunkBranch || pullPayload.PullRequest.Stack.Base.Sha == "" || pullPayload.PullRequest.Stack.Base.Repository == nil || pullPayload.PullRequest.Stack.Base.Repository.ID != stack.RepoID {
 		return errors.New("stack trunk provenance is unavailable; refusing to select pull request workflows")
 	}
 	return nil
+}
+
+func resolvePullRequestWorkflowInput(ctx context.Context, input *notifyInput) (*notifyInput, error) {
+	if input.PullRequest == nil {
+		return input, nil
+	}
+	stack, err := issues_model.GetPullRequestStack(ctx, input.PullRequest.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateStackWorkflowPayload(stack, input.Payload); err != nil {
+		return nil, err
+	}
+	repoID, _, err := issues_model.ResolvePullRequestPolicyTarget(ctx, input.PullRequest)
+	if err != nil {
+		return nil, err
+	}
+	if repoID == input.Repo.ID {
+		return input, nil
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	resolved := *input
+	resolved.Repo = repo
+	if resolved.Ref == git.RefName(input.PullRequest.GetGitHeadRefName()) {
+		resolved.Ref = git.RefName(issues_model.StackHeadRefName(input.PullRequest.ID))
+	}
+	if payload, ok := input.Payload.(*api.PullRequestPayload); ok {
+		permission, err := access_model.GetDoerRepoPermission(ctx, repo, input.Doer)
+		if err != nil {
+			return nil, err
+		}
+		resolvedPayload := *payload
+		resolvedPayload.Repository = convert.ToRepo(ctx, repo, permission)
+		resolved.Payload = &resolvedPayload
+	}
+	return &resolved, nil
+}
+
+func pullRequestWorkflowCommitRef(input *notifyInput, ref git.RefName) (git.RefName, error) {
+	pr := input.PullRequest
+	if pr == nil || pr.HasMerged || input.Repo.ID == pr.BaseRepoID || ref != git.RefName(issues_model.StackHeadRefName(pr.ID)) {
+		return ref, nil
+	}
+	payload, ok := input.Payload.(*api.PullRequestPayload)
+	if !ok || payload.PullRequest == nil || payload.PullRequest.Head == nil || payload.PullRequest.Head.Sha == "" {
+		return "", errors.New("stack source commit is unavailable")
+	}
+	return git.RefName(payload.PullRequest.Head.Sha), nil
 }
 
 func newNotifyInput(repo *repo_model.Repository, doer *user_model.User, event webhook_module.HookEventType) *notifyInput {
@@ -147,6 +202,10 @@ func (input *notifyInput) Notify(ctx context.Context) {
 }
 
 func notify(ctx context.Context, input *notifyInput) error {
+	input, err := resolvePullRequestWorkflowInput(ctx, input)
+	if err != nil {
+		return fmt.Errorf("resolve pull request workflow destination: %w", err)
+	}
 	shouldDetectSchedules := input.Event == webhook_module.HookEventPush && input.Ref.BranchName() == input.Repo.DefaultBranch
 	if input.Doer.ID == user_model.ActionsUserID {
 		// avoiding triggering cyclically, for example:
@@ -165,15 +224,6 @@ func notify(ctx context.Context, input *notifyInput) error {
 	}
 	if input.Repo.IsEmpty || input.Repo.IsArchived {
 		return nil
-	}
-	if input.PullRequest != nil {
-		stack, err := issues_model.GetPullRequestStack(ctx, input.PullRequest.ID)
-		if err != nil {
-			return fmt.Errorf("resolve pull request stack: %w", err)
-		}
-		if err := validateStackWorkflowPayload(stack, input.Payload); err != nil {
-			return err
-		}
 	}
 	if unit_model.TypeActions.UnitGlobalDisabled() {
 		if err := CleanRepoScheduleTasks(ctx, input.Repo); err != nil {
@@ -206,7 +256,22 @@ func notify(ctx context.Context, input *notifyInput) error {
 		ref = git.RefNameFromBranch(input.Repo.DefaultBranch)
 	}
 
-	commitID, err := gitRepo.GetRefCommitID(ctx, ref.String())
+	commitRef, err := pullRequestWorkflowCommitRef(input, ref)
+	if err != nil {
+		return err
+	}
+	if input.PullRequest != nil && !input.PullRequest.HasMerged && input.Repo.ID != input.PullRequest.BaseRepoID && !gitRepo.IsReferenceExist(ctx, commitRef.String()) {
+		if err := input.PullRequest.LoadHeadRepo(ctx); err != nil {
+			return err
+		}
+		if input.PullRequest.HeadRepo == nil {
+			return errors.New("stack source repository is unavailable")
+		}
+		if err := git.FetchRemoteCommit(ctx, input.Repo, input.PullRequest.HeadRepo, commitRef.String()); err != nil {
+			return err
+		}
+	}
+	commitID, err := gitRepo.GetRefCommitID(ctx, commitRef.String())
 	if err != nil {
 		return fmt.Errorf("gitRepo.GetRefCommitID: %w", err)
 	}
@@ -266,7 +331,11 @@ func notify(ctx context.Context, input *notifyInput) error {
 
 	if input.PullRequest != nil {
 		// detect pull_request_target workflows
-		baseRevision := git.BranchPrefix + input.PullRequest.BaseBranch
+		_, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, input.PullRequest)
+		if err != nil {
+			return err
+		}
+		baseRevision := git.BranchPrefix + policyBranch
 		if pullPayload, ok := input.Payload.(*api.PullRequestPayload); ok && pullPayload.PullRequest != nil && pullPayload.PullRequest.Stack != nil && pullPayload.PullRequest.Stack.Base != nil {
 			baseRevision = pullPayload.PullRequest.Stack.Base.Sha
 		}
@@ -679,7 +748,7 @@ func isForkPullRequestInput(input *notifyInput) bool {
 	}
 	switch pr.Flow {
 	case issues_model.PullRequestFlowGithub:
-		return pr.IsFromFork()
+		return pr.HeadRepoID != input.Repo.ID
 	case issues_model.PullRequestFlowAGit:
 		// There is no fork concept in agit flow, anyone with read permission can push refs/for/<target-branch>/<topic-branch> to the repo.
 		// So we can treat it as a fork pull request because it may be from an untrusted user

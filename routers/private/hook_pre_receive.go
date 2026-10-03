@@ -153,7 +153,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	}
 
 	if ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
-		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID); err != nil {
+		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID, repo.ID); err != nil {
 			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
 			return
 		}

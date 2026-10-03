@@ -2330,6 +2330,7 @@
   "repo.settings.delete_notices_2": "- This operation will permanently delete the <strong>%s</strong> repository, including code, issues, comments, wiki data and collaborator settings.",
   "repo.settings.delete_notices_fork_1": "- Forks of this repository will become independent after deletion.",
   "repo.settings.deletion_success": "The repository has been deleted.",
+  "repo.settings.deletion_blocked_by_stack": "Finish or cancel the stack operation before deleting this repository.",
   "repo.settings.update_settings_success": "The repository settings have been updated.",
   "repo.settings.update_settings_no_unit": "The repository should allow at least some sort of interaction.",
   "repo.settings.confirm_delete": "Delete Repository",

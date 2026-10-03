@@ -106,6 +106,8 @@ type PullRequest struct {
 	MergedCommitID *string `json:"merge_commit_sha"`
 	// The base branch SHA immediately before a server-managed merge, when recorded.
 	MergedBaseCommitID string `json:"merge_base_commit_sha,omitempty"`
+	MergedRepoID       int64  `json:"merged_repo_id,omitempty"`
+	MergedBranch       string `json:"merged_branch,omitempty"`
 	// The user who merged the pull request
 	MergedBy *User `json:"merged_by"`
 	// Whether maintainers can edit the pull request
@@ -150,6 +152,7 @@ const (
 
 // PullRequestStackRef identifies a pull request's position in a stack.
 type PullRequestStackRef struct {
+	Repository *Repository `json:"repository"`
 	// The stack number
 	Number int64 `json:"number"`
 	// The number of pull requests in the stack
@@ -164,6 +167,7 @@ type PullRequestStackRef struct {
 
 // PullRequestStackBase identifies the trunk of a pull request stack.
 type PullRequestStackBase struct {
+	Repository *Repository `json:"repository"`
 	// The trunk branch
 	Ref string `json:"ref"`
 	// The trunk commit SHA
@@ -172,6 +176,7 @@ type PullRequestStackBase struct {
 
 // PullRequestStack represents an ordered pull request stack.
 type PullRequestStack struct {
+	Repository *Repository `json:"repository"`
 	// The stack number
 	Number int64 `json:"number"`
 	// The trunk branch
@@ -195,7 +200,8 @@ type PullRequestStackEntry struct {
 	// The pull request
 	PullRequest *PullRequest `json:"pull_request"`
 	// The parent pull request number, or zero when the trunk is the parent
-	ParentPullRequest int64 `json:"parent_pull_request"`
+	ParentPullRequest    int64                 `json:"parent_pull_request"`
+	ParentPullRequestRef *PullRequestReference `json:"parent_pull_request_ref,omitempty"`
 	// The last observed head commit SHA
 	HeadSHA string `json:"head_sha"`
 	// The saved replay boundary commit SHA; in merge mode, the parent head the layer last contained
@@ -232,6 +238,12 @@ type PullRequestStackOperation struct {
 	Updated *time.Time `json:"updated_at"`
 }
 
+// PullRequestReference identifies a pull request within its repository.
+type PullRequestReference struct {
+	RepositoryID int64 `json:"repository_id,omitempty"`
+	PullRequest  int64 `json:"pull_request" binding:"Required"`
+}
+
 // CreatePullRequestStackOption creates a stack from an existing pull request chain.
 type CreatePullRequestStackOption struct {
 	// The stack trunk branch
@@ -239,7 +251,8 @@ type CreatePullRequestStackOption struct {
 	// How layers take parent updates, fixed at creation; defaults to rebase
 	Mode StackMode `json:"mode"`
 	// Ordered pull request numbers, starting at the trunk
-	PullRequests []int64 `json:"pull_requests" binding:"Required"`
+	PullRequests    []int64                `json:"pull_requests,omitempty"`
+	PullRequestRefs []PullRequestReference `json:"pull_request_refs,omitempty"`
 }
 
 // EditPullRequestStackOption appends pull requests to a stack.
@@ -247,7 +260,8 @@ type EditPullRequestStackOption struct {
 	// The expected stack revision
 	Revision int64 `json:"revision" binding:"Required"`
 	// Ordered pull request numbers to append
-	PullRequests []int64 `json:"pull_requests" binding:"Required"`
+	PullRequests    []int64                `json:"pull_requests,omitempty"`
+	PullRequestRefs []PullRequestReference `json:"pull_request_refs,omitempty"`
 }
 
 // InsertPullRequestStackOption inserts a pull request above the stack layer its base branch names.
@@ -255,7 +269,8 @@ type InsertPullRequestStackOption struct {
 	// The expected stack revision
 	Revision int64 `json:"revision" binding:"Required"`
 	// The pull request number to insert; its base branch must be the trunk or an open layer's branch
-	PullRequest int64 `json:"pull_request" binding:"Required"`
+	PullRequest    int64                 `json:"pull_request,omitempty"`
+	PullRequestRef *PullRequestReference `json:"pull_request_ref,omitempty"`
 }
 
 // PullRequestStackRevisionOption identifies an expected stack revision.
@@ -284,6 +299,7 @@ type SynchronizePullRequestStackOption struct {
 
 // PullRequestStackHead identifies one locally restacked layer.
 type PullRequestStackHead struct {
+	RepositoryID int64 `json:"repository_id,omitempty"`
 	// The pull request number
 	PullRequest int64 `json:"pull_request" binding:"Required"`
 	// The exact current remote head SHA

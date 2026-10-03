@@ -24,6 +24,7 @@ import (
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/setting"
+	"gitea.dev/modules/util"
 )
 
 type StackOperationOptions struct {
@@ -41,9 +42,15 @@ type stackJournal struct {
 
 var stackOperationQueue *queue.WorkerPoolQueue[int64]
 
-func stackActorPermission(ctx context.Context, stack *issues_model.PullRequestStack, actor *user_model.User) error {
+func stackActorPermission(ctx context.Context, stack *issues_model.PullRequestStack, actor *user_model.User, kind string) error {
 	if actor == nil {
 		return ErrNoPermissionToMerge
+	}
+	if kind != "land" {
+		if err := checkStackManagement(ctx, actor, stack); err != nil {
+			return err
+		}
+		return checkStackMemberRead(ctx, actor, stack.ID)
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
 	if err != nil {
@@ -63,7 +70,17 @@ func stackActorPermission(ctx context.Context, stack *issues_model.PullRequestSt
 	if !allowed {
 		return ErrNoPermissionToMerge
 	}
-	return nil
+	return checkStackMemberRead(ctx, actor, stack.ID)
+}
+
+func CanOperateStack(ctx context.Context, actor *user_model.User, stack *issues_model.PullRequestStack, kind string) (bool, error) {
+	if err := stackActorPermission(ctx, stack, actor, kind); err != nil {
+		if errors.Is(err, util.ErrPermissionDenied) || errors.Is(err, ErrNoPermissionToMerge) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // StackLandingStyles lists the merge styles that keep a stack's remaining layers valid.
@@ -92,7 +109,7 @@ func StartStackOperation(ctx context.Context, actor *user_model.User, opts Stack
 	if opts.Kind == "land" && !slices.Contains(StackLandingStyles(stack.Mode), opts.MergeStyle) {
 		return nil, fmt.Errorf("%s-mode stacks cannot land with %q", stack.Mode, opts.MergeStyle)
 	}
-	if err := stackActorPermission(ctx, stack, actor); err != nil {
+	if err := stackActorPermission(ctx, stack, actor, opts.Kind); err != nil {
 		return nil, err
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
@@ -135,7 +152,7 @@ func StartStackOperation(ctx context.Context, actor *user_model.User, opts Stack
 		if err != nil {
 			return nil, err
 		}
-		journal.Layers = append(journal.Layers, &stackLayerJournal{EntryID: entry.ID, PullID: pr.ID, Position: entry.Position, HeadBranch: pr.HeadBranch, ExpectedHead: head, OldParent: entry.OldParentSHA, Phase: "ready"})
+		journal.Layers = append(journal.Layers, &stackLayerJournal{EntryID: entry.ID, PullID: pr.ID, Position: entry.Position, HeadRepoID: pr.HeadRepoID, LandingRepoID: stack.RepoID, LandingBranch: stack.TrunkBranch, HeadBranch: pr.HeadBranch, ExpectedHead: head, OldParent: entry.OldParentSHA, Phase: "ready"})
 	}
 	if len(journal.Layers) == 0 {
 		return nil, ErrHasMerged
@@ -201,13 +218,24 @@ func recordStackLayer(ctx context.Context, op *issues_model.StackOperation, laye
 			cols = append(cols, "landed_commit_sha")
 		}
 		_, err = db.GetEngine(ctx).Where("id = ? AND stack_id = ?", layer.EntryID, op.StackID).Cols(cols...).Update(entry)
-		return err
+		if err != nil {
+			return err
+		}
+		entry.PullRequestID = layer.PullID
+		if !landed {
+			return pinStackEntry(ctx, stack, entry)
+		}
+		return nil
 	})
 }
 
-func checkStackLayerHeads(ctx context.Context, journal *stackJournal, repo *repo_model.Repository) error {
+func checkStackLayerHeads(ctx context.Context, journal *stackJournal) error {
 	for _, layer := range remainingStackLayers(journal) {
-		actual, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+layer.HeadBranch)
+		source, err := stackLayerSource(ctx, layer)
+		if err != nil {
+			return err
+		}
+		actual, err := git.GetFullCommitID(ctx, source, git.BranchPrefix+layer.HeadBranch)
 		if err != nil {
 			return err
 		}
@@ -237,7 +265,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 	if err != nil {
 		return err
 	}
-	if err := stackActorPermission(ctx, stack, actor); err != nil {
+	if err := stackActorPermission(ctx, stack, actor, op.Kind); err != nil {
 		return err
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
@@ -247,6 +275,21 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 	journal := new(stackJournal)
 	if err := json.Unmarshal([]byte(op.JournalJSON), journal); err != nil {
 		return err
+	}
+	for _, layer := range journal.Layers {
+		pr, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
+		if err != nil {
+			return err
+		}
+		if layer.HeadRepoID == 0 {
+			if pr.HeadRepoID != stack.RepoID || pr.BaseRepoID != stack.RepoID {
+				return issues_model.ErrStackRevision
+			}
+			layer.HeadRepoID, layer.LandingRepoID, layer.LandingBranch = pr.HeadRepoID, stack.RepoID, stack.TrunkBranch
+		}
+		if layer.HeadRepoID != pr.HeadRepoID || layer.LandingRepoID != stack.RepoID || layer.LandingBranch != stack.TrunkBranch {
+			return issues_model.ErrStackRevision
+		}
 	}
 	op.State, op.LastError = "running", ""
 	if err := saveStackJournal(ctx, op, journal); err != nil {
@@ -260,12 +303,12 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 		if err != nil {
 			return err
 		}
-		if err := stackActorPermission(ctx, stack, actor); err != nil {
+		if err := stackActorPermission(ctx, stack, actor, op.Kind); err != nil {
 			return err
 		}
 		layers := remainingStackLayers(journal)
 		if journal.Stage != "confirm" && journal.Stage != "finish" {
-			if err := checkStackLayerHeads(ctx, journal, repo); err != nil {
+			if err := checkStackLayerHeads(ctx, journal); err != nil {
 				return err
 			}
 		}
@@ -323,7 +366,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				if err := first.LoadIssue(ctx); err != nil {
 					return err
 				}
-				if first.BaseBranch != stack.TrunkBranch {
+				if first.BaseRepoID == stack.RepoID && first.BaseBranch != stack.TrunkBranch {
 					if err := changeTargetBranchForStack(ctx, first, actor, stack.TrunkBranch, op.ID); err != nil {
 						return err
 					}
@@ -349,7 +392,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err := pr.LoadBaseRepo(ctx); err != nil {
 				return err
 			}
-			if pr.BaseBranch != stack.TrunkBranch {
+			if pr.BaseRepoID == stack.RepoID && pr.BaseBranch != stack.TrunkBranch {
 				if err := changeTargetBranchForStack(ctx, pr, actor, stack.TrunkBranch, op.ID); err != nil {
 					return err
 				}
@@ -383,14 +426,14 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err != nil {
 				return err
 			}
-			if err := CheckPullMergeable(ctx, actor, &perm, pr, MergeCheckTypeGeneral, repo_model.MergeStyle(op.MergeStyle), false); err != nil {
+			if err := CheckPullMergeable(ctx, actor, &perm, pr, MergeCheckTypeGeneral, repo_model.MergeStyle(op.MergeStyle), false, &Target{Repo: repo, Branch: stack.TrunkBranch}); err != nil {
 				return err
 			}
 			baseRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, repo)
 			if err != nil {
 				return err
 			}
-			message, body, err := GetDefaultMergeMessage(ctx, baseRepo, pr, repo_model.MergeStyle(op.MergeStyle))
+			message, body, err := GetDefaultMergeMessage(ctx, baseRepo, pr, repo_model.MergeStyle(op.MergeStyle), &Target{Repo: repo, Branch: stack.TrunkBranch})
 			closer.Close()
 			if err != nil {
 				return err
@@ -439,7 +482,11 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				layer.Phase, journal.Stage = "ready", "land"
 				break
 			}
-			if pr.BaseBranch != stack.TrunkBranch {
+			mergedRepo, mergedBranch, err := pr.GetMergedTarget(ctx)
+			if err != nil {
+				return err
+			}
+			if mergedRepo.ID != stack.RepoID || mergedBranch != stack.TrunkBranch {
 				return issues_model.ErrInvalidStack
 			}
 			layer.LandedSHA, layer.Phase = pr.MergedCommitID, "landed"
@@ -474,6 +521,40 @@ func getLandedStackEntries(ctx context.Context, stackID int64) ([]*issues_model.
 }
 
 func cleanupStackCandidates(ctx context.Context, repo *repo_model.Repository, operationID int64) {
+	repositories := map[int64]*repo_model.Repository{repo.ID: repo}
+	op, err := issues_model.GetStackOperation(ctx, operationID)
+	if err != nil {
+		log.Warn("load completed stack operation %d: %v", operationID, err)
+		return
+	}
+	entries, err := issues_model.GetStackEntries(ctx, op.StackID)
+	if err != nil {
+		log.Warn("load completed stack entries %d: %v", op.StackID, err)
+		return
+	}
+	for _, entry := range entries {
+		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
+		if err != nil {
+			log.Warn("load completed stack pull %d: %v", entry.PullRequestID, err)
+			continue
+		}
+		if repositories[pr.HeadRepoID] != nil {
+			continue
+		}
+		if err := pr.LoadHeadRepo(ctx); err != nil {
+			log.Warn("load completed stack source %d: %v", pr.HeadRepoID, err)
+			continue
+		}
+		if pr.HeadRepo != nil {
+			repositories[pr.HeadRepoID] = pr.HeadRepo
+		}
+	}
+	for _, source := range repositories {
+		cleanupStackCandidateRefs(ctx, source, operationID)
+	}
+}
+
+func cleanupStackCandidateRefs(ctx context.Context, repo *repo_model.Repository, operationID int64) {
 	refs, _, err := gitcmd.NewCommand("for-each-ref", "--format=%(refname)").AddDynamicArguments(fmt.Sprintf("refs/stack-operations/%d/", operationID)).WithRepo(repo).RunStdString(ctx)
 	if err != nil {
 		log.Warn("list completed stack operation %d candidate refs: %v", operationID, err)
@@ -514,7 +595,7 @@ func runStackOperation(ctx context.Context, id int64) {
 			if err != nil {
 				return err
 			}
-			if err := reconcileStackCancellation(ctx, op, actor, repo); err != nil {
+			if err := reconcileStackCancellation(ctx, op, actor); err != nil {
 				return err
 			}
 			cleanupStackCandidates(ctx, repo, op.ID)
@@ -555,7 +636,7 @@ func ResumeStackOperation(ctx context.Context, actor *user_model.User, id int64)
 	if stack.ActiveOperationID != op.ID {
 		return issues_model.ErrStackRevision
 	}
-	if err := stackActorPermission(ctx, stack, actor); err != nil {
+	if err := stackActorPermission(ctx, stack, actor, op.Kind); err != nil {
 		return err
 	}
 	if actor.ID != op.ActorID {
@@ -569,7 +650,7 @@ func ResumeStackOperation(ctx context.Context, actor *user_model.User, id int64)
 		return err
 	}
 	if stack.Mode == issues_model.StackModeMerge {
-		if err := adoptFastForwardedStackHeads(ctx, stack, journal); err != nil {
+		if err := adoptFastForwardedStackHeads(ctx, journal); err != nil {
 			return err
 		}
 	}
@@ -582,17 +663,17 @@ func ResumeStackOperation(ctx context.Context, actor *user_model.User, id int64)
 }
 
 // adoptFastForwardedStackHeads accepts layer pushes that only add commits, such as a locally resolved merge.
-func adoptFastForwardedStackHeads(ctx context.Context, stack *issues_model.PullRequestStack, journal *stackJournal) error {
+func adoptFastForwardedStackHeads(ctx context.Context, journal *stackJournal) error {
 	if journal.Stage != "restack" && journal.Stage != "land" {
 		return nil // other stages hold candidates built from the recorded heads
-	}
-	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
-	if err != nil {
-		return err
 	}
 	for _, layer := range remainingStackLayers(journal) {
 		if layer.Phase != "ready" {
 			continue
+		}
+		repo, err := stackLayerSource(ctx, layer)
+		if err != nil {
+			return err
 		}
 		head, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+layer.HeadBranch)
 		if err != nil {
@@ -637,14 +718,14 @@ func cancelStackOperation(ctx context.Context, actor *user_model.User, id int64)
 	if stack.ActiveOperationID != op.ID {
 		return issues_model.ErrStackRevision
 	}
-	if err := stackActorPermission(ctx, stack, actor); err != nil {
+	if err := stackActorPermission(ctx, stack, actor, op.Kind); err != nil {
 		return err
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
 	if err != nil {
 		return err
 	}
-	if err := reconcileStackCancellation(ctx, op, actor, repo); err != nil {
+	if err := reconcileStackCancellation(ctx, op, actor); err != nil {
 		return err
 	}
 	cleanupStackCandidates(ctx, repo, op.ID)

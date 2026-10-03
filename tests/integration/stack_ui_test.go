@@ -52,7 +52,7 @@ func TestNativeStackUpdateBranchButton(t *testing.T) {
 		body := session.MakeRequest(t, NewRequest(t, http.MethodGet, fmt.Sprintf("/user2/repo1/pulls/%d", top.Index)), http.StatusOK).Body.String()
 		assert.Contains(t, body, fmt.Sprintf(`href="/user2/repo1/pulls/stacks/%d"`, lower.ID))
 		stackPage := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, fmt.Sprintf("/user2/repo1/pulls/stacks/%d", lower.ID)), http.StatusOK).Body)
-		assert.Equal(t, 1, stackPage.Find(fmt.Sprintf(`.menu .item[data-value="%d"]`, top.Index)).Length(), "the append link lands on an insert picker offering the pull request")
+		assert.Equal(t, 1, stackPage.Find(fmt.Sprintf(`.menu .item[data-value="%d"]`, top.ID)).Length(), "the append link lands on an insert picker offering the pull request")
 		resp := session.MakeRequest(t, NewRequestWithValues(t, http.MethodPost, "/user2/repo1/pulls/stacks/new", map[string]string{"pull": strconv.FormatInt(top.Index, 10), "start": "999", "mode": "merge"}), http.StatusSeeOther)
 		assert.Equal(t, fmt.Sprintf("/user2/repo1/pulls/stacks/new?mode=merge&pull=%d&start=999", top.Index), test.RedirectURL(resp))
 		assert.Equal(t, "The stack changed while you were viewing it. Review the current list and try again.", session.GetCookieFlashMessage().ErrorMsg)
@@ -121,4 +121,28 @@ func TestPullListGroupsStacks(t *testing.T) {
 	assert.Positive(t, doc.Find(`.pagination a[href*="page=2"]`).Length())
 	assert.Zero(t, doc.Find(`.pagination a[href*="page=3"]`).Length(), "a stack takes one page slot")
 	assert.Equal(t, []string{"#5", "#3", "#2"}, indexes(list("?view=grouped&page=2")))
+}
+
+func TestPullListShowsForkSuffix(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	_, err := db.GetEngine(t.Context()).ID(2).Cols("is_closed").Update(&issues_model.Issue{IsClosed: true})
+	require.NoError(t, err)
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "master", Mode: issues_model.StackModeMerge, State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(t.Context(), stack))
+	for i, pullID := range []int64{1, 6} {
+		require.NoError(t, db.Insert(t.Context(), &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pullID, Position: i + 1}))
+	}
+	session := loginUser(t, "user2")
+	page := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, "/user2/repo1/pulls?state=open"), http.StatusOK).Body)
+	row := page.Find("#issue-list > .item:has(details)")
+	require.Equal(t, 1, row.Length())
+	assert.Equal(t, "/org3/repo3/pulls/2", row.Find(".item-header a").First().AttrOr("href", ""))
+	assert.Equal(t, 1, row.Find(`.stack-layer .index[href="/org3/repo3/pulls/2"]`).Length())
+	assert.Zero(t, row.Find(`.stack-layer .index[href="/user2/repo1/pulls/2"]`).Length())
+	assert.Contains(t, row.Find(".stack-layer .index").Text(), "org3/repo3#2")
+	assert.Zero(t, row.Find(`.stack-layer .issue-checkbox`).Length())
+	assert.Equal(t, 2, row.Find(".stack-status-bar > span").Length())
+	page = NewHTMLParser(t, MakeRequest(t, NewRequest(t, http.MethodGet, "/user2/repo1/pulls?state=open"), http.StatusOK).Body)
+	assert.Zero(t, page.Find("#issue-list > .item:has(details)").Length(), "private fork layers are not disclosed")
+	assert.NotContains(t, page.doc.Text(), "org3/repo3")
 }

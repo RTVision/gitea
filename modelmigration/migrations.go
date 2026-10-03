@@ -432,6 +432,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(356, "Record pull request merge base revision", v28.AddPullRequestMergedBaseCommitID),
 		newMigration(357, "Add can delete to branch protection", v28.AddCanDeleteToProtectedBranch),
 		newMigration(358, "Add mode to pull request stack", v28.AddModeToPullRequestStack),
+		newMigration(359, "Record pull request landing repository", v28.AddPullRequestMergedTarget),
 	}
 	return preparedMigrations
 }
