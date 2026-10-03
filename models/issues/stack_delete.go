@@ -9,16 +9,31 @@ import (
 	"gitea.dev/models/db"
 
 	"xorm.io/builder"
+	"xorm.io/xorm"
 )
+
+func repoStacksQuery(ctx context.Context, repoID int64) *xorm.Session {
+	return db.GetEngine(ctx).Table("pull_request_stack").
+		Join("LEFT", "stack_entry", "stack_entry.stack_id = pull_request_stack.id").
+		Join("LEFT", "pull_request", "pull_request.id = stack_entry.pull_request_id").
+		Where(builder.Or(builder.Eq{"pull_request_stack.repo_id": repoID}, builder.Eq{"pull_request.base_repo_id": repoID}, builder.Eq{"pull_request.head_repo_id": repoID}))
+}
+
+func CheckRepoStackDeletion(ctx context.Context, repoID int64) error {
+	active, err := repoStacksQuery(ctx, repoID).And("pull_request_stack.active_operation_id <> 0").Exist()
+	if err != nil {
+		return err
+	}
+	if active {
+		return ErrStackRevision
+	}
+	return nil
+}
 
 func DeleteStacksByRepoID(ctx context.Context, repoID int64) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		var ids []int64
-		if err := db.GetEngine(ctx).Table("pull_request_stack").
-			Join("LEFT", "stack_entry", "stack_entry.stack_id = pull_request_stack.id").
-			Join("LEFT", "pull_request", "pull_request.id = stack_entry.pull_request_id").
-			Where(builder.Or(builder.Eq{"pull_request_stack.repo_id": repoID}, builder.Eq{"pull_request.base_repo_id": repoID}, builder.Eq{"pull_request.head_repo_id": repoID})).
-			Distinct("pull_request_stack.id").Find(&ids); err != nil {
+		if err := repoStacksQuery(ctx, repoID).Distinct("pull_request_stack.id").Find(&ids); err != nil {
 			return err
 		}
 		return deleteStacks(ctx, ids, 0, repoID)

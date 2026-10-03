@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
@@ -226,23 +227,39 @@ func ListPullRequestStacks(ctx *context.APIContext) {
 	//   "500":
 	//     "$ref": "#/responses/error"
 	opts := utils.GetListOptions(ctx)
-	stacks, total, err := issues_model.ListStacks(ctx, ctx.Repo.Repository.ID, opts)
+	stacks, _, err := issues_model.ListStacks(ctx, ctx.Repo.Repository.ID, db.ListOptionsAll)
 	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
-	converted := make([]*api.PullRequestStack, 0, len(stacks))
+	readable := make([]*issues_model.PullRequestStack, 0, len(stacks))
 	for _, stack := range stacks {
 		if err := checkStackAPIRead(ctx, stack); err != nil {
+			if errors.Is(err, util.ErrNotExist) {
+				continue
+			}
 			ctx.APIErrorAuto(err)
 			return
 		}
+		readable = append(readable, stack)
+	}
+	skip, take := opts.GetSkipTake()
+	total := int64(len(readable))
+	converted := make([]*api.PullRequestStack, 0, min(take, len(readable)))
+	for _, stack := range readable[min(skip, len(readable)):] {
 		apiStack, err := convert.ToAPIPullRequestStack(ctx, stack, ctx.Doer)
+		if errors.Is(err, util.ErrNotExist) {
+			total--
+			continue
+		}
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
 		converted = append(converted, apiStack)
+		if len(converted) == take {
+			break
+		}
 	}
 	ctx.SetLinkHeader(total, opts.PageSize)
 	ctx.SetTotalCountHeader(total)

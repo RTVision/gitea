@@ -602,6 +602,7 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 		return nil, err
 	}
 	candidates := make([]*StackInsertCandidate, 0, len(pulls))
+	var trunkSHA string
 	for _, pr := range pulls {
 		if err := pr.LoadHeadRepo(ctx); err != nil {
 			return nil, err
@@ -610,12 +611,14 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 			continue
 		}
 		if pr.BaseRepoID == stack.RepoID && pr.BaseBranch == stack.TrunkBranch {
-			trunkSHA, err := git.GetFullCommitID(ctx, trunkRepo, git.BranchPrefix+stack.TrunkBranch)
-			if err != nil {
-				return nil, err
-			}
-			if err := fetchStackObject(ctx, pr.HeadRepo, trunkRepo, trunkSHA, "refs/stack-trunks/"+strconv.FormatInt(stack.ID, 10)); err != nil {
-				return nil, err
+			if trunkSHA == "" {
+				trunkSHA, err = git.GetFullCommitID(ctx, trunkRepo, git.BranchPrefix+stack.TrunkBranch)
+				if err != nil {
+					return nil, err
+				}
+				if err := fetchStackObject(ctx, bottom.HeadRepo, trunkRepo, trunkSHA, "refs/stack-trunks/"+strconv.FormatInt(stack.ID, 10)); err != nil {
+					return nil, err
+				}
 			}
 			shared, err := git.MergeBase(ctx, pr.HeadRepo, git.BranchPrefix+pr.HeadBranch, git.BranchPrefix+bottom.HeadBranch)
 			if err != nil {

@@ -126,8 +126,11 @@ type PullRequestPolicyTarget struct {
 
 func ResolvePullRequestPolicyTarget(ctx context.Context, pr *PullRequest) (int64, string, error) {
 	targets, err := ResolvePullRequestPolicyTargets(ctx, PullRequestList{pr})
+	if err != nil {
+		return 0, "", err
+	}
 	target := targets[pr.ID]
-	return target.RepoID, target.Branch, err
+	return target.RepoID, target.Branch, nil
 }
 
 func ResolvePullRequestPolicyBranch(ctx context.Context, pr *PullRequest) (string, error) {

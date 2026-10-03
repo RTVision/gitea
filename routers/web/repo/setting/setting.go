@@ -13,6 +13,7 @@ import (
 
 	audit_model "gitea.dev/models/audit"
 	"gitea.dev/models/db"
+	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/organization"
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
@@ -966,7 +967,11 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	}
 
 	if err := repo_service.DeleteRepository(ctx, ctx.Doer, ctx.Repo.Repository, true); err != nil {
-		ctx.ServerError("DeleteRepository", err)
+		if errors.Is(err, issues_model.ErrStackRevision) {
+			ctx.JSON(http.StatusConflict, map[string]any{"errorMessage": ctx.Tr("repo.settings.deletion_blocked_by_stack"), "renderFormat": "text"})
+		} else {
+			ctx.ServerError("DeleteRepository", err)
+		}
 		return
 	}
 	log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
