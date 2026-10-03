@@ -35,7 +35,11 @@ func DownloadDiffOrPatch(ctx context.Context, pr *issues_model.PullRequest, w io
 	}
 	defer closer.Close()
 
-	compareArg := pr.MergeBase + "..." + pr.GetGitHeadRefName()
+	boundary, err := issues_model.StackComparisonBase(ctx, pr)
+	if err != nil {
+		return err
+	}
+	compareArg := boundary + "..." + pr.GetGitHeadRefName()
 	switch {
 	case patch:
 		err = gitRepo.GetPatch(ctx, compareArg, w)
@@ -46,8 +50,8 @@ func DownloadDiffOrPatch(ctx context.Context, pr *issues_model.PullRequest, w io
 	}
 
 	if err != nil {
-		log.Error("unable to get patch file from %s to %s in %s Error: %v", pr.MergeBase, pr.HeadBranch, pr.BaseRepo.FullName(), err)
-		return fmt.Errorf("unable to get patch file from %s to %s in %s Error: %w", pr.MergeBase, pr.HeadBranch, pr.BaseRepo.FullName(), err)
+		log.Error("unable to get patch file from %s to %s in %s Error: %v", boundary, pr.HeadBranch, pr.BaseRepo.FullName(), err)
+		return fmt.Errorf("unable to get patch file from %s to %s in %s Error: %w", boundary, pr.HeadBranch, pr.BaseRepo.FullName(), err)
 	}
 	return nil
 }
@@ -61,6 +65,14 @@ func checkPullRequestBranchMergeable(ctx context.Context, pr *issues_model.PullR
 	}
 
 	return checkPullRequestMergeableByTmpRepo(ctx, pr)
+}
+
+func pullRequestComparisonBase(ctx context.Context, pr *issues_model.PullRequest, mergeBase string) (string, error) {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || stack == nil {
+		return mergeBase, err
+	}
+	return issues_model.StackComparisonBase(ctx, pr)
 }
 
 func checkPullRequestMergeableByTmpRepo(ctx context.Context, pr *issues_model.PullRequest) error {
@@ -80,26 +92,30 @@ func checkPullRequestMergeableByTmpRepo(ctx context.Context, pr *issues_model.Pu
 	defer tmpGitRepo.Close()
 
 	// 1. update merge base
-	pr.MergeBase, _, err = gitcmd.NewCommand("merge-base", "--", tmpRepoBaseBranch, tmpRepoTrackingBranch).WithRepo(prCtx.tmpRepo).RunStdString(ctx)
+	mergeBase, _, err := gitcmd.NewCommand("merge-base", "--", tmpRepoBaseBranch, tmpRepoTrackingBranch).WithRepo(prCtx.tmpRepo).RunStdString(ctx)
 	if err != nil {
 		var err2 error
-		pr.MergeBase, err2 = tmpGitRepo.GetRefCommitID(ctx, git.BranchPrefix+tmpRepoBaseBranch)
+		mergeBase, err2 = tmpGitRepo.GetRefCommitID(ctx, git.BranchPrefix+tmpRepoBaseBranch)
 		if err2 != nil {
 			return fmt.Errorf("GetMergeBase: %v and can't find commit ID for base: %w", err, err2)
 		}
 	}
-	pr.MergeBase = strings.TrimSpace(pr.MergeBase)
+	mergeBase = strings.TrimSpace(mergeBase)
+	pr.MergeBase, err = pullRequestComparisonBase(ctx, pr, mergeBase)
+	if err != nil {
+		return err
+	}
 	if pr.HeadCommitID, err = tmpGitRepo.GetRefCommitID(ctx, git.BranchPrefix+tmpRepoTrackingBranch); err != nil {
 		return fmt.Errorf("GetBranchCommitID: can't find commit ID for head: %w", err)
 	}
 
-	if pr.HeadCommitID == pr.MergeBase {
+	if pr.HeadCommitID == mergeBase {
 		pr.Status = issues_model.PullRequestStatusAncestor
 		return nil
 	}
 
 	// 2. Check for conflicts
-	conflicts, err := checkConflictsByTmpRepo(ctx, pr, tmpGitRepo, prCtx.tmpBasePath)
+	conflicts, err := checkConflictsByTmpRepo(ctx, pr, tmpGitRepo, prCtx.tmpBasePath, mergeBase)
 	if err != nil {
 		return err
 	}
@@ -298,14 +314,14 @@ func AttemptThreeWayMerge(ctx context.Context, gitPath string, gitRepo *git.Repo
 	return conflict, conflictedFiles, nil
 }
 
-func checkConflictsByTmpRepo(ctx context.Context, pr *issues_model.PullRequest, tmpGitRepo *git.Repository, tmpBasePath string) (bool, error) {
+func checkConflictsByTmpRepo(ctx context.Context, pr *issues_model.PullRequest, tmpGitRepo *git.Repository, tmpBasePath, mergeBase string) (bool, error) {
 	// 1. checkConflictsByTmpRepo resets the conflict status - therefore - reset the conflict status
 	pr.ConflictedFiles = nil
 
 	// 2. AttemptThreeWayMerge first - this is much quicker than plain patch to base
 	description := fmt.Sprintf("PR[%d] %s/%s#%d", pr.ID, pr.BaseRepo.OwnerName, pr.BaseRepo.Name, pr.Index)
 	conflict, conflictFiles, err := AttemptThreeWayMerge(ctx,
-		tmpBasePath, tmpGitRepo, pr.MergeBase, tmpRepoBaseBranch, tmpRepoTrackingBranch, description)
+		tmpBasePath, tmpGitRepo, mergeBase, tmpRepoBaseBranch, tmpRepoTrackingBranch, description)
 	if err != nil {
 		return false, err
 	}

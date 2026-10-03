@@ -31,6 +31,11 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 		return summaries, nil
 	}
 
+	policyTargets, err := issues_model.ResolvePullRequestPolicyTargets(ctx, prs)
+	if err != nil {
+		return nil, err
+	}
+
 	issueIDs := make([]int64, 0, len(prs))
 	seenIssueIDs := make(map[int64]struct{}, len(prs))
 	baseRepoIDs := make(map[int64]struct{}, len(prs))
@@ -41,8 +46,8 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 				seenIssueIDs[pr.IssueID] = struct{}{}
 			}
 		}
-		if pr.BaseRepoID > 0 {
-			baseRepoIDs[pr.BaseRepoID] = struct{}{}
+		if repoID := policyTargets[pr.ID].RepoID; repoID > 0 {
+			baseRepoIDs[repoID] = struct{}{}
 		}
 	}
 
@@ -60,18 +65,15 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 		rulesByRepo[repoID] = rules
 	}
 
-	statusesByRepo, err := loadTrackingStatuses(ctx, prs, headCommitIDs)
+	statusesByRepo, err := loadTrackingStatuses(ctx, prs, headCommitIDs, policyTargets)
 	if err != nil {
 		return nil, err
 	}
 
-	policyBranches, err := issues_model.ResolvePullRequestPolicyBranches(ctx, prs)
-	if err != nil {
-		return nil, err
-	}
 	for _, pr := range prs {
 		var summary RequestTrackingSummary
-		pb := rulesByRepo[pr.BaseRepoID].GetFirstMatched(policyBranches[pr.ID])
+		target := policyTargets[pr.ID]
+		pb := rulesByRepo[target.RepoID].GetFirstMatched(target.Branch)
 		if decision := pullRequestReviewDecision(ctx, pb, pr, reviewsByIssue[pr.IssueID]); decision != nil {
 			summary.ReviewDecision = decision
 		}
@@ -81,7 +83,7 @@ func GetPullRequestTrackingSummaries(ctx context.Context, prs issues_model.PullR
 			sha = pr.HeadCommitID
 		}
 		if sha != "" {
-			summary.ChecksState = pullRequestChecksState(statusesByRepo[pr.BaseRepoID][sha])
+			summary.ChecksState = pullRequestChecksState(statusesByRepo[target.RepoID][sha])
 		}
 		summaries[pr.ID] = summary
 	}
@@ -111,25 +113,26 @@ func loadTrackingReviews(ctx context.Context, issueIDs []int64) (map[int64]issue
 	return reviewsByIssue, nil
 }
 
-func loadTrackingStatuses(ctx context.Context, prs issues_model.PullRequestList, headCommitIDs map[int64]string) (map[int64]map[string][]*git_model.CommitStatus, error) {
+func loadTrackingStatuses(ctx context.Context, prs issues_model.PullRequestList, headCommitIDs map[int64]string, policyTargets map[int64]issues_model.PullRequestPolicyTarget) (map[int64]map[string][]*git_model.CommitStatus, error) {
 	commitIDsByRepo := make(map[int64][]string)
 	seenByRepo := make(map[int64]map[string]struct{})
 	for _, pr := range prs {
+		repoID := policyTargets[pr.ID].RepoID
 		sha := headCommitIDs[pr.ID]
 		if sha == "" {
 			sha = pr.HeadCommitID
 		}
-		if sha == "" || pr.BaseRepoID <= 0 {
+		if sha == "" || repoID <= 0 {
 			continue
 		}
-		if seenByRepo[pr.BaseRepoID] == nil {
-			seenByRepo[pr.BaseRepoID] = make(map[string]struct{})
+		if seenByRepo[repoID] == nil {
+			seenByRepo[repoID] = make(map[string]struct{})
 		}
-		if _, ok := seenByRepo[pr.BaseRepoID][sha]; ok {
+		if _, ok := seenByRepo[repoID][sha]; ok {
 			continue
 		}
-		seenByRepo[pr.BaseRepoID][sha] = struct{}{}
-		commitIDsByRepo[pr.BaseRepoID] = append(commitIDsByRepo[pr.BaseRepoID], sha)
+		seenByRepo[repoID][sha] = struct{}{}
+		commitIDsByRepo[repoID] = append(commitIDsByRepo[repoID], sha)
 	}
 
 	statusesByRepo := make(map[int64]map[string][]*git_model.CommitStatus, len(commitIDsByRepo))

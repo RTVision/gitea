@@ -19,6 +19,11 @@ func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int6
 		log.Error("GetStackEntries[%d]: %v", stackID, err)
 		return
 	}
+	stack, err := issues_model.GetStackByID(ctx, stackID)
+	if err != nil {
+		log.Error("GetStackByID[%d]: %v", stackID, err)
+		return
+	}
 	for _, entry := range entries {
 		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
 		if err != nil {
@@ -27,6 +32,12 @@ func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int6
 		}
 		if pr.HasMerged {
 			continue
+		}
+		if stack.State == issues_model.StackStateOpen {
+			if err := pinStackEntry(ctx, stack, entry); err != nil {
+				log.Error("pinStackEntry[%d]: %v", pr.ID, err)
+				continue
+			}
 		}
 		if err := pr.LoadIssue(ctx); err != nil {
 			log.Error("LoadIssue[%d]: %v", pr.ID, err)

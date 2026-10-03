@@ -9,26 +9,28 @@
 		<div class="ui stackable grid tw-max-w-full">
 			<div class="eleven wide column tw-min-w-0">
 				<ul class="stack-layer-list flex-divided-list ui segment" aria-label="{{ctx.Locale.Tr "repo.pulls.stack_entries"}}">
-				{{range $_, $entry := $data.TopDownEntries}}<li class="item stack-layer flex-left-right tw-items-start tw-flex-wrap tw-max-w-full"><div class="flex-text-block tw-items-start tw-min-w-0">{{template "shared/issueicon" .Pull.Issue}}<div class="tw-min-w-0"><a class="tw-break-anywhere" href="{{.Pull.Issue.Link}}">#{{.Pull.Index}} {{.Pull.Issue.Title}}</a><div class="tw-text-text-light tw-text-12">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</div></div></div><div class="flex-text-block">{{if .Readiness}}<span class="ui basic red label">{{ctx.Locale.Tr "repo.pulls.stack_blocked"}}</span><span class="tw-text-red tw-break-anywhere">{{.Readiness}}</span>{{end}}<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span></div></li>{{end}}
+				{{range $_, $entry := $data.TopDownEntries}}<li class="item stack-layer flex-left-right tw-items-start tw-flex-wrap tw-max-w-full"><div class="flex-text-block tw-items-start tw-min-w-0">{{template "shared/issueicon" .Pull.Issue}}<div class="tw-min-w-0"><a class="tw-break-anywhere" href="{{.Pull.Issue.Link}}">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</a><div class="tw-text-text-light tw-text-12">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</div></div></div><div class="flex-text-block">{{if .Readiness}}<span class="ui basic red label">{{ctx.Locale.Tr "repo.pulls.stack_blocked"}}</span><span class="tw-text-red tw-break-anywhere">{{.Readiness}}</span>{{end}}<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span></div></li>{{end}}
 				</ul><div class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</div>
 			</div>
 			<div class="five wide column tw-min-w-0">
 				{{template "repo/stack/status" .}}
 				{{if $data.Operations}}<div class="ui segment"><h3>{{ctx.Locale.Tr "repo.pulls.stack_history"}}</h3>
 					<ul class="tw-pl-5">{{range $data.Operations}}<li>{{ctx.Locale.Tr "repo.pulls.stack_operation" .State}} {{if gt .Completed 0}}({{ctx.Locale.Tr "repo.pulls.stack_landed" .Completed}}){{end}}</li>{{end}}</ul></div>{{end}}
-				{{if .CanManageStack}}
+				{{if .CanLandStack}}
 				{{if $data.LandingStyles}}<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/land"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_land"}}</h3>
-					<div class="field"><label for="stack-through">{{ctx.Locale.Tr "repo.pulls.stack_land_through"}}</label><select id="stack-through" name="through">{{range $data.Entries}}{{if not .Pull.HasMerged}}<option value="{{.Entry.Position}}">#{{.Pull.Index}}</option>{{end}}{{end}}</select></div><div class="field"><label for="stack-style">{{ctx.Locale.Tr "repo.pulls.stack_merge_style"}}</label><select id="stack-style" name="merge_style">{{range $data.LandingStyles}}<option value="{{.}}">{{if eq . "merge"}}{{ctx.Locale.Tr "repo.pulls.stack_merge_commit"}}{{else if eq . "squash"}}{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}{{else if eq . "rebase"}}{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}{{else}}{{ctx.Locale.Tr "repo.pulls.fast_forward_only_merge_pull_request"}}{{end}}</option>{{end}}</select></div><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_land_desc"}}</p><button type="submit" class="ui primary button">{{ctx.Locale.Tr "repo.pulls.stack_land"}}</button></form>{{else}}
+					<div class="field"><label for="stack-through">{{ctx.Locale.Tr "repo.pulls.stack_land_through"}}</label><select id="stack-through" name="through">{{range $data.Entries}}{{if not .Pull.HasMerged}}<option value="{{.Entry.Position}}">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}}</option>{{end}}{{end}}</select></div><div class="field"><label for="stack-style">{{ctx.Locale.Tr "repo.pulls.stack_merge_style"}}</label><select id="stack-style" name="merge_style">{{range $data.LandingStyles}}<option value="{{.}}">{{if eq . "merge"}}{{ctx.Locale.Tr "repo.pulls.stack_merge_commit"}}{{else if eq . "squash"}}{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}{{else if eq . "rebase"}}{{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}}{{else}}{{ctx.Locale.Tr "repo.pulls.fast_forward_only_merge_pull_request"}}{{end}}</option>{{end}}</select></div><p class="help">{{ctx.Locale.Tr "repo.pulls.stack_land_desc"}}</p><button type="submit" class="ui primary button">{{ctx.Locale.Tr "repo.pulls.stack_land"}}</button></form>{{else}}
 				<div class="ui segment">
 					<h3>{{ctx.Locale.Tr "repo.pulls.stack_land"}}</h3>
 					<p>{{ctx.Locale.Tr "repo.pulls.stack_land_no_styles"}}</p>
 				</div>
 				{{end}}
+				{{end}}
+				{{if .CanManageStack}}
 				{{$merge := eq $data.Stack.Mode "merge"}}
 				<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/{{if $merge}}update{{else}}rebase{{end}}"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_update"}}</h3>
 					<p class="help">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge_desc"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_update_rebase_desc"}}{{end}}</p>
 					<button type="submit" class="ui button">{{if $merge}}{{ctx.Locale.Tr "repo.pulls.stack_update_merge"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebase"}}{{end}}</button></form>
-				{{if .CanInsertStack}}<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/insert" data-global-init="initRepoStackInsert"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_insert"}}</h3>
+				{{if .CanInsertStack}}<form class="ui segment form" method="post" action="{{.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/insert" data-global-init="initRepoStackInsert"><input type="hidden" name="global_ids" value="true"><input type="hidden" name="stack_version" value="{{$data.Stack.Revision}}"><h3>{{ctx.Locale.Tr "repo.pulls.stack_insert"}}</h3>
 					{{if .InsertCandidates}}<div class="field"><label for="stack-insert">{{ctx.Locale.Tr "repo.pulls.stack_insert_pull"}}</label>
 						<div class="ui search selection dropdown">
 							<input type="hidden" name="pull">
@@ -36,7 +38,7 @@
 							<div class="default text gt-ellipsis tw-max-w-full">{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}</div>
 							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 							<div class="menu">
-								{{range .InsertCandidates}}<div class="item tw-flex tw-flex-col" data-value="{{.Pull.Index}}"><span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span> <span class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</span></div>{{end}}
+								{{range .InsertCandidates}}<div class="item tw-flex tw-flex-col" data-value="{{.Pull.ID}}"><span class="tw-break-anywhere">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span> <span class="tw-text-text-light tw-text-12 tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}} · {{if .After}}{{ctx.Locale.Tr "repo.pulls.stack_insert_after" .After.Index}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_insert_bottom"}}{{end}}</span></div>{{end}}
 							</div>
 						</div>
 					</div>

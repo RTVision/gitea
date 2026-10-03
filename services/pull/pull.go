@@ -556,7 +556,15 @@ func checkIfPRContentChanged(ctx context.Context, pr *issues_model.PullRequest, 
 	}
 	defer cancel()
 
-	mergeBase, err = git.MergeBase(ctx, pr.BaseRepo, pr.BaseBranch, pr.GetGitHeadRefName())
+	stack, stackErr := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if stackErr != nil {
+		return false, "", stackErr
+	}
+	if stack != nil && stack.State == issues_model.StackStateOpen {
+		mergeBase, err = issues_model.StackComparisonBase(ctx, pr)
+	} else {
+		mergeBase, err = git.MergeBase(ctx, pr.BaseRepo, pr.BaseBranch, pr.GetGitHeadRefName())
+	}
 	if err != nil {
 		return false, "", fmt.Errorf("GetMergeBase: %w", err)
 	}
@@ -615,6 +623,21 @@ func PushToBaseRepo(ctx context.Context, pr *issues_model.PullRequest) error {
 		// If any error happens, it must be an internal error (e.g.: broken git hooks) but not user error.
 		return fmt.Errorf("unable to push from head branch %s:%s to base repo %s:%s, err: %w",
 			pr.HeadRepo.FullName(), pr.HeadBranch, pr.BaseRepo.FullName(), baseRepoHeadRefName, err)
+	}
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil {
+		return err
+	}
+	if stack != nil && stack.State == issues_model.StackStateOpen {
+		repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
+		if err != nil {
+			return err
+		}
+		head, err := git.GetFullCommitID(ctx, pr.BaseRepo, baseRepoHeadRefName)
+		if err != nil {
+			return err
+		}
+		return fetchStackObject(ctx, repo, pr.BaseRepo, head, issues_model.StackHeadRefName(pr.ID))
 	}
 	return nil
 }
@@ -998,9 +1021,13 @@ func getAllCommitStatus(ctx context.Context, doer *user_model.User, gitRepo *git
 		return nil, nil, shaErr
 	}
 
-	statuses, err = git_model.GetLatestCommitStatus(ctx, pr.BaseRepo.ID, sha, db.ListOptionsAll)
+	policyRepo, err := getPullPolicyRepository(ctx, pr)
+	if err != nil {
+		return nil, nil, err
+	}
+	statuses, err = git_model.GetLatestCommitStatus(ctx, policyRepo.ID, sha, db.ListOptionsAll)
 	for _, status := range statuses {
-		status.Repo = pr.BaseRepo // the repo is already loaded, spare the permission lookup a query
+		status.Repo = policyRepo // the repo is already loaded, spare the permission lookup a query
 	}
 	// CalcCommitStatus copies a TargetURL out of the statuses, so hide before combining
 	git_model.CommitStatusesApplyDoerPermission(ctx, doer, statuses)
@@ -1077,8 +1104,15 @@ func GetPullCommits(ctx context.Context, baseGitRepo *git.Repository, doer *user
 		return nil, "", err
 	}
 	baseBranch := pull.BaseBranch
-	if pull.HasMerged {
-		baseBranch = pull.MergeBase
+	stack, err := issues_model.GetPullRequestStack(ctx, pull.ID)
+	if err != nil {
+		return nil, "", err
+	}
+	if pull.HasMerged || (stack != nil && stack.State == issues_model.StackStateOpen) {
+		baseBranch, err = issues_model.StackComparisonBase(ctx, pull)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 	compareInfo, err := git_service.GetCompareInfo(ctx, pull.BaseRepo, pull.BaseRepo, baseGitRepo, git.RefNameFromBranch(baseBranch), git.RefName(pull.GetGitHeadRefName()), false, false)
 	if err != nil {

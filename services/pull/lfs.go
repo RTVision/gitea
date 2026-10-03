@@ -23,8 +23,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// LFSPush pushes lfs objects referred to in new commits in the head repository from the base repository
-func LFSPush(ctx context.Context, tmpBasePath string, tmpRepo git.RepositoryFacade, mergeHeadSHA, mergeBaseSHA string, pr *issues_model.PullRequest) error {
+// LFSPush associates source LFS objects with the merge destination.
+func LFSPush(ctx context.Context, tmpBasePath string, tmpRepo git.RepositoryFacade, mergeHeadSHA, mergeBaseSHA string, pr *issues_model.PullRequest, targets ...*Target) error {
 	// Now we have to implement git-lfs push
 	// git rev-list --objects --filter=blob:limit=1k HEAD --not base
 	// pass blob shas in to git cat-file --batch-check (possibly unnecessary)
@@ -49,7 +49,7 @@ func LFSPush(ctx context.Context, tmpBasePath string, tmpRepo git.RepositoryFaca
 	// to see if they're pointers to files in the LFS store associated with
 	// the head repo and add them to the base repo if so
 	wg.Go(func() error {
-		return createLFSMetaObjectsFromCatFileBatch(ctx, cmd5BatchContentOut, pr)
+		return createLFSMetaObjectsFromCatFileBatch(ctx, cmd5BatchContentOut, pr, targets...)
 	})
 
 	// 5. Take the shas of the blobs and batch read them
@@ -80,8 +80,16 @@ func LFSPush(ctx context.Context, tmpBasePath string, tmpRepo git.RepositoryFaca
 	return wg.Wait()
 }
 
-func createLFSMetaObjectsFromCatFileBatch(ctx context.Context, catFileBatchReader io.ReadCloser, pr *issues_model.PullRequest) error {
+func createLFSMetaObjectsFromCatFileBatch(ctx context.Context, catFileBatchReader io.ReadCloser, pr *issues_model.PullRequest, targets ...*Target) error {
 	defer catFileBatchReader.Close()
+
+	targetRepoID := pr.BaseRepoID
+	if len(targets) > 0 && targets[0] != nil {
+		if targets[0].Repo == nil {
+			return issues_model.ErrInvalidStack
+		}
+		targetRepoID = targets[0].Repo.ID
+	}
 
 	contentStore := lfs.NewContentStore()
 	bufferedReader := bufio.NewReader(catFileBatchReader)
@@ -131,7 +139,7 @@ func createLFSMetaObjectsFromCatFileBatch(ctx context.Context, catFileBatchReade
 		// OK we have a pointer that is associated with the head repo
 		// and is actually a file in the LFS
 		// Therefore it should be associated with the base repo
-		if _, err := git_model.NewLFSMetaObject(ctx, pr.BaseRepoID, pointer); err != nil {
+		if _, err := git_model.NewLFSMetaObject(ctx, targetRepoID, pointer); err != nil {
 			return err
 		}
 	}

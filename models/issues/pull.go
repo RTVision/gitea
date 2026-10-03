@@ -144,9 +144,11 @@ type PullRequest struct {
 	MergeBase           string `xorm:"VARCHAR(64)"`
 	AllowMaintainerEdit bool   `xorm:"NOT NULL DEFAULT false"`
 
-	HasMerged          bool               `xorm:"INDEX"`
-	MergedCommitID     string             `xorm:"VARCHAR(64)"`
-	MergedBaseCommitID string             `xorm:"VARCHAR(64)"`
+	HasMerged          bool   `xorm:"INDEX"`
+	MergedCommitID     string `xorm:"VARCHAR(64)"`
+	MergedBaseCommitID string `xorm:"VARCHAR(64)"`
+	MergedRepoID       int64  `xorm:"NOT NULL DEFAULT 0"`
+	MergedBranch       string
 	MergerID           int64              `xorm:"INDEX"`
 	Merger             *user_model.User   `xorm:"-"`
 	MergedUnix         timeutil.TimeStamp `xorm:"updated INDEX"`

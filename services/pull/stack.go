@@ -7,21 +7,19 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
-	perm_model "gitea.dev/models/perm"
-	access_model "gitea.dev/models/perm/access"
 	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
-	"gitea.dev/models/unit"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
 	"gitea.dev/modules/globallock"
+	repo_module "gitea.dev/modules/repository"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
 	notify_service "gitea.dev/services/notify"
@@ -31,23 +29,6 @@ type CreateStackOptions struct {
 	TrunkBranch    string
 	Mode           string
 	PullRequestIDs []int64
-}
-
-func checkStackAuthority(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) error {
-	if !repo.CanContentChange() {
-		return util.NewPermissionDeniedErrorf("stack management requires an editable repository")
-	}
-	if doer == nil {
-		return util.NewPermissionDeniedErrorf("stack management requires repository write access")
-	}
-	allowed, err := access_model.HasAccessUnit(ctx, doer, repo, unit.TypeCode, perm_model.AccessModeWrite)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return util.NewPermissionDeniedErrorf("stack management requires repository write access")
-	}
-	return nil
 }
 
 // StackLayerCheck reports what keeps a pull request from stacking on its parent.
@@ -86,19 +67,27 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 	if trunk == "" || len(pullIDs) == 0 {
 		return nil, issues_model.ErrInvalidStack
 	}
-	gitRepo, err := git.OpenRepository(ctx, repo)
+	tmpPath, gitRepo, cleanup, err := repo_module.CreateTemporaryGitRepo("stack-check")
 	if err != nil {
 		return nil, err
 	}
-	defer gitRepo.Close()
-	parentSHA, err := gitRepo.GetBranchCommitID(ctx, trunk)
+	defer cleanup()
+	if err := git.InitRepositoryLocal(ctx, tmpPath, false, repo.ObjectFormatName); err != nil {
+		return nil, err
+	}
+	parentSHA, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+trunk)
 	if err != nil {
 		return nil, err
 	}
+	if err := fetchStackObject(ctx, gitRepo, repo, parentSHA, "refs/heads/trunk"); err != nil {
+		return nil, err
+	}
+	parentRepoID := repo.ID
+	var sourceRepoID int64
 	parentBranch := trunk
 	var parentID, parentIndex int64
 	seenIDs := map[int64]bool{}
-	seenBranches := map[string]bool{trunk: true}
+	seenBranches := map[string]bool{issues_model.StackBranchKey(repo.ID, trunk): true}
 	checks := make([]*StackLayerCheck, 0, len(pullIDs))
 	for i, id := range pullIDs {
 		pr, err := issues_model.GetPullRequestByID(ctx, id)
@@ -108,13 +97,43 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		if err := pr.LoadIssue(ctx); err != nil {
 			return checks[:i], err
 		}
-		if id == retargetID {
+		if id == retargetID && pr.BaseRepoID == parentRepoID {
 			pr.BaseBranch = parentBranch
 		}
+		baseMatches := pr.BaseRepoID == parentRepoID && pr.BaseBranch == parentBranch
+		if i == 0 && !baseMatches {
+			member, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+			if err != nil {
+				return checks[:i], err
+			}
+			if member != nil && member.RepoID == repo.ID && member.TrunkBranch == trunk {
+				entries, err := issues_model.GetStackEntries(ctx, member.ID)
+				if err != nil {
+					return checks[:i], err
+				}
+				for _, entry := range entries {
+					if entry.PullRequestID != pr.ID || entry.ParentPullRequestID == 0 {
+						continue
+					}
+					parent, err := issues_model.GetPullRequestByID(ctx, entry.ParentPullRequestID)
+					if err != nil {
+						return checks[:i], err
+					}
+					if parent.HasMerged && parent.MergedCommitID != "" {
+						mergedRepo, mergedBranch, err := parent.GetMergedTarget(ctx)
+						if err != nil {
+							return checks[:i], err
+						}
+						baseMatches = mergedRepo.ID == repo.ID && mergedBranch == trunk && pr.BaseRepoID == parent.HeadRepoID && pr.BaseBranch == parent.HeadBranch
+					}
+				}
+			}
+		}
+		branchKey := issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)
 		check := &StackLayerCheck{Pull: pr, ParentBranch: parentBranch, ParentIndex: parentIndex}
 		checks = append(checks, check)
-		if seenIDs[id] || seenBranches[pr.HeadBranch] || pr.HasMerged || pr.Issue.IsClosed || pr.HeadRepoID != repo.ID || pr.BaseRepoID != repo.ID || pr.BaseBranch != parentBranch || pr.Flow != issues_model.PullRequestFlowGithub {
-			check.Invalid = fmt.Errorf("%w: pull request #%d does not form an open same-repository chain on %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
+		if seenIDs[id] || seenBranches[branchKey] || pr.HasMerged || pr.Issue.IsClosed || !baseMatches || pr.Flow != issues_model.PullRequestFlowGithub {
+			check.Invalid = fmt.Errorf("%w: pull request #%d does not form an open repository-qualified chain on %s", issues_model.ErrInvalidStack, pr.Index, parentBranch)
 			return checks, nil // later layers have no parent to check against
 		}
 		if scheduled, _, err := pull_model.GetScheduledMergeByPullID(ctx, id); err != nil {
@@ -122,8 +141,19 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		} else if scheduled {
 			check.Invalid = fmt.Errorf("%w: pull request #%d is scheduled to auto-merge", issues_model.ErrStackRevision, pr.Index)
 		}
-		headSHA, err := gitRepo.GetBranchCommitID(ctx, pr.HeadBranch)
+		if err := pr.LoadHeadRepo(ctx); err != nil {
+			return checks[:i], err
+		}
+		if pr.HeadRepo == nil || pr.HeadRepo.ObjectFormatName != repo.ObjectFormatName || pr.HeadRepo.IsPrivate != repo.IsPrivate || (pr.HeadRepoID != repo.ID && (!pr.HeadRepo.IsFork || pr.HeadRepo.ForkID != repo.ID)) || (sourceRepoID != 0 && sourceRepoID != pr.HeadRepoID) {
+			check.Invalid = fmt.Errorf("%w: all source branches must belong to one fork of the stack repository with matching visibility", issues_model.ErrInvalidStack)
+			return checks, nil
+		}
+		sourceRepoID = pr.HeadRepoID
+		headSHA, err := git.GetFullCommitID(ctx, pr.HeadRepo, git.BranchPrefix+pr.HeadBranch)
 		if err != nil {
+			return checks[:i], err
+		}
+		if err := fetchStackObject(ctx, gitRepo, pr.HeadRepo, headSHA, issues_model.StackHeadRefName(pr.ID)); err != nil {
 			return checks[:i], err
 		}
 		boundary, err := git.MergeBase(ctx, gitRepo, parentSHA, headSHA)
@@ -142,7 +172,7 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 			check.HasMerges = strings.TrimSpace(merges) != ""
 		}
 		// A head shared by another open PR has ambiguous rewrite ownership.
-		count, err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").Where("pull_request.head_repo_id = ? AND pull_request.head_branch = ? AND issue.is_closed = ? AND pull_request.id <> ?", repo.ID, pr.HeadBranch, false, id).Count(new(issues_model.PullRequest))
+		count, err := db.GetEngine(ctx).Table("pull_request").Join("INNER", "issue", "issue.id = pull_request.issue_id").Where("pull_request.head_repo_id = ? AND pull_request.head_branch = ? AND issue.is_closed = ? AND pull_request.id <> ?", pr.HeadRepoID, pr.HeadBranch, false, id).Count(new(issues_model.PullRequest))
 		if err != nil {
 			return checks[:i], err
 		}
@@ -150,7 +180,8 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 			check.Invalid = fmt.Errorf("%w: branch %s has multiple open pull requests", issues_model.ErrInvalidStack, pr.HeadBranch)
 		}
 		check.Entry = &issues_model.StackEntry{PullRequestID: id, Position: i + 1, ParentPullRequestID: parentID, OldParentSHA: boundary, HeadSHA: headSHA}
-		seenIDs[id], seenBranches[pr.HeadBranch] = true, true
+		seenIDs[id], seenBranches[branchKey] = true, true
+		parentRepoID = pr.HeadRepoID
 		parentID, parentIndex, parentBranch, parentSHA = id, pr.Index, pr.HeadBranch, headSHA
 	}
 	return checks, nil
@@ -173,33 +204,47 @@ func validateStackChain(ctx context.Context, repo *repo_model.Repository, trunk,
 
 // SuggestStackChain follows base branches down from the top pull request and returns the chain bottom first.
 // The suggested start is the layer just above the highest branch that several pull requests build on, like develop.
-func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) (chain []*issues_model.PullRequest, start int) {
+func SuggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string) ([]*issues_model.PullRequest, int) {
+	for _, pr := range candidates {
+		if pr.Index == top {
+			return suggestStackChain(candidates, top, defaultBranch, pr.BaseRepoID, false)
+		}
+	}
+	return nil, 0
+}
+
+func SuggestStackChainByID(candidates []*issues_model.PullRequest, top int64, defaultBranch string, trunkRepoID int64) ([]*issues_model.PullRequest, int) {
+	return suggestStackChain(candidates, top, defaultBranch, trunkRepoID, true)
+}
+
+func suggestStackChain(candidates []*issues_model.PullRequest, top int64, defaultBranch string, trunkRepoID int64, byID bool) (chain []*issues_model.PullRequest, start int) {
 	byHead := make(map[string]*issues_model.PullRequest, len(candidates))
-	bases := make(map[string]int, len(candidates))
-	heads := make(map[string]int, len(candidates))
+	bases, heads := map[string]int{}, map[string]int{}
 	var current *issues_model.PullRequest
 	for _, pr := range candidates {
-		byHead[pr.HeadBranch] = pr
-		bases[pr.BaseBranch]++
-		heads[pr.HeadBranch]++
-		if pr.Index == top {
+		head := issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)
+		base := issues_model.StackBranchKey(pr.BaseRepoID, pr.BaseBranch)
+		byHead[head] = pr
+		bases[base]++
+		heads[head]++
+		if (byID && pr.ID == top) || (!byID && pr.Index == top) {
 			current = pr
 		}
 	}
-	if current == nil || heads[current.HeadBranch] > 1 {
-		return nil, 0 // pull requests sharing a head branch can't be stacked
+	if current == nil || heads[issues_model.StackBranchKey(current.HeadRepoID, current.HeadBranch)] > 1 {
+		return nil, 0
 	}
-	inChain := make(map[string]bool)
+	inChain := map[string]bool{}
 	shared := -1
 	for current != nil {
 		chain = append(chain, current)
-		inChain[current.HeadBranch] = true
-		base := current.BaseBranch
+		inChain[issues_model.StackBranchKey(current.HeadRepoID, current.HeadBranch)] = true
+		base := issues_model.StackBranchKey(current.BaseRepoID, current.BaseBranch)
 		if shared < 0 && bases[base] > 1 {
 			shared = len(chain) - 1
 		}
 		next := byHead[base]
-		if next == nil || base == defaultBranch || heads[base] > 1 || inChain[next.BaseBranch] {
+		if next == nil || heads[base] > 1 || inChain[issues_model.StackBranchKey(next.BaseRepoID, next.BaseBranch)] || (current.BaseBranch == defaultBranch && current.BaseRepoID == trunkRepoID) {
 			break
 		}
 		current = next
@@ -221,7 +266,7 @@ func insertStackEntries(ctx context.Context, stack *issues_model.PullRequestStac
 		if _, err = db.GetEngine(ctx).Insert(entry); err != nil {
 			return err
 		}
-		claim := &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(stack.RepoID, pr.HeadBranch)}
+		claim := &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}
 		if _, err = db.GetEngine(ctx).Insert(claim); err != nil {
 			return fmt.Errorf("%w: branch or pull request already belongs to a stack: %v", issues_model.ErrInvalidStack, err)
 		}
@@ -239,7 +284,7 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 	if !setting.Repository.PullRequest.EnableStacks {
 		return nil, util.NewPermissionDeniedErrorf("stack creation is disabled")
 	}
-	if err := checkStackAuthority(ctx, doer, repo); err != nil {
+	if err := checkStackAuthority(ctx, doer, repo, opts.PullRequestIDs...); err != nil {
 		return nil, err
 	}
 	if opts.Mode == "" {
@@ -251,6 +296,12 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, Mode: opts.Mode, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, opts.PullRequestIDs...); err != nil {
+			return err
+		}
+		if err := checkStackAuthority(ctx, doer, repo, opts.PullRequestIDs...); err != nil {
+			return err
+		}
+		if err := checkStackPullRead(ctx, doer, opts.PullRequestIDs); err != nil {
 			return err
 		}
 		entries, err := validateStackChain(ctx, repo, opts.TrunkBranch, opts.Mode, opts.PullRequestIDs, 0)
@@ -290,7 +341,10 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 		if err != nil {
 			return err
 		}
-		if err = checkStackAuthority(ctx, doer, repo); err != nil {
+		if err = checkStackManagement(ctx, doer, stack, pullIDs...); err != nil {
+			return err
+		}
+		if err := checkStackMemberRead(ctx, doer, stack.ID, pullIDs...); err != nil {
 			return err
 		}
 		existing, err := issues_model.GetStackEntries(ctx, stack.ID)
@@ -348,10 +402,10 @@ func stackInsertPoint(ctx context.Context, stack *issues_model.PullRequestStack,
 		if layers[i].HasMerged {
 			continue
 		}
-		if at < 0 && pr.BaseBranch == stack.TrunkBranch {
+		if at < 0 && pr.BaseRepoID == stack.RepoID && pr.BaseBranch == stack.TrunkBranch {
 			at = i
 		}
-		if layers[i].HeadBranch == pr.BaseBranch {
+		if layers[i].HeadRepoID == pr.BaseRepoID && layers[i].HeadBranch == pr.BaseBranch {
 			at = i + 1
 		}
 	}
@@ -378,6 +432,9 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 	}
 	if stack.State != issues_model.StackStateOpen || stack.ActiveOperationID != 0 || stack.Revision != expectedRevision {
 		return nil, issues_model.ErrStackRevision
+	}
+	if err := checkStackMemberRead(ctx, doer, stack.ID, pullID); err != nil {
+		return nil, err
 	}
 	pr, err := issues_model.GetPullRequestByID(ctx, pullID)
 	if err != nil {
@@ -416,7 +473,10 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 		if err != nil {
 			return err
 		}
-		if err = checkStackAuthority(ctx, doer, repo); err != nil {
+		if err = checkStackManagement(ctx, doer, stack, pullID); err != nil {
+			return err
+		}
+		if err := checkStackMemberRead(ctx, doer, stack.ID, pullID); err != nil {
 			return err
 		}
 		if err = issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {
@@ -459,6 +519,9 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 			return err
 		}
 		if above != nil {
+			if above.BaseRepoID != pr.HeadRepoID {
+				return fmt.Errorf("%w: inserting this layer would change the next PR's repository", issues_model.ErrInvalidStack)
+			}
 			oldBase = above.BaseBranch
 			if err = changeTargetBranchLocked(ctx, above, doer, pr.HeadBranch); err != nil {
 				return err
@@ -516,34 +579,49 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 			return nil, err
 		}
 		if !layer.HasMerged {
-			anchors[layer.HeadBranch] = layer
+			anchors[issues_model.StackBranchKey(layer.HeadRepoID, layer.HeadBranch)] = layer
 			bottom = cmp.Or(bottom, layer)
 		}
 	}
 	if bottom == nil {
 		return nil, nil
 	}
-	pulls, err := issues_model.FindStackInsertCandidatePulls(ctx, stack.RepoID, append(slices.Collect(maps.Keys(anchors)), stack.TrunkBranch), limit)
+	branches := []string{stack.TrunkBranch}
+	for _, layer := range anchors {
+		branches = append(branches, layer.HeadBranch)
+	}
+	pulls, err := issues_model.FindStackInsertCandidatePulls(ctx, stack.RepoID, branches, limit)
 	if err != nil || len(pulls) == 0 {
 		return nil, err
 	}
-	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
+	trunkRepo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
 	if err != nil {
 		return nil, err
 	}
-	gitRepo, err := git.OpenRepository(ctx, repo)
-	if err != nil {
+	if err := bottom.LoadHeadRepo(ctx); err != nil {
 		return nil, err
 	}
-	defer gitRepo.Close()
 	candidates := make([]*StackInsertCandidate, 0, len(pulls))
 	for _, pr := range pulls {
-		if pr.BaseBranch == stack.TrunkBranch {
-			shared, err := git.MergeBase(ctx, gitRepo, git.BranchPrefix+pr.HeadBranch, git.BranchPrefix+bottom.HeadBranch)
+		if err := pr.LoadHeadRepo(ctx); err != nil {
+			return nil, err
+		}
+		if pr.HeadRepoID != bottom.HeadRepoID {
+			continue
+		}
+		if pr.BaseRepoID == stack.RepoID && pr.BaseBranch == stack.TrunkBranch {
+			trunkSHA, err := git.GetFullCommitID(ctx, trunkRepo, git.BranchPrefix+stack.TrunkBranch)
+			if err != nil {
+				return nil, err
+			}
+			if err := fetchStackObject(ctx, pr.HeadRepo, trunkRepo, trunkSHA, "refs/stack-trunks/"+strconv.FormatInt(stack.ID, 10)); err != nil {
+				return nil, err
+			}
+			shared, err := git.MergeBase(ctx, pr.HeadRepo, git.BranchPrefix+pr.HeadBranch, git.BranchPrefix+bottom.HeadBranch)
 			if err != nil {
 				continue // unrelated histories or a missing branch
 			}
-			onTrunk, err := stackAncestor(ctx, gitRepo, shared, git.BranchPrefix+stack.TrunkBranch)
+			onTrunk, err := stackAncestor(ctx, pr.HeadRepo, shared, trunkSHA)
 			if err != nil {
 				return nil, err
 			}
@@ -551,7 +629,11 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 				continue
 			}
 		}
-		candidates = append(candidates, &StackInsertCandidate{Pull: pr, After: anchors[pr.BaseBranch]})
+		anchor := anchors[issues_model.StackBranchKey(pr.BaseRepoID, pr.BaseBranch)]
+		if anchor == nil && (pr.BaseRepoID != stack.RepoID || pr.BaseBranch != stack.TrunkBranch) {
+			continue
+		}
+		candidates = append(candidates, &StackInsertCandidate{Pull: pr, After: anchor})
 	}
 	return candidates, nil
 }
@@ -562,11 +644,10 @@ func Unstack(ctx context.Context, doer *user_model.User, stackID, expectedRevisi
 		if err != nil {
 			return err
 		}
-		repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
-		if err != nil {
+		if err = checkStackManagement(ctx, doer, stack); err != nil {
 			return err
 		}
-		if err = checkStackAuthority(ctx, doer, repo); err != nil {
+		if err := checkStackMemberRead(ctx, doer, stack.ID); err != nil {
 			return err
 		}
 		if err = issues_model.AdvanceStackRevision(ctx, stack.ID, expectedRevision); err != nil {

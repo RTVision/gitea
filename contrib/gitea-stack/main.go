@@ -225,15 +225,26 @@ func parseStack(value string) (int64, error) {
 	return n, nil
 }
 
-func parsePulls(value string) ([]int64, error) {
+func parsePulls(value string) ([]localstate.Layer, error) {
 	parts := strings.Split(value, ",")
-	result := make([]int64, 0, len(parts))
+	result := make([]localstate.Layer, 0, len(parts))
 	for _, part := range parts {
-		n, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimSpace(part), "#"), 10, 64)
+		part = strings.TrimSpace(part)
+		repository, number, qualified := strings.Cut(part, "#")
+		if !qualified {
+			number, repository = part, ""
+		}
+		if repository != "" {
+			owner, repo, ok := strings.Cut(repository, "/")
+			if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
+				return nil, fail(2, "usage", "invalid pull request list %q", value)
+			}
+		}
+		n, err := strconv.ParseInt(number, 10, 64)
 		if err != nil || n <= 0 {
 			return nil, fail(2, "usage", "invalid pull request list %q", value)
 		}
-		result = append(result, n)
+		result = append(result, localstate.Layer{Repository: repository, PullRequest: n})
 	}
 	return result, nil
 }
@@ -266,7 +277,7 @@ func (a *application) checkPullStackModes(ctx context.Context, client *stackclie
 		if layer.PullRequest == 0 || layer.LandedSHA != "" {
 			continue
 		}
-		pull, err := client.GetPull(ctx, layer.PullRequest)
+		pull, err := getLayerPull(ctx, client, layer)
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -303,11 +314,102 @@ func (a *application) selectedRemote(state *localstate.State) (string, error) {
 	return remotes[0], nil
 }
 
+func trunkRemote(state *localstate.State) string {
+	return cmp.Or(state.UpstreamRemote, state.Remote)
+}
+
+func pullRepositoryID(pull *api.PullRequest) int64 {
+	if pull.Base == nil {
+		return 0
+	}
+	if pull.Base.Repository != nil {
+		return cmp.Or(pull.Base.RepoID, pull.Base.Repository.ID)
+	}
+	return pull.Base.RepoID
+}
+
+func pullRepository(pull *api.PullRequest) string {
+	if pull == nil {
+		return ""
+	}
+	if pull.Base != nil && pull.Base.Repository != nil {
+		return pull.Base.Repository.FullName
+	}
+	return ""
+}
+
+func serverRepositoryID(server *api.PullRequestStack) int64 {
+	if server.Repository != nil {
+		return server.Repository.ID
+	}
+	return 0
+}
+
+func layerReference(layer localstate.Layer, defaultRepo int64) api.PullRequestReference {
+	return api.PullRequestReference{RepositoryID: cmp.Or(layer.RepositoryID, defaultRepo), PullRequest: layer.PullRequest}
+}
+
+func pullReference(pull *api.PullRequest, defaultRepo int64) api.PullRequestReference {
+	return api.PullRequestReference{RepositoryID: cmp.Or(pullRepositoryID(pull), defaultRepo), PullRequest: pull.Index}
+}
+
+func getLayerPull(ctx context.Context, client *stackclient.Client, layer localstate.Layer) (*api.PullRequest, error) {
+	if layer.Repository != "" {
+		var err error
+		client, err = client.ForRepository(layer.Repository)
+		if err != nil {
+			return nil, err
+		}
+	}
+	pull, err := client.GetPull(ctx, layer.PullRequest)
+	if err == nil && layer.RepositoryID != 0 && pullRepositoryID(pull) != layer.RepositoryID {
+		return nil, fail(3, "stack_drift", "the repository for %s#%d changed", layer.Repository, layer.PullRequest)
+	}
+	return pull, err
+}
+
+func createStack(ctx context.Context, client *stackclient.Client, trunk string, mode api.StackMode, layers []localstate.Layer) (*api.PullRequestStack, error) {
+	pulls := make([]int64, 0, len(layers))
+	references := make([]api.PullRequestReference, 0, len(layers))
+	qualified := false
+	for _, layer := range layers {
+		pulls = append(pulls, layer.PullRequest)
+		references = append(references, layerReference(layer, 0))
+		qualified = qualified || layer.Repository != ""
+	}
+	if qualified {
+		return client.CreateStackReferences(ctx, trunk, mode, references)
+	}
+	return client.CreateStack(ctx, trunk, mode, pulls)
+}
+
+func appendStack(ctx context.Context, client *stackclient.Client, number, revision int64, layers []localstate.Layer) (*api.PullRequestStack, error) {
+	pulls := make([]int64, 0, len(layers))
+	references := make([]api.PullRequestReference, 0, len(layers))
+	qualified := false
+	for _, layer := range layers {
+		pulls = append(pulls, layer.PullRequest)
+		references = append(references, layerReference(layer, 0))
+		qualified = qualified || layer.Repository != ""
+	}
+	if qualified {
+		return client.AppendStackReferences(ctx, number, revision, references)
+	}
+	return client.AppendStack(ctx, number, revision, pulls)
+}
+
 func (a *application) client(state *localstate.State) (*stackclient.Client, error) {
 	remote, err := a.selectedRemote(state)
+	if state != nil && state.UpstreamRemote != "" {
+		remote = state.UpstreamRemote
+	}
 	if err != nil {
 		return nil, err
 	}
+	return a.clientForRemote(remote)
+}
+
+func (a *application) clientForRemote(remote string) (*stackclient.Client, error) {
 	remoteURL, err := a.repo.RemoteURL(remote)
 	if err != nil {
 		return nil, err
@@ -327,6 +429,17 @@ func (a *application) client(state *localstate.State) (*stackclient.Client, erro
 		}
 	}
 	return client, nil
+}
+
+func (a *application) queryClient() (*stackclient.Client, error) {
+	if a.remoteFlag != "" {
+		return a.client(nil)
+	}
+	state, _, err := a.optionalState()
+	if err != nil {
+		return nil, err
+	}
+	return a.client(state)
 }
 
 // teaToken only accepts a login for the server the request goes to, so a token never reaches another host.
@@ -400,7 +513,8 @@ func mapGitContextError(operation string, err error) error {
 func (a *application) init(args []string) error {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	trunk := flags.String("trunk", "", "trunk branch")
-	remoteFlag := flags.String("remote", "", "git remote")
+	remoteFlag := flags.String("remote", "", "source and push git remote")
+	upstreamFlag := flags.String("upstream", "", "stack repository and trunk git remote")
 	modeValue := flags.String("mode", "", "stack mode: rebase (default) or merge")
 	if err := flags.Parse(args); err != nil || *trunk == "" {
 		return fail(2, "usage", "init requires --trunk and explicit ordered branches")
@@ -422,11 +536,15 @@ func (a *application) init(args []string) error {
 			return err
 		}
 	}
-	parentSHA, err := a.repo.Head(*trunk)
+	trunkRef := *trunk
+	if *upstreamFlag != "" {
+		trunkRef = "refs/remotes/" + *upstreamFlag + "/" + *trunk
+	}
+	parentSHA, err := a.repo.Head(trunkRef)
 	if err != nil {
 		return fail(8, "not_found", "trunk %s: %v", *trunk, err)
 	}
-	state := &localstate.State{Remote: remote, Trunk: *trunk, Mode: cmp.Or(mode, api.StackModeRebase), LastSyncedTrunkSHA: parentSHA, Layers: []localstate.Layer{}}
+	state := &localstate.State{Remote: remote, UpstreamRemote: *upstreamFlag, Trunk: *trunk, Mode: cmp.Or(mode, api.StackModeRebase), LastSyncedTrunkSHA: parentSHA, Layers: []localstate.Layer{}}
 	parent := *trunk
 	for _, branch := range flags.Args() {
 		if err := a.repo.ValidateBranch(branch); err != nil {
@@ -574,7 +692,7 @@ func (a *application) status(ctx context.Context) error {
 				if entry.LandedSHA != "" {
 					status = "merged " + short(entry.LandedSHA)
 				}
-				fmt.Fprintf(os.Stdout, " %d  %s  #%d  %s\n", entry.Position, branch, pull, status)
+				fmt.Fprintf(os.Stdout, " %d  %s  %s#%d  %s\n", entry.Position, branch, pullRepository(entry.PullRequest), pull, status)
 			}
 			a.success(map[string]any{"local": nil, "server": server})
 			return nil
@@ -585,7 +703,7 @@ func (a *application) status(ctx context.Context) error {
 			if layer.LandedSHA != "" {
 				status = "merged " + short(layer.LandedSHA)
 			}
-			fmt.Fprintf(os.Stdout, " %d  %s  #%d  %s\n", i+1, layer.Branch, layer.PullRequest, status)
+			fmt.Fprintf(os.Stdout, " %d  %s  %s#%d  %s\n", i+1, layer.Branch, layer.Repository, layer.PullRequest, status)
 		}
 	}
 	a.success(map[string]any{"local": local, "server": server})
@@ -629,7 +747,7 @@ func short(sha string) string {
 }
 
 func (a *application) list(ctx context.Context) error {
-	client, err := a.client(nil)
+	client, err := a.queryClient()
 	if err != nil {
 		return err
 	}
@@ -650,14 +768,22 @@ func layerIndex(state *localstate.State, selector string) (int, error) {
 	if position, err := strconv.Atoi(selector); err == nil && position >= 1 && position <= len(state.Layers) {
 		return position - 1, nil
 	}
-	if value, ok := strings.CutPrefix(selector, "#"); ok {
+	if repository, value, qualified := strings.Cut(selector, "#"); qualified {
 		pr, err := strconv.ParseInt(value, 10, 64)
+		match := -1
 		if err == nil {
-			for i := range state.Layers {
-				if state.Layers[i].PullRequest == pr {
-					return i, nil
+			for i, layer := range state.Layers {
+				if layer.PullRequest != pr || repository != "" && layer.Repository != repository {
+					continue
 				}
+				if match >= 0 {
+					return 0, fail(2, "usage", "ambiguous pull request %q; use repository#number", selector)
+				}
+				match = i
 			}
+		}
+		if match >= 0 {
+			return match, nil
 		}
 	}
 	for i := range state.Layers {
@@ -780,7 +906,7 @@ func (a *application) pushLayers(ctx context.Context, state *localstate.State, t
 
 // mergeLayerParents maps each open layer to the parent head it contains, which merge-mode sync records instead of a replay boundary.
 func (a *application) mergeLayerParents(state *localstate.State) (map[int]string, error) {
-	parent, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk)
+	parent, err := a.repo.Head("refs/remotes/" + trunkRemote(state) + "/" + state.Trunk)
 	if err != nil {
 		return nil, fail(3, "precondition", "fetch the trunk with sync before pushing: %v", err)
 	}
@@ -933,7 +1059,7 @@ func (a *application) push(ctx context.Context, args []string) error {
 			if parent, ok := mergeParents[i]; ok {
 				layer.ParentSHA = parent
 			}
-			heads = append(heads, api.PullRequestStackHead{PullRequest: layer.PullRequest, HeadSHA: head, ParentSHA: layer.ParentSHA})
+			heads = append(heads, api.PullRequestStackHead{RepositoryID: layer.RepositoryID, PullRequest: layer.PullRequest, HeadSHA: head, ParentSHA: layer.ParentSHA})
 		}
 		server, err = client.SynchronizeStack(ctx, stackNumber, server.Revision, heads)
 		if err != nil {
@@ -1013,7 +1139,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			parent = state.Layers[i-1].Branch
 		}
 		if layer.PullRequest != 0 {
-			pull, err := client.GetPull(ctx, layer.PullRequest)
+			pull, err := getLayerPull(ctx, client, *layer)
 			if err != nil {
 				return mapAPIError(err)
 			}
@@ -1030,21 +1156,37 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			title = "WIP: " + title
 		}
 		body, _ := a.repo.Run(nil, "log", "-1", "--format=%b", parent+".."+layer.Branch)
-		pull, err := client.CreatePull(ctx, api.CreatePullRequestOption{Head: layer.Branch, Base: parent, Title: title, Body: body})
+		pullClient := client
+		head := layer.Branch
+		if state.UpstreamRemote != "" && state.UpstreamRemote != state.Remote {
+			source, err := a.clientForRemote(state.Remote)
+			if err != nil {
+				return err
+			}
+			if source.BaseURL != client.BaseURL {
+				return fail(3, "invalid_chain", "the source and upstream must use the same Gitea server")
+			}
+			if i == 0 {
+				head = source.Owner + "/" + source.Repo + ":" + layer.Branch
+			} else {
+				pullClient = source
+			}
+		}
+		pull, err := pullClient.CreatePull(ctx, api.CreatePullRequestOption{Head: head, Base: parent, Title: title, Body: body})
 		if err != nil {
 			return mapAPIError(err)
 		}
 		layer.PullRequest = pull.Index
+		layer.RepositoryID = pullRepositoryID(pull)
+		if state.UpstreamRemote != "" {
+			layer.Repository = pullClient.Owner + "/" + pullClient.Repo
+		}
 		if err := a.store.Save(state); err != nil {
 			return err
 		}
 	}
 	if stackNumber == 0 {
-		pulls := make([]int64, 0, through)
-		for i := range through {
-			pulls = append(pulls, state.Layers[i].PullRequest)
-		}
-		server, err := client.CreateStack(ctx, state.Trunk, cmp.Or(state.Mode, api.StackModeRebase), pulls)
+		server, err := createStack(ctx, client, state.Trunk, cmp.Or(state.Mode, api.StackModeRebase), state.Layers[:through])
 		if err != nil {
 			return mapAPIError(err)
 		}
@@ -1059,7 +1201,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(missingPulls) != 0 {
-			server, err = client.AppendStack(ctx, stackNumber, server.Revision, missingPulls)
+			server, err = appendStack(ctx, client, stackNumber, server.Revision, state.Layers[len(server.Entries):through])
 			if err != nil {
 				return mapAPIError(err)
 			}
@@ -1095,7 +1237,7 @@ func validateSubmitStack(state *localstate.State, server *api.PullRequestStack) 
 	if len(server.Entries) > len(state.Layers) {
 		return drift("has %d entries but local stack has %d", len(server.Entries), len(state.Layers))
 	}
-	localPulls := make(map[int64]struct{}, len(state.Layers))
+	localPulls := make(map[api.PullRequestReference]struct{}, len(state.Layers))
 	missingSeen := false
 	for i, layer := range state.Layers {
 		if layer.PullRequest == 0 {
@@ -1105,12 +1247,12 @@ func validateSubmitStack(state *localstate.State, server *api.PullRequestStack) 
 		if missingSeen {
 			return drift("has local pull request #%d after an unsubmitted layer at position %d", layer.PullRequest, i+1)
 		}
-		if _, duplicate := localPulls[layer.PullRequest]; duplicate {
+		if _, duplicate := localPulls[layerReference(layer, serverRepositoryID(server))]; duplicate {
 			return drift("has duplicate local pull request #%d", layer.PullRequest)
 		}
-		localPulls[layer.PullRequest] = struct{}{}
+		localPulls[layerReference(layer, serverRepositoryID(server))] = struct{}{}
 	}
-	serverPulls := make(map[int64]struct{}, len(server.Entries))
+	serverPulls := make(map[api.PullRequestReference]struct{}, len(server.Entries))
 	for i, entry := range server.Entries {
 		if entry == nil || entry.PullRequest == nil || entry.Position != i+1 {
 			return drift("has malformed membership at position %d", i+1)
@@ -1119,15 +1261,15 @@ func validateSubmitStack(state *localstate.State, server *api.PullRequestStack) 
 		if pull <= 0 {
 			return drift("has malformed membership at position %d", i+1)
 		}
-		if _, duplicate := serverPulls[pull]; duplicate {
+		if _, duplicate := serverPulls[pullReference(entry.PullRequest, serverRepositoryID(server))]; duplicate {
 			return drift("contains duplicate pull request #%d", pull)
 		}
-		serverPulls[pull] = struct{}{}
+		serverPulls[pullReference(entry.PullRequest, serverRepositoryID(server))] = struct{}{}
 		localPull := state.Layers[i].PullRequest
 		if localPull == 0 {
 			return drift("has #%d at layer %d but local layer is unsubmitted", pull, i+1)
 		}
-		if localPull != pull {
+		if layerReference(state.Layers[i], serverRepositoryID(server)) != pullReference(entry.PullRequest, serverRepositoryID(server)) {
 			return drift("has #%d at layer %d but local layer is #%d", pull, i+1, localPull)
 		}
 	}
@@ -1153,7 +1295,9 @@ func missingSubmitPulls(state *localstate.State, through int, server *api.PullRe
 
 func (a *application) adopt(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("adopt", flag.ContinueOnError)
-	pullValue := flags.String("prs", "", "ordered pull request numbers")
+	pullValue := flags.String("prs", "", "ordered pull request numbers or repository#number references")
+	remoteFlag := flags.String("remote", "", "source and push git remote")
+	upstreamFlag := flags.String("upstream", "", "stack repository and trunk git remote")
 	trunk := flags.String("trunk", "", "trunk branch")
 	modeValue := flags.String("mode", "", "stack mode for a new server stack: rebase (default) or merge")
 	if err := flags.Parse(args); err != nil || *pullValue == "" || *trunk == "" {
@@ -1170,36 +1314,75 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	remote, err := a.selectedRemote(nil)
-	if err != nil {
-		return err
+	remote := *remoteFlag
+	if remote == "" {
+		remote, err = a.selectedRemote(nil)
+		if err != nil {
+			return err
+		}
 	}
-	temporary := &localstate.State{Remote: remote, Trunk: *trunk}
+	temporary := &localstate.State{Remote: remote, UpstreamRemote: *upstreamFlag, Trunk: *trunk}
 	client, err := a.client(temporary)
 	if err != nil {
 		return err
 	}
-	branches := []string{*trunk}
+	branches := []string{}
+	if trunkRemote(temporary) == remote {
+		branches = append(branches, *trunk)
+	}
 	apiPulls := make([]*api.PullRequest, 0, len(pulls))
 	parent := *trunk
+	parentRepository := client.Owner + "/" + client.Repo
 	existing := int64(-1)
-	for _, number := range pulls {
-		pull, err := client.GetPull(ctx, number)
+	for i, reference := range pulls {
+		number := reference.PullRequest
+		pull, err := getLayerPull(ctx, client, reference)
 		if err != nil {
 			return mapAPIError(err)
 		}
-		if pull.Base.Ref != parent || pull.Head == nil || pull.Head.Ref == "" {
+		baseRef := ""
+		baseRepository := ""
+		if pull.Base != nil {
+			baseRef = pull.Base.Ref
+			if pull.Base.Repository != nil {
+				baseRepository = pull.Base.Repository.FullName
+			}
+		}
+		if i == 0 && pull.Stack != nil && pull.Stack.Position > 1 && pull.Stack.Base != nil {
+			baseRef = pull.Stack.Base.Ref
+			if pull.Stack.Base.Repository != nil {
+				baseRepository = pull.Stack.Base.Repository.FullName
+			}
+		}
+		if baseRef != parent || pull.Head == nil || pull.Head.Ref == "" || baseRepository != "" && baseRepository != parentRepository {
 			return fail(3, "invalid_chain", "#%d does not target %s", number, parent)
 		}
 		stack := int64(0)
 		if pull.Stack != nil {
 			stack = pull.Stack.Number
+			if pull.Stack.Repository != nil && pull.Stack.Repository.FullName != client.Owner+"/"+client.Repo {
+				return fail(3, "invalid_chain", "select the stack's repository with --upstream")
+			}
 		}
 		if existing >= 0 && stack != existing {
-			return fail(3, "invalid_chain", "#%d is not in the same stack as #%d", number, pulls[0])
+			return fail(3, "invalid_chain", "#%d is not in the same stack as #%d", number, pulls[0].PullRequest)
 		}
 		existing = stack
 		apiPulls = append(apiPulls, pull)
+		pulls[i].RepositoryID = pullRepositoryID(pull)
+		if *upstreamFlag != "" || reference.Repository != "" {
+			pulls[i].Repository = cmp.Or(pullRepository(pull), reference.Repository, client.Owner+"/"+client.Repo)
+		}
+		if pull.Head.Repository != nil {
+			source, err := a.clientForRemote(remote)
+			if err != nil {
+				return err
+			}
+			if source.BaseURL != client.BaseURL || pull.Head.Repository.FullName != source.Owner+"/"+source.Repo {
+				return fail(3, "invalid_chain", "the selected source remote does not contain %s", pull.Head.Ref)
+			}
+			parentRepository = pull.Head.Repository.FullName
+		}
 		branches = append(branches, pull.Head.Ref)
 		parent = pull.Head.Ref
 	}
@@ -1221,12 +1404,17 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 	if err := a.repo.FetchContext(ctx, remote, branches); err != nil {
 		return mapGitContextError("fetch", err)
 	}
-	trunkSHA, err := a.repo.Head("refs/remotes/" + remote + "/" + *trunk)
+	if trunkRemote(temporary) != remote {
+		if err := a.repo.FetchContext(ctx, trunkRemote(temporary), []string{*trunk}); err != nil {
+			return mapGitContextError("fetch", err)
+		}
+	}
+	trunkSHA, err := a.repo.Head("refs/remotes/" + trunkRemote(temporary) + "/" + *trunk)
 	if err != nil {
 		return err
 	}
-	state := &localstate.State{Remote: remote, Trunk: *trunk, Mode: cmp.Or(mode, api.StackModeRebase), LastSyncedTrunkSHA: trunkSHA, Layers: landed}
-	for _, pull := range apiPulls {
+	state := &localstate.State{Remote: remote, UpstreamRemote: *upstreamFlag, Trunk: *trunk, Mode: cmp.Or(mode, api.StackModeRebase), LastSyncedTrunkSHA: trunkSHA, Layers: landed}
+	for i, pull := range apiPulls {
 		remoteHead, err := a.repo.Head("refs/remotes/" + remote + "/" + pull.Head.Ref)
 		if err != nil {
 			return err
@@ -1239,16 +1427,24 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 			localHead = remoteHead
 		}
 		parentSHA := pull.Base.Sha
+		if server != nil {
+			for _, entry := range server.Entries {
+				if entry.PullRequest != nil && pullReference(entry.PullRequest, serverRepositoryID(server)) == pullReference(pull, serverRepositoryID(server)) && entry.ParentSHA != "" {
+					parentSHA = entry.ParentSHA
+					break
+				}
+			}
+		}
 		if state.Mode == api.StackModeMerge && parentSHA != "" && a.repo.IsAncestor(parentSHA, localHead) != nil {
 			parentSHA, _ = a.repo.Run(nil, "merge-base", parentSHA, localHead) // a merge-mode layer may be behind; restack merges the parent in
 		}
 		if parentSHA == "" || a.repo.IsAncestor(parentSHA, localHead) != nil {
 			return fail(3, "boundary_invalid", "#%d has no verifiable saved parent boundary", pull.Index)
 		}
-		state.Layers = append(state.Layers, localstate.Layer{Branch: pull.Head.Ref, PullRequest: pull.Index, HeadSHA: localHead, RemoteSHA: remoteHead, ParentSHA: parentSHA})
+		state.Layers = append(state.Layers, localstate.Layer{Branch: pull.Head.Ref, PullRequest: pull.Index, RepositoryID: pulls[i].RepositoryID, Repository: pulls[i].Repository, HeadSHA: localHead, RemoteSHA: remoteHead, ParentSHA: parentSHA})
 	}
 	if server == nil {
-		if server, err = client.CreateStack(ctx, *trunk, state.Mode, pulls); err != nil {
+		if server, err = createStack(ctx, client, *trunk, state.Mode, state.Layers); err != nil {
 			return mapAPIError(err)
 		}
 	}
@@ -1264,15 +1460,15 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 }
 
 // boundLandedLayers checks that pulls are the open suffix of server and returns its landed prefix, keeping local positions equal to server positions.
-func boundLandedLayers(server *api.PullRequestStack, trunk string, pulls []int64) ([]localstate.Layer, error) {
+func boundLandedLayers(server *api.PullRequestStack, trunk string, pulls []localstate.Layer) ([]localstate.Layer, error) {
 	landed := make([]localstate.Layer, 0, len(server.Entries))
-	open := make([]int64, 0, len(server.Entries))
+	open := make([]api.PullRequestReference, 0, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry == nil || entry.PullRequest == nil {
 			return nil, fail(3, "stack_drift", "S%d has malformed membership", server.Number)
 		}
 		if entry.LandedSHA == "" {
-			open = append(open, entry.PullRequest.Index)
+			open = append(open, pullReference(entry.PullRequest, serverRepositoryID(server)))
 			continue
 		}
 		if len(open) != 0 {
@@ -1282,9 +1478,13 @@ func boundLandedLayers(server *api.PullRequestStack, trunk string, pulls []int64
 		if entry.PullRequest.Head != nil {
 			branch = entry.PullRequest.Head.Ref
 		}
-		landed = append(landed, localstate.Layer{Branch: branch, PullRequest: entry.PullRequest.Index, HeadSHA: entry.HeadSHA, ParentSHA: entry.ParentSHA, LandedSHA: entry.LandedSHA})
+		landed = append(landed, localstate.Layer{Branch: branch, PullRequest: entry.PullRequest.Index, RepositoryID: pullRepositoryID(entry.PullRequest), Repository: pullRepository(entry.PullRequest), HeadSHA: entry.HeadSHA, ParentSHA: entry.ParentSHA, LandedSHA: entry.LandedSHA})
 	}
-	if server.State != "open" || server.Trunk != trunk || !slices.Equal(open, pulls) {
+	references := make([]api.PullRequestReference, 0, len(pulls))
+	for _, pull := range pulls {
+		references = append(references, layerReference(pull, serverRepositoryID(server)))
+	}
+	if server.State != "open" || server.Trunk != trunk || !slices.Equal(open, references) {
 		return nil, fail(3, "stack_drift", "the pull requests belong to S%d; adopt must list its open layers %v in order on trunk %s", server.Number, open, server.Trunk)
 	}
 	return landed, nil
@@ -1313,22 +1513,32 @@ func (a *application) sync(ctx context.Context) error {
 	if err := checkServerMode(state, server); err != nil {
 		return err
 	}
-	landedPulls := make(map[int64]bool, len(server.Entries))
+	landedPulls := make(map[api.PullRequestReference]bool, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil && entry.LandedSHA != "" {
-			landedPulls[entry.PullRequest.Index] = true
+			landedPulls[pullReference(entry.PullRequest, serverRepositoryID(server))] = true
 		}
 	}
-	branches := []string{state.Trunk}
+	branches := []string{}
+	if trunkRemote(state) == state.Remote {
+		branches = append(branches, state.Trunk)
+	}
 	for _, layer := range state.Layers {
-		if layer.LandedSHA == "" && !landedPulls[layer.PullRequest] {
+		if layer.LandedSHA == "" && !landedPulls[layerReference(layer, serverRepositoryID(server))] {
 			branches = append(branches, layer.Branch)
 		}
 	}
-	if err := a.repo.FetchContext(ctx, state.Remote, branches); err != nil {
-		return mapGitContextError("fetch", err)
+	if len(branches) != 0 {
+		if err := a.repo.FetchContext(ctx, state.Remote, branches); err != nil {
+			return mapGitContextError("fetch", err)
+		}
 	}
-	trunkSHA, err := a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk)
+	if trunkRemote(state) != state.Remote {
+		if err := a.repo.FetchContext(ctx, trunkRemote(state), []string{state.Trunk}); err != nil {
+			return mapGitContextError("fetch", err)
+		}
+	}
+	trunkSHA, err := a.repo.Head("refs/remotes/" + trunkRemote(state) + "/" + state.Trunk)
 	if err != nil {
 		return err
 	}
@@ -1367,10 +1577,10 @@ type syncReport struct {
 
 func (a *application) updateSyncState(state *localstate.State, server *api.PullRequestStack, trunkSHA string) (*syncReport, error) {
 	report := &syncReport{NeedsRestack: make([]string, 0), NeedsReconciliation: make([]string, 0)}
-	entriesByPull := make(map[int64]*api.PullRequestStackEntry, len(server.Entries))
+	entriesByPull := make(map[api.PullRequestReference]*api.PullRequestStackEntry, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil {
-			entriesByPull[entry.PullRequest.Index] = entry
+			entriesByPull[pullReference(entry.PullRequest, serverRepositoryID(server))] = entry
 		}
 	}
 	merge := state.Mode == api.StackModeMerge
@@ -1378,7 +1588,7 @@ func (a *application) updateSyncState(state *localstate.State, server *api.PullR
 	openParent := trunkSHA
 	for i := range state.Layers {
 		layer := &state.Layers[i]
-		entry := entriesByPull[layer.PullRequest]
+		entry := entriesByPull[layerReference(*layer, serverRepositoryID(server))]
 		if entry != nil {
 			layer.LandedSHA = entry.LandedSHA
 			if merge && entry.LandedSHA != "" && entry.HeadSHA != "" {
@@ -1516,7 +1726,7 @@ func (a *application) restack(ctx context.Context, args []string) error {
 	}
 	newTrunk := *onto
 	if newTrunk == "" {
-		newTrunk, err = a.repo.Head("refs/remotes/" + state.Remote + "/" + state.Trunk)
+		newTrunk, err = a.repo.Head("refs/remotes/" + trunkRemote(state) + "/" + state.Trunk)
 		if err != nil {
 			return fail(3, "precondition", "fetch the trunk with sync before restacking: %v", err)
 		}
@@ -2018,7 +2228,7 @@ func (a *application) unstack(ctx context.Context, args []string) error {
 }
 
 func (a *application) capabilities(ctx context.Context) error {
-	client, err := a.client(nil)
+	client, err := a.queryClient()
 	if err != nil {
 		return err
 	}

@@ -8,13 +8,13 @@
 			<ul class="stack-layer-list flex-divided-list tw-mt-3">
 				{{range $_, $entry := $data.TopDownEntries}}
 					<li class="item stack-layer flex-left-right tw-items-start {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}>
-						<a class="flex-text-block tw-items-start tw-min-w-0" href="{{.Pull.Issue.Link}}">{{template "shared/issueicon" .Pull.Issue}}<span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
+						<a class="flex-text-block tw-items-start tw-min-w-0" href="{{.Pull.Issue.Link}}">{{template "shared/issueicon" .Pull.Issue}}<span class="tw-break-anywhere">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
 						<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span>
 					</li>
 				{{end}}
 			</ul>
 			<div class="flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="tw-break-anywhere">{{$data.Stack.TrunkBranch}}</span></div>
-			<a class="flex-text-inline tw-mt-3" href="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
+			<a class="flex-text-inline tw-mt-3" href="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
 		</details>
 		{{if $data.Operation}}{{template "repo/stack/status" $}}{{end}}
 	</div></div></div>

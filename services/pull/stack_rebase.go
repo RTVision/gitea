@@ -21,6 +21,9 @@ type stackLayerJournal struct {
 	EntryID           int64  `json:"entry_id"`
 	PullID            int64  `json:"pull_id"`
 	Position          int    `json:"position"`
+	HeadRepoID        int64  `json:"head_repo_id,omitempty"`
+	LandingRepoID     int64  `json:"landing_repo_id,omitempty"`
+	LandingBranch     string `json:"landing_branch,omitempty"`
 	HeadBranch        string `json:"head_branch"`
 	ExpectedHead      string `json:"expected_head"`
 	OldParent         string `json:"old_parent"`
@@ -85,11 +88,18 @@ func buildStackRebase(ctx context.Context, op *issues_model.StackOperation, laye
 	if err != nil {
 		return err
 	}
-	tmp, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, layers[0].ExpectedHead)
+	target, err := stackOperationTarget(ctx, op)
+	if err != nil {
+		return err
+	}
+	tmp, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, layers[0].ExpectedHead, target)
 	if err != nil {
 		return err
 	}
 	defer cancel()
+	if err := prepareStackObjects(ctx, tmp, layers); err != nil {
+		return err
+	}
 	// Every candidate must build successfully before any source branch is published.
 	for _, layer := range layers {
 		pr, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
@@ -125,12 +135,12 @@ func buildStackRebase(ctx context.Context, op *issues_model.StackOperation, laye
 		}
 		parent = layer.NewHead
 	}
-	return storeStackCandidates(ctx, op, layers, tmp, pr)
+	return storeStackCandidates(ctx, op, layers, tmp)
 }
 
-func storeStackCandidates(ctx context.Context, op *issues_model.StackOperation, layers []*stackLayerJournal, tmp *mergeContext, pr *issues_model.PullRequest) error {
+func storeStackCandidates(ctx context.Context, op *issues_model.StackOperation, layers []*stackLayerJournal, tmp *mergeContext) error {
 	for _, layer := range layers {
-		if err := gitcmd.NewCommand("fetch", "--no-tags", "--no-write-fetch-head").AddDashesAndList(tmp.tmpBasePath, "+"+layer.NewHead+":"+stackCandidateRef(op.ID, layer.EntryID)).WithRepo(pr.BaseRepo).Run(ctx); err != nil {
+		if err := gitcmd.NewCommand("fetch", "--no-tags", "--no-write-fetch-head").AddDashesAndList(tmp.tmpBasePath, "+"+layer.NewHead+":"+stackCandidateRef(op.ID, layer.EntryID)).WithRepo(tmp.target.Repo).Run(ctx); err != nil {
 			return err
 		}
 		layer.Phase = "rebuilt"
@@ -166,6 +176,16 @@ func publishStackLayer(ctx context.Context, op *issues_model.StackOperation, lay
 	merge := mode == issues_model.StackModeMerge
 	if !push || (!force && !merge) {
 		return ErrNoPermissionToMerge
+	}
+	target, err := stackOperationTarget(ctx, op)
+	if err != nil {
+		return err
+	}
+	if layer.HeadRepoID != 0 && layer.HeadRepoID != pr.HeadRepoID {
+		return issues_model.ErrStackRevision
+	}
+	if err := fetchStackObject(ctx, pr.HeadRepo, target.Repo, layer.NewHead, stackCandidateRef(op.ID, layer.EntryID)); err != nil {
+		return err
 	}
 	if merge {
 		if forward, err := stackAncestor(ctx, pr.HeadRepo, layer.ExpectedHead, layer.NewHead); err != nil {

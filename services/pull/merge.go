@@ -41,7 +41,7 @@ import (
 )
 
 // getMergeMessage composes the message used when merging a pull request.
-func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issues_model.PullRequest, mergeStyle repo_model.MergeStyle, extraVars map[string]string) (message, body string, err error) {
+func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issues_model.PullRequest, mergeStyle repo_model.MergeStyle, extraVars map[string]string, targets ...*Target) (message, body string, err error) {
 	if err := pr.LoadBaseRepo(ctx); err != nil {
 		return "", "", err
 	}
@@ -58,17 +58,28 @@ func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issue
 		return "", "", err
 	}
 
-	isExternalTracker := pr.BaseRepo.UnitEnabled(ctx, unit.TypeExternalTracker)
+	target := &Target{Repo: pr.BaseRepo, Branch: pr.BaseBranch}
+	if len(targets) > 0 && targets[0] != nil {
+		target = targets[0]
+	}
+	if target.Repo == nil || target.Branch == "" {
+		return "", "", issues_model.ErrInvalidStack
+	}
+	isExternalTracker := target.Repo.UnitEnabled(ctx, unit.TypeExternalTracker)
 	issueReference := "#"
 	if isExternalTracker {
 		issueReference = "!"
 	}
 
+	pullReference := fmt.Sprintf("%s%d", issueReference, pr.Index)
+	if target.Repo.ID != pr.BaseRepoID {
+		pullReference = httplib.MakeAbsoluteURL(ctx, pr.Issue.Link())
+	}
 	reviewedOn := "Reviewed-on: " + httplib.MakeAbsoluteURL(ctx, pr.Issue.Link())
 	reviewedBy := pr.GetApprovers(ctx)
 
 	if mergeStyle != "" {
-		commit, err := baseGitRepo.GetBranchCommit(ctx, pr.BaseRepo.DefaultBranch)
+		commit, err := baseGitRepo.GetBranchCommit(ctx, target.Repo.DefaultBranch)
 		if err != nil {
 			return "", "", err
 		}
@@ -78,9 +89,9 @@ func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issue
 		}
 		if templateContent != "" {
 			vars := map[string]string{
-				"BaseRepoOwnerName":      pr.BaseRepo.OwnerName,
-				"BaseRepoName":           pr.BaseRepo.Name,
-				"BaseBranch":             pr.BaseBranch,
+				"BaseRepoOwnerName":      target.Repo.OwnerName,
+				"BaseRepoName":           target.Repo.Name,
+				"BaseBranch":             target.Branch,
 				"HeadRepoOwnerName":      "",
 				"HeadRepoName":           "",
 				"HeadBranch":             pr.HeadBranch,
@@ -88,7 +99,7 @@ func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issue
 				"PullRequestDescription": pr.Issue.Content,
 				"PullRequestPosterName":  pr.Issue.Poster.Name,
 				"PullRequestIndex":       strconv.FormatInt(pr.Index, 10),
-				"PullRequestReference":   fmt.Sprintf("%s%d", issueReference, pr.Index),
+				"PullRequestReference":   pullReference,
 				"ReviewedOn":             reviewedOn,
 				"ReviewedBy":             reviewedBy,
 			}
@@ -109,7 +120,14 @@ func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issue
 						if err := ref.LoadIssue(ctx); err != nil {
 							return "", "", err
 						}
-						closeIssueIndexes = append(closeIssueIndexes, fmt.Sprintf("%s %s%d", closeWord, issueReference, ref.Issue.Index))
+						reference := fmt.Sprintf("%s%d", issueReference, ref.Issue.Index)
+						if ref.Issue.RepoID != target.Repo.ID {
+							if err := ref.Issue.LoadRepo(ctx); err != nil {
+								return "", "", err
+							}
+							reference = httplib.MakeAbsoluteURL(ctx, ref.Issue.Link())
+						}
+						closeIssueIndexes = append(closeIssueIndexes, closeWord+" "+reference)
 					}
 				}
 				if len(closeIssueIndexes) > 0 {
@@ -132,18 +150,18 @@ func getMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issue
 
 	// Squash merge has a different from other styles.
 	if mergeStyle == repo_model.MergeStyleSquash {
-		return fmt.Sprintf("%s (%s%d)", pr.Issue.Title, issueReference, pr.Issue.Index), body, nil
+		return fmt.Sprintf("%s (%s)", pr.Issue.Title, pullReference), body, nil
 	}
 
-	if pr.BaseRepoID == pr.HeadRepoID {
-		return fmt.Sprintf("Merge pull request '%s' (%s%d) from %s into %s", pr.Issue.Title, issueReference, pr.Issue.Index, pr.HeadBranch, pr.BaseBranch), body, nil
+	if target.Repo.ID == pr.HeadRepoID {
+		return fmt.Sprintf("Merge pull request '%s' (%s) from %s into %s", pr.Issue.Title, pullReference, pr.HeadBranch, target.Branch), body, nil
 	}
 
 	if pr.HeadRepo == nil {
-		return fmt.Sprintf("Merge pull request '%s' (%s%d) from <deleted>:%s into %s", pr.Issue.Title, issueReference, pr.Issue.Index, pr.HeadBranch, pr.BaseBranch), body, nil
+		return fmt.Sprintf("Merge pull request '%s' (%s) from <deleted>:%s into %s", pr.Issue.Title, pullReference, pr.HeadBranch, target.Branch), body, nil
 	}
 
-	return fmt.Sprintf("Merge pull request '%s' (%s%d) from %s:%s into %s", pr.Issue.Title, issueReference, pr.Issue.Index, pr.HeadRepo.FullName(), pr.HeadBranch, pr.BaseBranch), body, nil
+	return fmt.Sprintf("Merge pull request '%s' (%s) from %s:%s into %s", pr.Issue.Title, pullReference, pr.HeadRepo.FullName(), pr.HeadBranch, target.Branch), body, nil
 }
 
 // resolveMergeMessageTemplate returns the content of the merge message template for the given
@@ -175,8 +193,8 @@ func expandDefaultMergeMessage(template string, varsMap map[string]string) (mess
 }
 
 // GetDefaultMergeMessage returns default message used when merging pull request
-func GetDefaultMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issues_model.PullRequest, mergeStyle repo_model.MergeStyle) (message, body string, err error) {
-	return getMergeMessage(ctx, baseGitRepo, pr, mergeStyle, nil)
+func GetDefaultMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr *issues_model.PullRequest, mergeStyle repo_model.MergeStyle, targets ...*Target) (message, body string, err error) {
+	return getMergeMessage(ctx, baseGitRepo, pr, mergeStyle, nil, targets...)
 }
 
 func AddCommitMessageTailer(message, tailerKey, tailerValue string) string {
@@ -273,7 +291,18 @@ func mergeWithStackOperation(pr *issues_model.PullRequest, doer *user_model.User
 		return fmt.Errorf("unable to load head repo: %w", err)
 	}
 
-	prUnit, err := pr.BaseRepo.GetUnit(ctx, unit.TypePullRequests)
+	target := &Target{Repo: pr.BaseRepo, Branch: pr.BaseBranch}
+	if operationID != 0 {
+		op, err := issues_model.GetStackOperation(ctx, operationID)
+		if err != nil {
+			return err
+		}
+		target, err = stackOperationTarget(ctx, op)
+		if err != nil {
+			return err
+		}
+	}
+	prUnit, err := target.Repo.GetUnit(ctx, unit.TypePullRequests)
 	if err != nil {
 		log.Error("pr.BaseRepo.GetUnit(unit.TypePullRequests): %v", err)
 		return err
@@ -282,7 +311,7 @@ func mergeWithStackOperation(pr *issues_model.PullRequest, doer *user_model.User
 
 	// Check if merge style is correct and allowed
 	if !prConfig.IsMergeStyleAllowed(mergeStyle) {
-		return ErrInvalidMergeStyle{ID: pr.BaseRepo.ID, Style: mergeStyle}
+		return ErrInvalidMergeStyle{ID: target.Repo.ID, Style: mergeStyle}
 	}
 
 	err = globallock.LockAndDo(ctx, getPullWorkingLockKey(pr.ID), func(ctx context.Context) error {
@@ -302,15 +331,15 @@ func mergeWithStackOperation(pr *issues_model.PullRequest, doer *user_model.User
 			if err := checkStackMergeOrder(ctx, pr); err != nil {
 				return err
 			}
-			perm, err := access_model.GetDoerRepoPermission(ctx, pr.BaseRepo, doer)
+			perm, err := access_model.GetDoerRepoPermission(ctx, target.Repo, doer)
 			if err != nil {
 				return err
 			}
-			if err := CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeGeneral, mergeStyle, false); err != nil {
+			if err := CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeGeneral, mergeStyle, false, target); err != nil {
 				return err
 			}
 		}
-		_, err := doMergeAndPush(ctx, pr, doer, mergeStyle, expectedHeadCommitID, message, repo_module.PushTriggerPRMergeToBase)
+		_, err := doMergeAndPush(ctx, pr, doer, mergeStyle, expectedHeadCommitID, message, repo_module.PushTriggerPRMergeToBase, target)
 		return err
 	})
 	defer addTestPullRequestTaskAfterWebOperation(pr, doer) // keep the same behavior as old code: always call AddTestPullRequestTask
@@ -352,7 +381,11 @@ func handleMergePostProcess(ctx context.Context, prID int64, doer *user_model.Us
 	}
 
 	// Reset cached commit count
-	git.RemoveCommitsCountCache(pr.Issue.Repo, git.RefNameFromBranch(pr.BaseBranch))
+	targetRepo, targetBranch, err := pr.GetMergedTarget(ctx)
+	if err != nil {
+		return err
+	}
+	git.RemoveCommitsCountCache(targetRepo, git.RefNameFromBranch(targetBranch))
 	return handleCloseCrossReferences(ctx, pr, doer)
 }
 
@@ -388,9 +421,9 @@ func handleCloseCrossReferences(ctx context.Context, pr *issues_model.PullReques
 }
 
 // doMergeAndPush performs the merge operation without changing any pull information in database and pushes it up to the base repository
-func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, pushTrigger repo_module.PushTrigger) (string, error) { //nolint:unparam // non-error result is never used
+func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, pushTrigger repo_module.PushTrigger, targets ...*Target) (string, error) { //nolint:unparam // non-error result is never used
 	// Clone base repo.
-	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, expectedHeadCommitID)
+	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, expectedHeadCommitID, targets...)
 	if err != nil {
 		return "", err
 	}
@@ -415,7 +448,7 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 			return "", err
 		}
 	default:
-		return "", ErrInvalidMergeStyle{ID: pr.BaseRepo.ID, Style: mergeStyle}
+		return "", ErrInvalidMergeStyle{ID: mergeCtx.target.Repo.ID, Style: mergeStyle}
 	}
 
 	// OK we should cache our current head and origin/headbranch
@@ -425,7 +458,7 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 	}
 	mergeBaseSHA, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, "original_"+tmpRepoBaseBranch)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get full commit id for origin/%s: %w", pr.BaseBranch, err)
+		return "", fmt.Errorf("Failed to get full commit id for origin/%s: %w", mergeCtx.target.Branch, err)
 	}
 	mergeCommitID, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, tmpRepoBaseBranch)
 	if err != nil {
@@ -442,7 +475,7 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 	// I think in the interests of data safety - failures to push to the lfs should prevent
 	// the merge as you can always remerge.
 	if setting.LFS.StartServer {
-		if err := LFSPush(ctx, mergeCtx.tmpBasePath, mergeCtx.tmpRepo, mergeHeadSHA, mergeBaseSHA, pr); err != nil {
+		if err := LFSPush(ctx, mergeCtx.tmpBasePath, mergeCtx.tmpRepo, mergeHeadSHA, mergeBaseSHA, pr, mergeCtx.target); err != nil {
 			return "", err
 		}
 	}
@@ -463,16 +496,16 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 	mergeCtx.env = repo_module.FullPushingEnvironment(
 		headUser,
 		doer,
-		pr.BaseRepo,
-		pr.BaseRepo.Name,
+		mergeCtx.target.Repo,
+		mergeCtx.target.Repo.Name,
 		pr.ID,
 		pr.Index,
 	)
 
 	mergeCtx.env = append(mergeCtx.env, repo_module.EnvPushTrigger+"="+string(pushTrigger))
-	pushCmd := gitcmd.NewCommand("push", "origin").AddDynamicArguments(tmpRepoBaseBranch + ":" + git.BranchPrefix + pr.BaseBranch)
+	pushCmd := gitcmd.NewCommand("push", "origin").AddDynamicArguments(tmpRepoBaseBranch + ":" + git.BranchPrefix + mergeCtx.target.Branch)
 	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
-		pushCmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+pr.BaseBranch+":"+publication.layer.LandingBaseSHA)
+		pushCmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+mergeCtx.target.Branch+":"+publication.layer.LandingBaseSHA)
 	}
 
 	// Push back to upstream.
@@ -615,11 +648,21 @@ var escapedSymbols = regexp.MustCompile(`([*[?! \\])`)
 
 // IsUserAllowedToMerge check if user is allowed to merge PR with given permissions and branch protections
 func IsUserAllowedToMerge(ctx context.Context, pr *issues_model.PullRequest, p access_model.Permission, user *user_model.User) (bool, error) {
-	branch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+	repoID, branch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
 	if err != nil {
 		return false, err
 	}
-	return isUserAllowedToMergeInRepoBranch(ctx, pr.BaseRepoID, branch, p, user)
+	if repoID != pr.BaseRepoID {
+		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
+		if err != nil {
+			return false, err
+		}
+		p, err = access_model.GetDoerRepoPermission(ctx, repo, user)
+		if err != nil {
+			return false, err
+		}
+	}
+	return isUserAllowedToMergeInRepoBranch(ctx, repoID, branch, p, user)
 }
 
 func isUserAllowedToMergeInRepoBranch(ctx context.Context, repoID int64, branch string, p access_model.Permission, user *user_model.User) (bool, error) {
@@ -671,7 +714,11 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return util.ErrorWrap(ErrNotReadyToMerge, "There are official review requests")
 	}
 
-	if issues_model.MergeBlockedByOutdatedBranch(pb, pr) {
+	outdated, err := isPullBranchOutdated(ctx, pb, pr)
+	if err != nil {
+		return err
+	}
+	if outdated {
 		return util.ErrorWrap(ErrNotReadyToMerge, "The head branch is behind the base branch")
 	}
 
@@ -693,7 +740,7 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 			return err
 		}
 		defer closer.Close()
-		boundary, err := git.MergeBase(ctx, pr.BaseRepo, git.BranchPrefix+pr.BaseBranch, pr.GetGitHeadRefName())
+		boundary, err := issues_model.StackComparisonBase(ctx, pr)
 		if err != nil {
 			return err
 		}
@@ -728,7 +775,7 @@ func MergedManually(ctx context.Context, pr *issues_model.PullRequest, doer *use
 			return err
 		}
 		if stack != nil {
-			if stack.ActiveOperationID != 0 {
+			if stack.ActiveOperationID != 0 || stack.RepoID != pr.BaseRepoID {
 				return ErrPullRequestStacked
 			}
 			// The row write serializes marking a merge with operation reservation.
@@ -843,7 +890,7 @@ func SetMerged(ctx context.Context, pr *issues_model.PullRequest, mergedCommitID
 		// We need to save all of the data used to compute this merge as it may have already been changed by checkPullRequestBranchMergeable. FIXME: need to set some state to prevent checkPullRequestBranchMergeable from running whilst we are merging.
 		if cnt, err := db.GetEngine(ctx).Where("id = ?", pr.ID).
 			And("has_merged = ?", false).
-			Cols("has_merged, status, merge_base, merged_commit_id, merged_base_commit_id, merger_id, merged_unix, conflicted_files").
+			Cols("has_merged, status, merge_base, merged_commit_id, merged_base_commit_id, merged_repo_id, merged_branch, merger_id, merged_unix, conflicted_files").
 			Update(pr); err != nil {
 			return false, fmt.Errorf("failed to update pr[%d]: %w", pr.ID, err)
 		} else if cnt != 1 {

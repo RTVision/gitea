@@ -60,9 +60,9 @@ func (err ErrSHADoesNotMatch) Error() string {
 	return fmt.Sprintf("sha does not match [given: %s, expected: %s]", err.GivenSHA, err.CurrentSHA)
 }
 
-func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, expectedHeadCommitID string) (mergeCtx *mergeContext, cancel context.CancelFunc, err error) {
+func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, expectedHeadCommitID string, targets ...*Target) (mergeCtx *mergeContext, cancel context.CancelFunc, err error) {
 	// Clone base repo.
-	prCtx, cancel, err := createTemporaryRepoForPR(ctx, pr)
+	prCtx, cancel, err := createTemporaryRepoForPR(ctx, pr, targets...)
 	if err != nil {
 		log.Error("createTemporaryRepoForPR: %v", err)
 		return nil, cancel, err
@@ -110,13 +110,13 @@ func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullReque
 	defer gitRepo.Close()
 
 	// Determine if we should sign, using the temp repo's own refs (see SignMerge for why)
-	sign, key, signer, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, git.BranchPrefix+tmpRepoBaseBranch, git.BranchPrefix+tmpRepoTrackingBranch)
+	sign, key, signer, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, git.BranchPrefix+tmpRepoBaseBranch, git.BranchPrefix+tmpRepoTrackingBranch, mergeCtx.target.Repo)
 	if err != nil && !asymkey_service.IsErrWontSign(err) {
 		log.Error("%-v SignMerge: %v", mergeCtx.pr, err) // the merge proceeds unsigned regardless, so log it here
 	}
 	if sign {
 		mergeCtx.signKey = key
-		if pr.BaseRepo.GetTrustModel() == repo_model.CommitterTrustModel || pr.BaseRepo.GetTrustModel() == repo_model.CollaboratorCommitterTrustModel {
+		if mergeCtx.target.Repo.GetTrustModel() == repo_model.CommitterTrustModel || mergeCtx.target.Repo.GetTrustModel() == repo_model.CollaboratorCommitterTrustModel {
 			mergeCtx.committer = signer
 		}
 	}

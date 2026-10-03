@@ -5,17 +5,18 @@
 		{{template "base/alert" .}}
 		<h1>{{ctx.Locale.Tr "repo.pulls.new_stack"}}</h1>
 		<form class="ui form" method="post" action="{{.RepoLink}}/pulls/stacks/new" data-global-init="initRepoStackNew">
+			<input type="hidden" name="global_ids" value="true">
 			<div class="field">
 				<label for="stack-top">{{ctx.Locale.Tr "repo.pulls.stack_top"}}</label>
 				<div class="flex-text-block">
 					<div class="ui search selection dropdown ellipsis-text-items tw-flex-1 tw-min-w-0">
-						<input type="hidden" name="pull" value="{{if .TopPull}}{{.TopPull.Index}}{{end}}">
+						<input type="hidden" name="pull" value="{{if .TopPull}}{{.TopPull.ID}}{{end}}">
 						<input id="stack-top" type="text" class="search" autocomplete="off">
-						<div class="{{if not .TopPull}}default {{end}}text">{{with .TopPull}}<span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span>{{else}}{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}{{end}}</div>
+						<div class="{{if not .TopPull}}default {{end}}text">{{with .TopPull}}<span class="gt-ellipsis">{{if ne .BaseRepoID $.Repository.ID}}{{.Issue.Repo.FullName}}{{end}}#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span>{{else}}{{ctx.Locale.Tr "repo.pulls.stack_top_none"}}{{end}}</div>
 						{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 						<div class="menu">
 							{{range .Candidates}}
-								<div class="item tw-flex tw-flex-col" data-value="{{.Index}}"><span class="gt-ellipsis">#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></div>
+								<div class="item tw-flex tw-flex-col" data-value="{{.ID}}"><span class="gt-ellipsis">{{if ne .BaseRepoID $.Repository.ID}}{{.Issue.Repo.FullName}}{{end}}#{{.Index}} {{.Issue.Title}}</span> <span class="gt-ellipsis tw-text-12 tw-text-text-light">{{.HeadBranch}} → {{.BaseBranch}}</span></div>
 							{{end}}
 						</div>
 					</div>
@@ -31,8 +32,8 @@
 						{{range $i, $layer := .Layers}}
 							<div class="ui segment stack-new-layer" data-base="{{.Pull.BaseBranch}}"{{if or .Behind .HasMerges}} data-rebase-blocked{{end}}{{if .Invalid}} data-invalid{{end}}>
 								<div class="ui radio checkbox tw-max-w-full{{if lt $i $.Start}} tw-opacity-50{{end}}">
-									<input type="radio" name="start" value="{{.Pull.Index}}"{{if eq $i $.Start}} checked{{end}}>
-									<label><span class="tw-break-anywhere">#{{.Pull.Index}} {{.Pull.Issue.Title}}</span><span class="tw-block tw-text-12 tw-text-text-light tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</span></label>
+									<input type="radio" name="start" value="{{.Pull.ID}}"{{if eq $i $.Start}} checked{{end}}{{if ne .Pull.BaseRepoID $.Repository.ID}} disabled{{end}}>
+									<label><span class="tw-break-anywhere">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span><span class="tw-block tw-text-12 tw-text-text-light tw-break-anywhere">{{.Pull.HeadBranch}} → {{.Pull.BaseBranch}}</span></label>
 								</div>
 								{{if or .Invalid .Behind .HasMerges}}
 									<div class="flex-text-block tw-flex-wrap tw-mt-2">

@@ -117,11 +117,12 @@
 				{{end}}
 				<span class="comment-text-line">
 					{{template "repo/issue/view_content/comments_authorlink" dict "comment" .}}
-					{{$link := printf "%s/commit/%s" $.Repository.Link ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
+					{{$commit := HTMLFormat "<b>%s</b>" (ShortSha $.Issue.PullRequest.MergedCommitID)}}
+					{{if $.MergedCommitLink}}{{$commit = HTMLFormat `<a class="ui sha" href="%s"><b>%s</b></a>` $.MergedCommitLink (ShortSha $.Issue.PullRequest.MergedCommitID)}}{{end}}
 					{{if eq $.Issue.PullRequest.Status 3}}
-						{{ctx.Locale.Tr "repo.issues.comment_manually_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
+						{{ctx.Locale.Tr "repo.issues.comment_manually_pull_merged_at" $commit (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
 					{{else}}
-						{{ctx.Locale.Tr "repo.issues.comment_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
+						{{ctx.Locale.Tr "repo.issues.comment_pull_merged_at" $commit (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
 					{{end}}
 				</span>
 			</div>

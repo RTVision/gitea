@@ -12,8 +12,10 @@ import (
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
+	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/structs"
+	"gitea.dev/services/contexttest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,4 +138,34 @@ func TestStackOperationEmptyJournalJSON(t *testing.T) {
 	_, err := json.Marshal(converted)
 	require.NoError(t, err)
 	assert.Nil(t, converted.Journal)
+}
+
+func TestPullRequestStackPublicOnlyToken(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+	ctx, _ := contexttest.MockAPIContext(t, "user2/repo1/pulls/3")
+	contexttest.LoadUser(t, ctx, 1)
+	contexttest.LoadRepo(t, ctx, 1)
+	ctx.PublicOnly = true
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	stack := &issues_model.PullRequestStack{RepoID: 10, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx,
+		&issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1},
+		&issues_model.StackEntry{StackID: stack.ID, PullRequestID: 3, Position: 2, ParentPullRequestID: pr.ID},
+		&issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)},
+	))
+	for _, ownerID := range []int64{13, 12} {
+		_, err := db.GetEngine(ctx).ID(ownerID).Cols("visibility").Update(&user_model.User{Visibility: structs.VisibleTypeLimited})
+		require.NoError(t, err)
+		converted := ToAPIPullRequest(ctx, pr, ctx.Doer)
+		require.NotNil(t, converted)
+		assert.Nil(t, converted.Stack, "hidden member and trunk repositories must not appear through another PR")
+		trusted := ToAPIPullRequestForNotification(ctx, pr)
+		require.NotNil(t, trusted.Stack)
+		_, err = db.GetEngine(ctx).ID(ownerID).Cols("visibility").Update(&user_model.User{Visibility: structs.VisibleTypePublic})
+		require.NoError(t, err)
+	}
+	ctx.PublicOnly = false
+	converted := ToAPIPullRequest(ctx, pr, ctx.Doer)
+	require.NotNil(t, converted.Stack)
 }

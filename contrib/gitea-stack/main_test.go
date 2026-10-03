@@ -6,12 +6,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"gitea.dev/contrib/gitea-stack/internal/gitx"
@@ -769,4 +771,112 @@ func TestMergeModeFlagsAndAdopt(t *testing.T) {
 	state, err = store.Load()
 	require.NoError(t, err)
 	assert.Equal(t, trunk, state.Layers[0].ParentSHA, "a layer behind its parent is bound at the merge base")
+}
+
+type stackRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f stackRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+func TestForkStackWorkflow(t *testing.T) {
+	work, forkPath, trunk, lower, upper := newMergeStackRepo(t)
+	upstreamPath := filepath.Join(filepath.Dir(filepath.Dir(forkPath)), "main", "repo.git")
+	runGit(t, work, "init", "--bare", upstreamPath)
+	runGit(t, work, "remote", "add", "upstream", "file://localhost"+filepath.ToSlash(upstreamPath))
+	runGit(t, work, "push", "upstream", "main")
+	mainRepo := &api.Repository{ID: 10, FullName: "main/repo"}
+	forkRepo := &api.Repository{ID: 20, FullName: "owner/repo"}
+	bottom := &api.PullRequest{Index: 1, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk, Repository: mainRepo}, Head: &api.PRBranchInfo{Ref: "layer-1", Sha: lower, Repository: forkRepo}}
+	top := &api.PullRequest{Index: 1, Base: &api.PRBranchInfo{Ref: "layer-1", Sha: lower, Repository: forkRepo}, Head: &api.PRBranchInfo{Ref: "layer-2", Sha: upper, Repository: forkRepo}}
+	stack := &api.PullRequestStack{Number: 5, Trunk: "main", Repository: mainRepo, State: "open", Mode: api.StackModeRebase, Revision: 1, Entries: []*api.PullRequestStackEntry{
+		{Position: 1, PullRequest: bottom, HeadSHA: lower, ParentSHA: trunk},
+		{Position: 2, PullRequest: top, HeadSHA: upper, ParentSHA: lower},
+	}}
+	createdPulls := 0
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	http.DefaultTransport = stackRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		var result any
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/v1/repos/main/repo/stacks/capabilities":
+			result = &api.PullRequestStackCapabilities{Enabled: true}
+		case "POST /api/v1/repos/main/repo/pulls", "POST /api/v1/repos/owner/repo/pulls":
+			var option api.CreatePullRequestOption
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&option))
+			createdPulls++
+			if r.URL.Path == "/api/v1/repos/main/repo/pulls" {
+				assert.Equal(t, "owner/repo:layer-1", option.Head)
+				assert.Equal(t, "main", option.Base)
+				result = bottom
+			} else {
+				assert.Equal(t, "layer-2", option.Head)
+				assert.Equal(t, "layer-1", option.Base)
+				result = top
+			}
+		case "GET /api/v1/repos/main/repo/pulls/1":
+			result = bottom
+		case "GET /api/v1/repos/owner/repo/pulls/1":
+			result = top
+		case "POST /api/v1/repos/main/repo/stacks":
+			var option api.CreatePullRequestStackOption
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&option))
+			assert.Equal(t, []api.PullRequestReference{{RepositoryID: 10, PullRequest: 1}, {RepositoryID: 20, PullRequest: 1}}, option.PullRequestRefs)
+			assert.Empty(t, option.PullRequests)
+			result = stack
+		case "GET /api/v1/repos/main/repo/stacks/5":
+			result = stack
+		case "GET /api/v1/repos/main/repo/stacks":
+			result = []*api.PullRequestStack{stack}
+		case "POST /api/v1/repos/main/repo/stacks/5/sync":
+			var option api.SynchronizePullRequestStackOption
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&option))
+			assert.Equal(t, []api.PullRequestStackHead{{RepositoryID: 10, PullRequest: 1, HeadSHA: lower, ParentSHA: trunk}, {RepositoryID: 20, PullRequest: 1, HeadSHA: upper, ParentSHA: lower}}, option.Heads)
+			result = stack
+		default:
+			t.Fatalf("unexpected API request %s %s", r.Method, r.URL.Path)
+		}
+		body, err := json.Marshal(result)
+		require.NoError(t, err)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+	})
+	t.Setenv("GITEA_URL", "https://stack.example.test")
+	t.Setenv("GITEA_TOKEN", "test-token")
+	app, store := mergeModeApp(t, work, &localstate.State{})
+	require.NoError(t, app.init([]string{"--remote", "origin", "--upstream", "upstream", "--trunk", "main", "layer-1", "layer-2"}))
+	require.NoError(t, app.submit(t.Context(), nil))
+	require.NoError(t, app.list(t.Context()))
+	require.NoError(t, app.capabilities(t.Context()))
+	state, err := store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "origin", state.Remote)
+	assert.Equal(t, "upstream", state.UpstreamRemote)
+	assert.Equal(t, "main/repo", state.Layers[0].Repository)
+	assert.Equal(t, "owner/repo", state.Layers[1].Repository)
+	_, err = layerIndex(state, "#1")
+	requireCommandError(t, err, 2, "usage")
+	index, err := layerIndex(state, "owner/repo#1")
+	require.NoError(t, err)
+	assert.Equal(t, 1, index)
+	require.NoError(t, app.submit(t.Context(), nil))
+	assert.Equal(t, 2, createdPulls)
+	require.NoError(t, app.push(t.Context(), nil))
+	mainHead := gitLine(t, work, "commit-tree", lower+"^{tree}", "-p", trunk, "-m", "landed bottom")
+	runGit(t, work, "push", "upstream", mainHead+":refs/heads/main")
+	stack.Entries[0].LandedSHA = mainHead
+	top.Stack = &api.PullRequestStackRef{Number: 5, Size: 2, Position: 2, Mode: api.StackModeRebase, Repository: mainRepo, Base: &api.PullRequestStackBase{Ref: "main", Sha: mainHead, Repository: mainRepo}}
+	require.NoError(t, app.sync(t.Context()))
+	state, err = store.Load()
+	require.NoError(t, err)
+	assert.Equal(t, mainHead, state.LastSyncedTrunkSHA)
+	assert.Equal(t, mainHead, state.Layers[0].LandedSHA)
+	assert.Empty(t, state.Layers[1].LandedSHA)
+	assert.Equal(t, trunk, gitLine(t, work, "rev-parse", "refs/remotes/origin/main"))
+	require.NoError(t, app.adopt(t.Context(), []string{"--remote", "origin", "--upstream", "upstream", "--trunk", "main", "--prs", "owner/repo#1"}))
+	state, err = store.Load()
+	require.NoError(t, err)
+	require.Len(t, state.Layers, 2)
+	assert.Equal(t, int64(10), state.Layers[0].RepositoryID)
+	assert.Equal(t, int64(20), state.Layers[1].RepositoryID)
+	assert.Equal(t, lower, state.Layers[1].ParentSHA)
 }

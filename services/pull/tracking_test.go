@@ -9,6 +9,9 @@ import (
 	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
+	access_model "gitea.dev/models/perm/access"
+	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/commitstatus"
@@ -69,20 +72,26 @@ func TestTrackingStackPolicyAndSupersededReviews(t *testing.T) {
 	ctx := t.Context()
 	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
 	other := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1})
-	pb := &git_model.ProtectedBranch{RepoID: pr.BaseRepoID, RuleName: "release", RequiredApprovals: 1, BlockOnRejectedReviews: true}
+	pb := &git_model.ProtectedBranch{RepoID: pr.BaseRepoID + 1, RuleName: "release", RequiredApprovals: 1, BlockOnRejectedReviews: true}
 	require.NoError(t, db.Insert(ctx, pb))
-	stack := &issues_model.PullRequestStack{RepoID: pr.BaseRepoID, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
+	stack := &issues_model.PullRequestStack{RepoID: pb.RepoID, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
 	require.NoError(t, db.Insert(ctx, stack))
 	require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}))
 	require.NotEqual(t, stack.TrunkBranch, pr.BaseBranch)
 	_, err := db.GetEngine(ctx).Where("issue_id = ?", pr.IssueID).Delete(new(issues_model.Review))
 	require.NoError(t, err)
+	sha := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	require.NoError(t, db.Insert(ctx, &git_model.CommitStatus{RepoID: pr.BaseRepoID, SHA: sha, Context: "ci", State: commitstatus.CommitStatusSuccess}))
+	require.NoError(t, db.Insert(ctx, &git_model.CommitStatus{RepoID: stack.RepoID, SHA: sha, Context: "ci", State: commitstatus.CommitStatusFailure}))
 	prs := issues_model.PullRequestList{pr, other}
-	summaries, err := GetPullRequestTrackingSummaries(ctx, prs, nil)
+	summaries, err := GetPullRequestTrackingSummaries(ctx, prs, map[int64]string{pr.ID: sha})
 	require.NoError(t, err)
 	require.NotNil(t, summaries[pr.ID].ReviewDecision)
 	assert.Equal(t, api.PullRequestReviewRequired, *summaries[pr.ID].ReviewDecision)
 	assert.Nil(t, summaries[other.ID].ReviewDecision)
+	require.NotNil(t, summaries[pr.ID].ChecksState)
+	assert.Equal(t, api.PullRequestChecksFailing, *summaries[pr.ID].ChecksState)
+	assert.Equal(t, int64(1), pr.BaseRepoID)
 	require.NoError(t, pr.LoadIssue(ctx))
 	require.NoError(t, pr.Issue.LoadRepo(ctx))
 	reviewer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
@@ -100,4 +109,20 @@ func TestTrackingStackPolicyAndSupersededReviews(t *testing.T) {
 		assert.Equal(t, reviewType == issues_model.ReviewTypeReject, issues_model.MergeBlockedByRejectedReview(ctx, pb, pr))
 		assert.Equal(t, reviewType == issues_model.ReviewTypeApprove, issues_model.HasEnoughApprovals(ctx, pb, pr))
 	}
+	_, err = db.GetEngine(ctx).ID(stack.ID).Cols("repo_id", "trunk_branch").Update(&issues_model.PullRequestStack{RepoID: 4, TrunkBranch: "master"})
+	require.NoError(t, err)
+	source := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: pr.BaseRepoID})
+	sourcePermission, err := access_model.GetDoerRepoPermission(ctx, source, reviewer)
+	require.NoError(t, err)
+	require.True(t, sourcePermission.CanWrite(unit.TypeCode))
+	allowed, err := IsUserAllowedToMerge(ctx, pr, sourcePermission, reviewer)
+	require.NoError(t, err)
+	assert.False(t, allowed, "writing the fork cannot authorize landing into the destination")
+	maintainer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	sourcePermission, err = access_model.GetDoerRepoPermission(ctx, source, maintainer)
+	require.NoError(t, err)
+	require.False(t, sourcePermission.CanWrite(unit.TypeCode))
+	allowed, err = IsUserAllowedToMerge(ctx, pr, sourcePermission, maintainer)
+	require.NoError(t, err)
+	assert.True(t, allowed, "destination permission authorizes landing without fork write access")
 }

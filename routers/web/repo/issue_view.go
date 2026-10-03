@@ -393,17 +393,11 @@ func ViewIssue(ctx *context.Context) {
 		if ctx.Written() {
 			return
 		}
-		stackable := !issue.IsClosed && issue.PullRequest.HeadRepoID == ctx.Repo.Repository.ID && issue.PullRequest.Flow == issues_model.PullRequestFlowGithub
-		canCreateStack := stackable && setting.Repository.PullRequest.EnableStacks && canManagePullStack(ctx) && ctx.Data["PullStackData"] == nil
-		ctx.Data["CanCreateStack"] = canCreateStack
-		if canCreateStack {
-			baseLayer, err := issues_model.GetOpenStackLayerByBranch(ctx, ctx.Repo.Repository.ID, issue.PullRequest.BaseBranch)
-			if err != nil {
-				ctx.ServerError("GetOpenStackLayerByBranch", err)
+		stackable := !issue.IsClosed && issue.PullRequest.HeadRepoID != 0 && issue.PullRequest.Flow == issues_model.PullRequestFlowGithub
+		if stackable {
+			if err := preparePullStackCreation(ctx, issue.PullRequest); err != nil {
+				ctx.ServerError("preparePullStackCreation", err)
 				return
-			}
-			if baseLayer != nil && baseLayer.IsTop {
-				ctx.Data["AppendStackID"] = baseLayer.StackID
 			}
 		}
 	}
@@ -960,6 +954,14 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 	data.ShowMergeBox = !pull.HasMerged || data.IsPullBranchDeletable
 
 	isRepoAdmin := ctx.Repo.Permission.IsAdmin()
+	if pb := prInfo.ProtectedBranchRule; pb != nil && pb.RepoID != ctx.Repo.Repository.ID {
+		permission, err := access_model.GetDoerRepoPermission(ctx, pb.Repo, ctx.Doer)
+		if err != nil {
+			ctx.ServerError("GetDoerRepoPermission", err)
+			return
+		}
+		isRepoAdmin = permission.IsAdmin()
+	}
 
 	// admin can merge without checks, writer can merge when checks succeed
 	// admin and writer both can make an auto merge schedule (not affected by overridable blockers)
@@ -1030,18 +1032,22 @@ func (prInfo *pullRequestViewInfo) preparePullUpdateActions(ctx *context.Context
 }
 
 func (prInfo *pullRequestViewInfo) prepareMergeBoxProtectionChecks(ctx *context.Context) {
-	policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, prInfo.issue.PullRequest)
+	policyRepoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, prInfo.issue.PullRequest)
 	if err != nil {
-		ctx.ServerError("ResolvePullRequestPolicyBranch", err)
+		ctx.ServerError("ResolvePullRequestPolicyTarget", err)
 		return
 	}
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, ctx.Repo.Repository.ID, policyBranch)
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, policyRepoID, policyBranch)
 	if err != nil {
 		ctx.ServerError("GetFirstMatchProtectedBranchRule", err)
 		return
 	}
 	if pb != nil {
-		pb.Repo = prInfo.issue.PullRequest.BaseRepo
+		pb.Repo, err = repo_model.GetRepositoryByID(ctx, policyRepoID)
+		if err != nil {
+			ctx.ServerError("GetRepositoryByID", err)
+			return
+		}
 		prInfo.ProtectedBranchRule = pb
 	}
 

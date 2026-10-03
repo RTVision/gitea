@@ -31,6 +31,12 @@ func TestViewPullRequestFromRun(t *testing.T) {
 		assert.Equal(t, &ViewPullRequest{Index: "#42", Link: "/owner/repo/pulls/42"}, viewPullRequestFromRun(t.Context(), run, payload))
 	})
 
+	t.Run("fork stack pull request event", func(t *testing.T) {
+		run := &actions_model.ActionRun{Repo: repo, Ref: "refs/stack-pulls/123/head"}
+		payload := &api.PullRequestPayload{Index: 7, PullRequest: &api.PullRequest{HTMLURL: "https://gitea.example/fork/repo/pulls/7"}}
+		assert.Equal(t, &ViewPullRequest{Index: "#7", Link: payload.PullRequest.HTMLURL}, viewPullRequestFromRun(t.Context(), run, payload))
+	})
+
 	t.Run("nil repo", func(t *testing.T) {
 		run := &actions_model.ActionRun{Ref: "refs/pull/1/head"}
 		assert.Nil(t, viewPullRequestFromRun(t.Context(), run, nil))

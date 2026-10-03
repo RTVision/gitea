@@ -1,7 +1,7 @@
 {{$data := .PullStackData}}
 {{$op := $data.Operation}}
 {{$active := and $op (or (eq $op.State "queued") (eq $op.State "running") (eq $op.State "waiting") (eq $op.State "cancelling"))}}
-<div aria-live="polite" {{if $active}}data-stack-status-url="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/status" data-reloading-interval="3000"{{else}}data-status-final="true"{{end}}>
+<div aria-live="polite" {{if $active}}data-stack-status-url="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/status" data-reloading-interval="3000"{{else}}data-status-final="true"{{end}}>
 	{{if $op}}
 		{{if eq $op.State "completed"}}
 			<div class="ui positive message">{{if eq $op.Kind "update"}}{{ctx.Locale.Tr "repo.pulls.stack_updated"}}{{else if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebased"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_landed" $op.Completed}}{{end}}</div>
@@ -11,11 +11,11 @@
 			<div class="ui warning message">
 				<strong>{{if eq $op.Kind "update"}}{{ctx.Locale.Tr "repo.pulls.stack_update_blocked"}}{{else if eq $op.Kind "rebase"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_blocked"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_land_blocked" $op.Completed}}{{end}}</strong>
 				<p>{{$op.LastError}}</p>
-				{{if $.CanManageStack}}
-					<form class="tw-inline" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
+				{{if $.CanOperateStack}}
+					<form class="tw-inline" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
 					</form>
-					<form class="tw-inline" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/retry">
+					<form class="tw-inline" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/retry">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry"}}</button>
 					</form>
 				{{end}}
@@ -37,12 +37,12 @@
 					{{ctx.Locale.Tr "repo.pulls.stack_landing" $op.Completed}}
 				{{end}}
 				{{if $op.LastError}}<p>{{$op.LastError}}</p>{{end}}
-				{{if and $.CanManageStack (ne $op.State "cancelling")}}
-					<form class="tw-float-right" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
+				{{if and $.CanOperateStack (ne $op.State "cancelling")}}
+					<form class="tw-float-right" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
 					</form>
-				{{else if and $.CanManageStack (eq $op.State "cancelling") $op.LastError}}
-					<form class="tw-float-right" method="post" action="{{$.RepoLink}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
+				{{else if and $.CanOperateStack (eq $op.State "cancelling") $op.LastError}}
+					<form class="tw-float-right" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry_cancel"}}</button>
 					</form>
 				{{end}}
@@ -50,4 +50,4 @@
 		{{end}}
 	{{end}}
 </div>
-{{if $active}}<noscript><meta http-equiv="refresh" content="5"></noscript>{{end}}
+{{if $active}}<noscript><a class="ui button" href="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a></noscript>{{end}}

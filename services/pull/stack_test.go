@@ -82,6 +82,22 @@ func TestStackLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "release", branch)
 	assert.Equal(t, "branch2", upper.BaseBranch)
+	t.Run("trunk ancestry policy", func(t *testing.T) {
+		lower := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+		lower.CommitsBehind = 10
+		policy := &git_model.ProtectedBranch{BlockOnOutdatedBranch: true}
+		outdated, err := isPullBranchOutdated(ctx, policy, lower)
+		require.NoError(t, err)
+		assert.False(t, outdated, "parent divergence does not determine trunk ancestry")
+		trunk := run("rev-parse", "release")
+		bare := gitrepo.RepoLocalPath(repo)
+		defer run("--git-dir="+bare, "update-ref", "refs/heads/release", trunk)
+		run("--git-dir="+bare, "update-ref", "refs/heads/release", run("rev-parse", "pr-to-update"))
+		lower.CommitsBehind = 0
+		outdated, err = isPullBranchOutdated(ctx, policy, lower)
+		require.NoError(t, err)
+		assert.True(t, outdated, "a layer must include the actual trunk head")
+	})
 	run("checkout", "branch2")
 	run("commit", "--amend", "--allow-empty", "-m", "first revised")
 	newParent := run("rev-parse", "HEAD")
@@ -316,4 +332,14 @@ func TestSuggestStackChain(t *testing.T) {
 			assert.Equal(t, tc.start, start)
 		})
 	}
+}
+
+func TestSuggestForkStackTrunkIdentity(t *testing.T) {
+	bottom := &issues_model.PullRequest{ID: 10, Index: 1, BaseRepoID: 1, BaseBranch: "main", HeadRepoID: 2, HeadBranch: "a"}
+	middle := &issues_model.PullRequest{ID: 20, Index: 1, BaseRepoID: 2, BaseBranch: "a", HeadRepoID: 2, HeadBranch: "main"}
+	top := &issues_model.PullRequest{ID: 30, Index: 2, BaseRepoID: 2, BaseBranch: "main", HeadRepoID: 2, HeadBranch: "c"}
+	unrelated := &issues_model.PullRequest{ID: 40, Index: 3, BaseRepoID: 1, BaseBranch: "release", HeadRepoID: 1, HeadBranch: "main"}
+	chain, start := SuggestStackChainByID([]*issues_model.PullRequest{unrelated, top, middle, bottom}, top.ID, "main", 1)
+	assert.Equal(t, []*issues_model.PullRequest{bottom, middle, top}, chain)
+	assert.Zero(t, start)
 }

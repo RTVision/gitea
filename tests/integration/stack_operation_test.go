@@ -28,6 +28,7 @@ import (
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
 	pull_service "gitea.dev/services/pull"
+	repo_service "gitea.dev/services/repository"
 	commitstatus_service "gitea.dev/services/repository/commitstatus"
 
 	"github.com/stretchr/testify/assert"
@@ -57,20 +58,23 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 			onGiteaRun(t, func(t *testing.T, _ *url.URL) {
 				defer test.MockVariableValue(&setting.Repository.PullRequest.EnableStacks, true)()
 				session := loginUser(t, "user2")
-				testCreateBranch(t, session, "user2", "repo1", "branch/master", "release", http.StatusSeeOther)
-				testEditFileToNewBranch(t, session, "user2", "repo1", "release", "stack-lower", "README.md", "lower layer\n")
-				testEditFileToNewBranch(t, session, "user2", "repo1", "stack-lower", "stack-upper", "README.md", "lower layer\nupper layer\n")
-				testPullCreate(t, session, "user2", "repo1", true, "release", "stack-lower", "stack lower")
-				testPullCreate(t, session, "user2", "repo1", true, "stack-lower", "stack-upper", "stack upper")
-				require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
-				repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 				actor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+				repo, err := repo_service.CreateRepository(t.Context(), actor, actor, repo_service.CreateRepoOptions{
+					Name: "ordered-stack-" + string(style), DefaultBranch: "master", AutoInit: true, Readme: "Default",
+				})
+				require.NoError(t, err)
+				testCreateBranch(t, session, "user2", repo.Name, "branch/master", "release", http.StatusSeeOther)
+				testEditFileToNewBranch(t, session, "user2", repo.Name, "release", "stack-lower", "README.md", "lower layer\n")
+				testEditFileToNewBranch(t, session, "user2", repo.Name, "stack-lower", "stack-upper", "README.md", "lower layer\nupper layer\n")
+				testPullCreate(t, session, "user2", repo.Name, true, "release", "stack-lower", "stack lower")
+				testPullCreate(t, session, "user2", repo.Name, true, "stack-lower", "stack-upper", "stack upper")
+				require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
 				lower := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: repo.ID, HeadBranch: "stack-lower"})
 				upper := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: repo.ID, HeadBranch: "stack-upper"})
 				stack, err := pull_service.CreateStack(t.Context(), actor, repo, pull_service.CreateStackOptions{TrunkBranch: "release", PullRequestIDs: []int64{lower.ID, upper.ID}})
 				require.NoError(t, err)
 				token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
-				req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/user2/repo1/pulls/%d/merge", lower.Index), map[string]any{"do": string(style), "merge_when_checks_succeed": true, "merge_message_field": "preserve this message", "delete_branch_after_merge": true}).AddTokenAuth(token)
+				req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/pulls/%d/merge", repo.FullName(), lower.Index), map[string]any{"do": string(style), "merge_when_checks_succeed": true, "merge_message_field": "preserve this message", "delete_branch_after_merge": true}).AddTokenAuth(token)
 				response := MakeRequest(t, req, http.StatusUnprocessableEntity)
 				assert.Contains(t, response.Body.String(), "Use Land on the stack page")
 				operations, err := issues_model.GetStackOperations(t.Context(), stack.ID)

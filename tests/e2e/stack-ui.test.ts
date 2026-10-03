@@ -1,6 +1,6 @@
 import {env} from 'node:process';
 import {expect, test, type Locator} from '@playwright/test';
-import {apiCreateFiles, apiCreatePR, apiCreateRepo, login, randomString} from './utils.ts';
+import {apiCreateFiles, apiCreatePR, apiCreateRepo, apiHeaders, login, randomString} from './utils.ts';
 
 const owner = env.GITEA_TEST_E2E_USER;
 
@@ -32,6 +32,9 @@ test('stack pages create and render a pull request chain', async ({page, request
     return {one, two, three, unsafe};
   })();
   const [{two, three, unsafe}] = await Promise.all([createStack, login(page)]);
+  const thirdResponse = await request.get(`/api/v1/repos/${owner}/${repo}/pulls/${three}`, {headers: apiHeaders()});
+  expect(thirdResponse.ok()).toBe(true);
+  const thirdID = (await thirdResponse.json()).id;
   const stackURL = `/${owner}/${repo}/pulls/stacks`;
   await page.goto(`/${owner}/${repo}/pulls/${two}`);
   await page.screenshot({path: testInfo.outputPath('pull-before-stack.png'), fullPage: true});
@@ -43,7 +46,7 @@ test('stack pages create and render a pull request chain', async ({page, request
   await page.getByLabel('Last pull request in the chain').pressSequentially('three');
   await expect(page.getByRole('option', {name: /Layer two/})).toBeHidden();
   await page.getByRole('option', {name: /Layer three/}).click();
-  await expect(page).toHaveURL(new RegExp(`pull=${three}`));
+  await expect(page).toHaveURL((url) => url.searchParams.get('pull') === String(thirdID) && url.searchParams.get('global_ids') === 'true');
   await expect(page.getByRole('radio', {name: /Layer one/})).toBeChecked();
   await expect(page.getByText('Lands into main')).toBeVisible();
   await expect(page.getByText('Behind main')).toBeVisible();

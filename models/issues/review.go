@@ -15,6 +15,7 @@ import (
 	"gitea.dev/models/organization"
 	"gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
+	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/structs"
@@ -279,21 +280,21 @@ func IsOfficialReviewer(ctx context.Context, issue *Issue, reviewer *user_model.
 	}
 
 	pr := issue.PullRequest
-	branch, err := ResolvePullRequestPolicyBranch(ctx, pr)
+	repoID, branch, err := ResolvePullRequestPolicyTarget(ctx, pr)
 	if err != nil {
 		return false, err
 	}
-	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pr.BaseRepoID, branch)
+	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repoID, branch)
 	if err != nil {
 		return false, err
 	}
 	if rule == nil {
 		// if no rule is found, then user with write access can make official reviews
-		err := pr.LoadBaseRepo(ctx)
+		repo, err := repo_model.GetRepositoryByID(ctx, repoID)
 		if err != nil {
 			return false, err
 		}
-		writeAccess, err := access_model.HasAccessUnit(ctx, reviewer, pr.BaseRepo, unit.TypeCode, perm.AccessModeWrite)
+		writeAccess, err := access_model.HasAccessUnit(ctx, reviewer, repo, unit.TypeCode, perm.AccessModeWrite)
 		if err != nil {
 			return false, err
 		}
@@ -313,11 +314,11 @@ func IsOfficialReviewerTeam(ctx context.Context, issue *Issue, team *organizatio
 	if err := issue.LoadPullRequest(ctx); err != nil {
 		return false, err
 	}
-	branch, err := ResolvePullRequestPolicyBranch(ctx, issue.PullRequest)
+	repoID, branch, err := ResolvePullRequestPolicyTarget(ctx, issue.PullRequest)
 	if err != nil {
 		return false, err
 	}
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, issue.PullRequest.BaseRepoID, branch)
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repoID, branch)
 	if err != nil {
 		return false, err
 	}
@@ -326,14 +327,16 @@ func IsOfficialReviewerTeam(ctx context.Context, issue *Issue, team *organizatio
 	}
 
 	if !pb.EnableApprovalsWhitelist {
+		if repoID != issue.PullRequest.BaseRepoID && !organization.HasTeamRepo(ctx, team.OrgID, team.ID, repoID) {
+			return false, nil
+		}
 		return team.UnitAccessMode(ctx, unit.TypeCode) >= perm.AccessModeWrite, nil
 	}
 
 	return slices.Contains(pb.ApprovalsWhitelistTeamIDs, team.ID), nil
 }
 
-// RecalculateReviewsOfficial re-evaluates the "official" flag of the latest approve
-// and reject reviews of an issue against its pull request's current base branch.
+// RecalculateReviewsOfficial re-evaluates official reviews against the current policy target.
 // It must be called whenever the target branch changes, otherwise an approval that
 // was official on the previous (possibly unprotected) branch would keep satisfying
 // the new branch's protection rules.
@@ -345,32 +348,46 @@ func RecalculateReviewsOfficial(ctx context.Context, issue *Issue) error {
 	// Clearing and restoring the official flags must happen atomically, otherwise a
 	// failure in between would leave the reviews without any official flag set.
 	return db.WithTx(ctx, func(ctx context.Context) error {
-		// Only the latest approve/reject review of each reviewer counts as official, so
-		// clear the flag on all of them first and restore it only where it still applies.
 		if _, err := db.GetEngine(ctx).
 			Where("issue_id = ?", issue.ID).
-			In("type", ReviewTypeApprove, ReviewTypeReject).
+			In("type", ReviewTypeApprove, ReviewTypeReject, ReviewTypeRequest).
 			Cols("official").
 			Update(&Review{Official: false}); err != nil {
 			return err
 		}
 
-		reviews, err := FindLatestReviews(ctx, FindReviewOptions{
-			Types:   []ReviewType{ReviewTypeApprove, ReviewTypeReject},
+		reviews, err := FindReviews(ctx, FindReviewOptions{
+			Types:   []ReviewType{ReviewTypeApprove, ReviewTypeReject, ReviewTypeRequest},
 			IssueID: issue.ID,
 		})
 		if err != nil {
 			return err
 		}
 
+		latest := make(map[[2]int64]*Review)
 		for _, review := range reviews {
-			if err := review.LoadReviewer(ctx); err != nil {
-				return err
+			key := [2]int64{review.ReviewerID, review.ReviewerTeamID}
+			if previous := latest[key]; previous == nil || previous.ID < review.ID {
+				latest[key] = review
 			}
-			if review.Reviewer == nil {
-				continue
+		}
+		for _, review := range latest {
+			var official bool
+			var err error
+			if review.ReviewerTeamID != 0 {
+				if err := review.LoadReviewerTeam(ctx); err != nil {
+					return err
+				}
+				official, err = IsOfficialReviewerTeam(ctx, issue, review.ReviewerTeam)
+			} else {
+				if err := review.LoadReviewer(ctx); err != nil {
+					return err
+				}
+				if review.Reviewer == nil {
+					continue
+				}
+				official, err = IsOfficialReviewer(ctx, issue, review.Reviewer)
 			}
-			official, err := IsOfficialReviewer(ctx, issue, review.Reviewer)
 			if err != nil {
 				return err
 			}

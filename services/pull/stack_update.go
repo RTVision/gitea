@@ -83,11 +83,18 @@ func buildStackUpdate(ctx context.Context, op *issues_model.StackOperation, laye
 	if err != nil {
 		return err
 	}
-	tmp, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, layers[0].ExpectedHead)
+	target, err := stackOperationTarget(ctx, op)
+	if err != nil {
+		return err
+	}
+	tmp, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, layers[0].ExpectedHead, target)
 	if err != nil {
 		return err
 	}
 	defer cancel()
+	if err := prepareStackObjects(ctx, tmp, layers); err != nil {
+		return err
+	}
 	parentBranch := trunkBranch
 	var merges []string
 	for i, layer := range layers {
@@ -151,5 +158,5 @@ func buildStackUpdate(ctx context.Context, op *issues_model.StackOperation, laye
 		layer.NewParent, layer.NewHead = parent, head
 		parent, parentBranch = head, pr.HeadBranch
 	}
-	return storeStackCandidates(ctx, op, layers, tmp, pr)
+	return storeStackCandidates(ctx, op, layers, tmp)
 }

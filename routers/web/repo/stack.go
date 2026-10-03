@@ -15,6 +15,8 @@ import (
 
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	perm_model "gitea.dev/models/perm"
+	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/log"
@@ -39,11 +41,13 @@ type pullStackEntryData struct {
 }
 
 type pullStackHeaderData struct {
+	Repo    *repo_model.Repository
 	Stack   *issues_model.PullRequestStack
 	Entries []*pullStackEntryData
 }
 
 type pullStackData struct {
+	Repo          *repo_model.Repository
 	Stack         *issues_model.PullRequestStack
 	Entries       []*pullStackEntryData
 	Operation     *issues_model.StackOperation
@@ -59,8 +63,99 @@ func (data *pullStackData) TopDownEntries() iter.Seq2[int, *pullStackEntryData] 
 	return slices.Backward(data.Entries)
 }
 
-func canManagePullStack(ctx *context.Context) bool {
-	return ctx.Repo.Repository.CanContentChange() && ctx.Repo.Permission.CanWrite(unit.TypeCode)
+func canOpenPullStackForm(ctx *context.Context) bool {
+	return ctx.IsSigned && ctx.Repo.Repository.CanContentChange() && ctx.Repo.Permission.CanRead(unit.TypeCode) && ctx.Repo.Permission.CanRead(unit.TypePullRequests)
+}
+
+func setPullStackCapabilities(ctx *context.Context, data *pullStackData) error {
+	canManage, err := pull_service.CanManageStack(ctx, ctx.Doer, data.Stack)
+	if err != nil {
+		return err
+	}
+	canLand := false
+	if data.Repo.CanContentChange() {
+		canLand, err = pull_service.CanOperateStack(ctx, ctx.Doer, data.Stack, "land")
+		if err != nil {
+			return err
+		}
+	}
+	canOperate := canManage
+	if data.Operation != nil && data.Operation.Kind == "land" {
+		canOperate = canLand
+	}
+	ctx.Data["CanManageStack"] = canManage
+	ctx.Data["CanLandStack"] = canLand
+	ctx.Data["CanOperateStack"] = canOperate
+	return nil
+}
+
+func preparePullStackCreation(ctx *context.Context, pr *issues_model.PullRequest) error {
+	ctx.Data["CanCreateStack"] = false
+	if !ctx.IsSigned || !setting.Repository.PullRequest.EnableStacks || ctx.Data["PullStackData"] != nil {
+		return nil
+	}
+	repo := ctx.Repo.Repository
+	baseLayer, err := issues_model.GetOpenStackLayerByBranch(ctx, pr.BaseRepoID, pr.BaseBranch)
+	if err != nil {
+		return err
+	}
+	if repo.IsFork && pr.HeadRepoID == repo.ID {
+		upstream, err := readableStackRepository(ctx, repo.ForkID)
+		if err != nil && !errors.Is(err, issues_model.ErrStackNotExist) {
+			return err
+		}
+		if upstream != nil {
+			if baseLayer != nil {
+				parentStack, err := issues_model.GetStackByID(ctx, baseLayer.StackID)
+				if err != nil {
+					return err
+				}
+				if parentStack.RepoID == upstream.ID {
+					repo = upstream
+				}
+			} else {
+				candidates, err := issues_model.FindStackCandidatePulls(ctx, upstream.ID)
+				if err != nil {
+					return err
+				}
+				candidates, err = readableStackCandidates(ctx, candidates)
+				if err != nil {
+					return err
+				}
+				chain, _ := pull_service.SuggestStackChainByID(candidates, pr.ID, upstream.DefaultBranch, upstream.ID)
+				if len(chain) > 0 && chain[0].BaseRepoID == upstream.ID {
+					repo = upstream
+				}
+			}
+		}
+	}
+	allowed, err := pull_service.CanCreateStack(ctx, ctx.Doer, repo, []int64{pr.ID})
+	if err != nil || !allowed {
+		return err
+	}
+	ctx.Data["CanCreateStack"] = true
+	ctx.Data["CreateStackURL"] = fmt.Sprintf("%s/pulls/stacks/new?pull=%d&global_ids=true", repo.Link(), pr.ID)
+	if baseLayer == nil || !baseLayer.IsTop {
+		return nil
+	}
+	stack, err := issues_model.GetStackByID(ctx, baseLayer.StackID)
+	if err != nil {
+		return err
+	}
+	allowed, err = pull_service.CanManageStack(ctx, ctx.Doer, stack, pr.ID)
+	if err != nil || !allowed {
+		return err
+	}
+	repo, err = readableStackRepository(ctx, stack.RepoID)
+	if errors.Is(err, issues_model.ErrStackNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	ctx.Data["AppendStackID"] = stack.ID
+	ctx.Data["AppendStackRepoLink"] = repo.Link()
+	return nil
 }
 
 func stackEntryReadiness(ctx *context.Context, pr *issues_model.PullRequest) string {
@@ -82,6 +177,54 @@ func stackEntryReadiness(ctx *context.Context, pr *issues_model.PullRequest) str
 	return ""
 }
 
+func readableStackRepository(ctx *context.Context, repoID int64) (*repo_model.Repository, error) {
+	repo, err := repo_model.GetRepositoryByID(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := access_model.HasAccessUnit(ctx, ctx.Doer, repo, unit.TypePullRequests, perm_model.AccessModeRead)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, issues_model.ErrStackNotExist
+	}
+	return repo, nil
+}
+
+func readableStackCandidates(ctx *context.Context, candidates issues_model.PullRequestList) (issues_model.PullRequestList, error) {
+	visible := make(issues_model.PullRequestList, 0, len(candidates))
+	for _, pr := range candidates {
+		repo, err := readableStackRepository(ctx, pr.BaseRepoID)
+		if errors.Is(err, issues_model.ErrStackNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := pr.LoadIssue(ctx); err != nil {
+			return nil, err
+		}
+		pr.Issue.Repo, pr.BaseRepo = repo, repo
+		visible = append(visible, pr)
+	}
+	return visible, nil
+}
+
+func creatableStackCandidates(ctx *context.Context, candidates issues_model.PullRequestList) (issues_model.PullRequestList, error) {
+	visible := make(issues_model.PullRequestList, 0, len(candidates))
+	for _, pr := range candidates {
+		allowed, err := pull_service.CanCreateStack(ctx, ctx.Doer, ctx.Repo.Repository, []int64{pr.ID})
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			visible = append(visible, pr)
+		}
+	}
+	return visible, nil
+}
+
 func loadPullStackEntries(ctx *context.Context, stackID int64) ([]*pullStackEntryData, error) {
 	entries, err := issues_model.GetStackEntries(ctx, stackID)
 	if err != nil {
@@ -96,9 +239,11 @@ func loadPullStackEntries(ctx *context.Context, stackID int64) ([]*pullStackEntr
 		if err := pr.LoadIssue(ctx); err != nil {
 			return nil, err
 		}
-		if err := pr.Issue.LoadRepo(ctx); err != nil {
+		repo, err := readableStackRepository(ctx, pr.BaseRepoID)
+		if err != nil {
 			return nil, err
 		}
+		pr.Issue.Repo, pr.BaseRepo = repo, repo
 		data = append(data, &pullStackEntryData{Entry: entry, Pull: pr})
 	}
 	return data, nil
@@ -113,17 +258,20 @@ func loadPullStackData(ctx *context.Context, stack *issues_model.PullRequestStac
 }
 
 func completePullStackData(ctx *context.Context, stack *issues_model.PullRequestStack, entries []*pullStackEntryData) (*pullStackData, error) {
-	data := &pullStackData{Stack: stack, Entries: entries}
+	repo, err := readableStackRepository(ctx, stack.RepoID)
+	if err != nil {
+		return nil, err
+	}
+	data := &pullStackData{Repo: repo, Stack: stack, Entries: entries}
 	for _, entry := range entries {
 		entry.Readiness = stackEntryReadiness(ctx, entry.Pull)
 	}
-	prConfig := ctx.Repo.Repository.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
+	prConfig := repo.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
 	for _, style := range pull_service.StackLandingStyles(stack.Mode) {
 		if prConfig.IsMergeStyleAllowed(style) {
 			data.LandingStyles = append(data.LandingStyles, style)
 		}
 	}
-	var err error
 	data.Operations, err = issues_model.GetStackOperations(ctx, stack.ID)
 	if err != nil {
 		return nil, err
@@ -150,11 +298,22 @@ func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
 		return
 	}
 	entries, err := loadPullStackEntries(ctx, stack.ID)
+	if errors.Is(err, issues_model.ErrStackNotExist) {
+		return
+	}
 	if err != nil {
 		ctx.ServerError("loadPullStackEntries", err)
 		return
 	}
-	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Stack: stack, Entries: entries}
+	repo, err := readableStackRepository(ctx, stack.RepoID)
+	if errors.Is(err, issues_model.ErrStackNotExist) {
+		return
+	}
+	if err != nil {
+		ctx.ServerError("readableStackRepository", err)
+		return
+	}
+	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Repo: repo, Stack: stack, Entries: entries}
 }
 
 func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
@@ -168,6 +327,10 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 		return
 	}
 	ctx.Data["PullStackData"] = data
+	if err := setPullStackCapabilities(ctx, data); err != nil {
+		ctx.ServerError("setPullStackCapabilities", err)
+		return
+	}
 	if mergeData, ok := ctx.Data["PullMergeBoxData"].(*pullMergeBoxData); ok && !issue.PullRequest.HasMerged && !issue.IsClosed {
 		mergeData.MergeFormProps = nil
 		mergeData.ShowUpdatePullInfo = mergeData.ShowUpdatePullInfo && pull_service.CheckStackUpdateByMerge(ctx, issue.PullRequest) == nil
@@ -196,8 +359,11 @@ func PullStacks(ctx *context.Context) {
 	data := make([]*pullStackData, 0, len(stacks))
 	for _, stack := range stacks {
 		stackData, err := loadPullStackData(ctx, stack)
+		if errors.Is(err, issues_model.ErrStackNotExist) {
+			continue
+		}
 		if err != nil {
-			ctx.ServerError("loadPullStackData", err)
+			ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
 			return
 		}
 		data = append(data, stackData)
@@ -205,7 +371,7 @@ func PullStacks(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.stacks")
 	ctx.Data["Stacks"] = data
 	ctx.Data["Page"] = context.NewPagerBuilder(ctx).TotalCount(count).PerPageLimit(setting.UI.IssuePagingNum).CurPage(page).Build()
-	ctx.Data["CanCreateStack"] = setting.Repository.PullRequest.EnableStacks && canManagePullStack(ctx)
+	ctx.Data["CanCreateStack"] = setting.Repository.PullRequest.EnableStacks && canOpenPullStackForm(ctx)
 	ctx.HTML(http.StatusOK, tplPullStacks)
 }
 
@@ -229,19 +395,41 @@ func PullStack(ctx *context.Context) {
 	}
 	data, err := loadPullStackData(ctx, stack)
 	if err != nil {
-		ctx.ServerError("loadPullStackData", err)
+		ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
 		return
 	}
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.stack_number", stack.ID)
 	ctx.Data["PullStackData"] = data
-	canManage := canManagePullStack(ctx)
-	ctx.Data["CanManageStack"] = canManage
+	if err := setPullStackCapabilities(ctx, data); err != nil {
+		ctx.ServerError("setPullStackCapabilities", err)
+		return
+	}
+	canManage, _ := ctx.Data["CanManageStack"].(bool)
 	if canManage && setting.Repository.PullRequest.EnableStacks && stack.State == issues_model.StackStateOpen && stack.ActiveOperationID == 0 {
 		candidates, err := pull_service.StackInsertCandidates(ctx, stack, 50)
 		if err != nil {
 			ctx.ServerError("StackInsertCandidates", err)
 			return
 		}
+		visible := candidates[:0]
+		for _, candidate := range candidates {
+			prs, err := readableStackCandidates(ctx, issues_model.PullRequestList{candidate.Pull})
+			if err != nil {
+				ctx.ServerError("readableStackCandidates", err)
+				return
+			}
+			if len(prs) > 0 {
+				allowed, err := pull_service.CanManageStack(ctx, ctx.Doer, stack, candidate.Pull.ID)
+				if err != nil {
+					ctx.ServerError("CanManageStack", err)
+					return
+				}
+				if allowed {
+					visible = append(visible, candidate)
+				}
+			}
+		}
+		candidates = visible
 		ctx.Data["CanInsertStack"] = true
 		ctx.Data["InsertCandidates"] = candidates
 	}
@@ -286,13 +474,29 @@ func stackErrorMessage(err error) string {
 
 // suggestPullStack honors the form's start layer, reporting false when it isn't in the chain.
 func suggestPullStack(ctx *context.Context, candidates issues_model.PullRequestList) ([]*issues_model.PullRequest, int, bool) {
-	chain, start := pull_service.SuggestStackChain(candidates, ctx.FormInt64("pull"), ctx.Repo.Repository.DefaultBranch)
+	top := ctx.FormInt64("pull")
+	if !ctx.FormBool("global_ids") {
+		index := top
+		top = 0
+		for _, pr := range candidates {
+			if pr.BaseRepoID == ctx.Repo.Repository.ID && pr.Index == index {
+				top = pr.ID
+				break
+			}
+		}
+	}
+	chain, start := pull_service.SuggestStackChainByID(candidates, top, ctx.Repo.Repository.DefaultBranch, ctx.Repo.Repository.ID)
+	if start > 0 && chain[start].BaseRepoID != ctx.Repo.Repository.ID {
+		start = 0
+	}
 	wanted := ctx.FormInt64("start")
 	if wanted == 0 {
 		return chain, start, true
 	}
-	i := slices.IndexFunc(chain, func(pr *issues_model.PullRequest) bool { return pr.Index == wanted })
-	if i < 0 {
+	i := slices.IndexFunc(chain, func(pr *issues_model.PullRequest) bool {
+		return (ctx.FormBool("global_ids") && pr.ID == wanted) || (!ctx.FormBool("global_ids") && pr.BaseRepoID == ctx.Repo.Repository.ID && pr.Index == wanted)
+	})
+	if i < 0 || chain[i].BaseRepoID != ctx.Repo.Repository.ID {
 		return chain, start, false
 	}
 	return chain, i, true
@@ -332,13 +536,23 @@ func pullStackLayerError(ctx *context.Context, err error) string {
 }
 
 func PullStackNew(ctx *context.Context) {
-	if !setting.Repository.PullRequest.EnableStacks || !canManagePullStack(ctx) {
+	if !setting.Repository.PullRequest.EnableStacks || !canOpenPullStackForm(ctx) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
 	candidates, err := issues_model.FindStackCandidatePulls(ctx, ctx.Repo.Repository.ID)
 	if err != nil {
 		ctx.ServerError("FindStackCandidatePulls", err)
+		return
+	}
+	candidates, err = readableStackCandidates(ctx, candidates)
+	if err != nil {
+		ctx.ServerError("readableStackCandidates", err)
+		return
+	}
+	candidates, err = creatableStackCandidates(ctx, candidates)
+	if err != nil {
+		ctx.ServerError("creatableStackCandidates", err)
 		return
 	}
 	chain, start, _ := suggestPullStack(ctx, candidates)
@@ -366,7 +580,9 @@ func PullStackNew(ctx *context.Context) {
 		mode = issues_model.StackModeMerge
 	}
 	top := ctx.FormInt64("pull")
-	if i := slices.IndexFunc(candidates, func(pr *issues_model.PullRequest) bool { return pr.Index == top }); i >= 0 {
+	if i := slices.IndexFunc(candidates, func(pr *issues_model.PullRequest) bool {
+		return (ctx.FormBool("global_ids") && pr.ID == top) || (!ctx.FormBool("global_ids") && pr.BaseRepoID == ctx.Repo.Repository.ID && pr.Index == top)
+	}); i >= 0 {
 		ctx.Data["TopPull"] = candidates[i]
 	}
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.new_stack")
@@ -380,13 +596,18 @@ func PullStackNew(ctx *context.Context) {
 }
 
 func PullStackNewPost(ctx *context.Context) {
-	if !setting.Repository.PullRequest.EnableStacks || !canManagePullStack(ctx) {
+	if !setting.Repository.PullRequest.EnableStacks || !canOpenPullStackForm(ctx) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
 	candidates, err := issues_model.FindStackCandidatePulls(ctx, ctx.Repo.Repository.ID)
 	if err != nil {
 		ctx.ServerError("FindStackCandidatePulls", err)
+		return
+	}
+	candidates, err = readableStackCandidates(ctx, candidates)
+	if err != nil {
+		ctx.ServerError("readableStackCandidates", err)
 		return
 	}
 	chain, start, ok := suggestPullStack(ctx, candidates)
@@ -404,6 +625,15 @@ func PullStackNewPost(ctx *context.Context) {
 	for _, pr := range chain[start:] {
 		ids = append(ids, pr.ID)
 	}
+	allowed, err := pull_service.CanCreateStack(ctx, ctx.Doer, ctx.Repo.Repository, ids)
+	if err != nil {
+		ctx.ServerError("CanCreateStack", err)
+		return
+	}
+	if !allowed {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
 	// The trunk follows from the start layer, so the form can't post an inconsistent one.
 	_, err = pull_service.CreateStack(ctx, ctx.Doer, ctx.Repo.Repository, pull_service.CreateStackOptions{TrunkBranch: chain[start].BaseBranch, Mode: ctx.FormTrim("mode"), PullRequestIDs: ids})
 	if err != nil {
@@ -417,6 +647,9 @@ func PullStackNewPost(ctx *context.Context) {
 
 func redirectPullStackNew(ctx *context.Context) {
 	query := url.Values{"pull": {ctx.FormString("pull")}, "start": {ctx.FormString("start")}, "mode": {ctx.FormString("mode")}}
+	if ctx.FormBool("global_ids") {
+		query.Set("global_ids", "true")
+	}
 	ctx.Redirect(ctx.Repo.RepoLink + "/pulls/stacks/new?" + query.Encode())
 }
 
@@ -425,13 +658,34 @@ func PullStackAction(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
-	if !canManagePullStack(ctx) {
+	if !ctx.Repo.Repository.CanContentChange() {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
 	revision := ctx.FormInt64("stack_version")
 	action := ctx.PathParam("action")
-	var err error
+	kind := action
+	if action == "retry" || action == "cancel" {
+		op, err := issues_model.GetStackOperation(ctx, ctx.FormInt64("operation"))
+		if err != nil {
+			ctx.NotFoundOrServerError("GetStackOperation", db.IsErrNotExist, err)
+			return
+		}
+		if op.StackID != stack.ID {
+			ctx.NotFound(nil)
+			return
+		}
+		kind = op.Kind
+	}
+	allowed, err := pull_service.CanOperateStack(ctx, ctx.Doer, stack, kind)
+	if err != nil {
+		ctx.ServerError("CanOperateStack", err)
+		return
+	}
+	if !allowed {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
 	switch action {
 	case "append":
 		if !setting.Repository.PullRequest.EnableStacks {
@@ -449,7 +703,14 @@ func PullStackAction(ctx *context.Context) {
 			return
 		}
 		var pr *issues_model.PullRequest
-		pr, err = issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, ctx.FormInt64("pull"))
+		if ctx.FormBool("global_ids") {
+			pr, err = issues_model.GetPullRequestByID(ctx, ctx.FormInt64("pull"))
+		} else {
+			pr, err = issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, ctx.FormInt64("pull"))
+		}
+		if err == nil {
+			_, err = readableStackRepository(ctx, pr.BaseRepoID)
+		}
 		if err == nil {
 			_, err = pull_service.InsertStackLayer(ctx, ctx.Doer, stack.ID, revision, pr.ID)
 		}
@@ -492,10 +753,13 @@ func PullStackStatus(ctx *context.Context) {
 	}
 	data, err := loadPullStackData(ctx, stack)
 	if err != nil {
-		ctx.ServerError("loadPullStackData", err)
+		ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
 		return
 	}
 	ctx.Data["PullStackData"] = data
-	ctx.Data["CanManageStack"] = canManagePullStack(ctx)
+	if err := setPullStackCapabilities(ctx, data); err != nil {
+		ctx.ServerError("setPullStackCapabilities", err)
+		return
+	}
 	ctx.HTML(http.StatusOK, tplPullStackStatus)
 }

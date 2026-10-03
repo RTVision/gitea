@@ -1,8 +1,10 @@
 # Stacked pull requests
 
-A stack is an ordered chain of pull requests in one repository. The first open
-pull request targets the stack's trunk branch; each later pull request targets
-the preceding layer's branch. The trunk can be any repository branch.
+A stack is an ordered chain of pull requests owned by the repository containing
+its trunk. Source branches can live in that repository or in one direct fork with
+the same visibility. In the fork workflow, the first PR targets the main repository;
+later PRs belong to the fork and target the preceding source branch. Each layer
+lands into the main repository's trunk. The trunk can be any repository branch.
 
 Each pull request retains its own discussion, reviews and diff. Required reviews,
 status checks, protected-file rules and CODEOWNERS are evaluated against the
@@ -45,9 +47,22 @@ release ← feature/storage ← feature/api ← feature/ui
 Each branch needs at least one commit beyond its parent. In rebase mode, each
 branch must also contain its current parent's head and have linear history. In
 merge mode, a branch may be behind its parent; **Update stack** merges the parent
-in. Cross-repository branches, duplicate membership, multiple open pull requests
-sharing a head branch, and already scheduled ordinary auto-merges cannot be
-adopted.
+in. Source branches from several repositories, duplicate membership, multiple open
+pull requests sharing a head branch, and already scheduled ordinary auto-merges
+cannot be adopted.
+
+Fork PRs retain their repository, number, discussion and immediate base after
+lower layers land. The stack records the main repository's trunk as their effective
+landing target. Merged PR payloads expose `merged_repo_id` and `merged_branch` so
+clients can locate the published commit. All source rewrites still require
+permission on the fork branch; write access to the main repository does not grant
+write access to the fork.
+
+Contributors without write access to the main repository can create, extend,
+synchronize, rebase, update and unstack their own fork layers. They must be the
+author of every layer and have push permission on every source branch. Creating
+the stack on their behalf does not change these checks. Landing still requires
+merge permission on the main repository's trunk.
 
 The collapsible stack box on each pull request shows connected layers from top to
 bottom, with the trunk branch below them. Review the
@@ -168,7 +183,18 @@ continuation workflow.
 
 The repository API exposes stacks at
 `/api/v1/repos/{owner}/{repo}/stacks`. Stack numbers are separate from pull request
-numbers. Mutations require an expected stack revision and return a conflict when
+numbers. Existing integer `pull_requests` fields identify PRs in the stack
+repository. Cross-repository creation and append use `pull_request_refs` instead:
+
+```json
+{"trunk":"main","pull_request_refs":[{"repository_id":10,"pull_request":1},{"repository_id":20,"pull_request":1}]}
+```
+
+Insert accepts `pull_request_ref` with the same shape. Synchronization heads add
+`repository_id` beside `pull_request`; omitting it selects the stack repository.
+The caller must be able to read each referenced repository.
+
+Mutations require an expected stack revision and return a conflict when
 the stack changed or another operation owns it. Check `/stacks/capabilities`
 before offering stack creation in a client.
 
@@ -181,11 +207,12 @@ published boundaries: submit every open layer's pull request number, expected
 head SHA and parent SHA. The server validates the complete current chain; this
 endpoint does not push branches or guess old replay boundaries.
 
-Pull request payloads include `stack.number`, `stack.size`, `stack.position` and
-`stack.base.ref`/`stack.base.sha`. The ordinary `base` fields continue to describe
+Pull request payloads include `stack.number`, `stack.repository`, `stack.size`,
+`stack.position` and `stack.base.repository`/`stack.base.ref`/`stack.base.sha`. The ordinary `base` fields continue to describe
 the immediate parent. Actions branch filters use the trunk while path filters
 use the layer diff. Trusted `pull_request_target` workflow selection uses the
-trunk rather than an unmerged parent branch.
+trunk rather than an unmerged parent branch. Fork layers remain untrusted fork
+inputs when workflows run in the main repository.
 
 The generated API documentation describes request and response schemas. The
 importable `modules/stackclient` package supports the stack REST workflow without
@@ -193,7 +220,8 @@ requiring changes to the external Gitea SDK.
 
 ## Scope
 
-This implementation supports same-repository linear stacks. It does not provide
-cross-fork stacks, a GraphQL server, speculative merge-group queues, atomic
+This implementation supports linear stacks within a repository or from one direct
+fork. It does not combine source branches from several forks, change repository
+visibility, provide a GraphQL server, speculative merge-group queues, atomic
 whole-stack publication, or GitHub CLI/API compatibility. Stack landing follows
 Gitea's existing per-pull-request merge semantics.

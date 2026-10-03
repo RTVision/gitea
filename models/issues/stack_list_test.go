@@ -7,9 +7,14 @@ import (
 	"slices"
 	"testing"
 
+	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	"gitea.dev/models/unittest"
+	"gitea.dev/modules/optional"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"xorm.io/builder"
 )
 
 func TestOpenStackLeads(t *testing.T) {
@@ -47,4 +52,30 @@ func TestOpenStackLeads(t *testing.T) {
 	assert.EqualValues(t, 21, second.Bottom.IssueID)
 	assert.EqualValues(t, 30, landed.Bottom.IssueID)
 	assert.Same(t, first, stacks.Layers[12].Stack)
+}
+
+func TestForeignStackListScope(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	for i, pullID := range []int64{1, 6} {
+		require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pullID, Position: i + 1}))
+	}
+	layers, err := issues_model.FindOpenStackLayers(ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, layers, 2)
+	assert.EqualValues(t, 3, layers[1].RepoID)
+	stacks := issues_model.NewOpenStacks(layers)
+	assert.EqualValues(t, 12, stacks.Stacks[stack.ID].Bottom.IssueID)
+	opts := &issues_model.IssuesOptions{RepoCond: builder.Eq{"issue.repo_id": 1}.Or(builder.In("issue.id", []int64{12})), IsPull: optional.Some(true), IsClosed: optional.Some(false)}
+	ids, _, err := issues_model.IssueIDs(ctx, opts)
+	require.NoError(t, err)
+	assert.Contains(t, ids, int64(12))
+	assert.NotContains(t, ids, int64(8))
+	leads := stacks.Leads([]int64{12})
+	assert.Equal(t, []issues_model.IssueGroup{{StackID: stack.ID, IssueIDs: []int64{12}}}, leads.Rows([]int64{12}))
+	stats, err := issues_model.GetIssueStats(ctx, opts)
+	require.NoError(t, err)
+	assert.EqualValues(t, len(ids), stats.OpenCount)
 }

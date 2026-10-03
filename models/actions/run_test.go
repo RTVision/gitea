@@ -10,6 +10,8 @@ import (
 	"gitea.dev/models/db"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
+	"gitea.dev/modules/json"
+	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -56,6 +58,26 @@ func TestActionRun_WorkflowLink(t *testing.T) {
 	// a scoped run carries its source repo id back, so the list stays filtered to that source
 	scoped := &ActionRun{Repo: repo, WorkflowID: "ci.yaml", WorkflowRepoID: 42, IsScopedRun: true}
 	assert.Equal(t, repo.Link()+"/actions/?workflow=ci.yaml&scoped_workflow_source_repo_id=42", scoped.WorkflowLink())
+}
+
+func TestActionRun_ForkStackRef(t *testing.T) {
+	payload := &api.PullRequestPayload{Index: 7, PullRequest: &api.PullRequest{Index: 7, HTMLURL: "https://gitea.example/fork/repo/pulls/7"}}
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+	run := &ActionRun{
+		Repo:         &repo_model.Repository{OwnerName: "main", Name: "repo"},
+		Ref:          "refs/stack-pulls/123/head",
+		Event:        "pull_request",
+		EventPayload: string(data),
+	}
+	assert.Equal(t, payload.PullRequest.HTMLURL, run.RefLink())
+	assert.Equal(t, "#7", run.PrettyRef())
+	run.Ref = "refs/pull/42/head"
+	assert.Equal(t, "/main/repo/pulls/42", run.RefLink())
+	assert.Equal(t, "#42", run.PrettyRef())
+	run.Ref = "refs/heads/release"
+	assert.Equal(t, "/main/repo/src/branch/release", run.RefLink())
+	assert.Equal(t, "release", run.PrettyRef())
 }
 
 func TestGetWorkflowLatestRun_RepoLevelOnly(t *testing.T) {

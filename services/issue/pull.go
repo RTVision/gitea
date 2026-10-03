@@ -12,6 +12,7 @@ import (
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	org_model "gitea.dev/models/organization"
+	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
@@ -37,26 +38,24 @@ func IsCodeOwnerFile(f string) bool {
 }
 
 // Get all code owner rules for a given pr + repo combination.
-func getCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *issues_model.PullRequest) ([]*issues_model.CodeOwnerRule, error) {
-	if err := pr.LoadBaseRepo(ctx); err != nil {
-		return nil, err
-	}
-
-	if err := pr.LoadIssue(ctx); err != nil {
-		return nil, err
-	}
-
-	pr.Issue.Repo = pr.BaseRepo
-
-	if pr.BaseRepo.IsFork {
-		return nil, nil
-	}
-
-	policyBranch, err := issues_model.ResolvePullRequestPolicyBranch(ctx, pr)
+func getCodeOwnerRules(ctx context.Context, pr *issues_model.PullRequest) ([]*issues_model.CodeOwnerRule, error) {
+	repoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
 	if err != nil {
 		return nil, err
 	}
-	commit, err := repo.GetBranchCommit(ctx, policyBranch)
+	policyRepo, err := repo_model.GetRepositoryByID(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	if policyRepo.IsFork {
+		return nil, nil
+	}
+	policyGitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, policyRepo)
+	if err != nil {
+		return nil, err
+	}
+	defer closer.Close()
+	commit, err := policyGitRepo.GetBranchCommit(ctx, policyBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +63,7 @@ func getCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *issues_mod
 	var data string
 
 	for _, file := range codeOwnerFiles {
-		blob, err := commit.GetBlobByPath(ctx, repo, file)
+		blob, err := commit.GetBlobByPath(ctx, policyGitRepo, file)
 		if err != nil {
 			continue // no CODEOWNERS at this path, try the next candidate
 		}
@@ -102,7 +101,7 @@ func getCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *issues_mod
 // complete flag is false when rule matching was cut short by the match budget, so
 // the returned slice is only a partial set of the matching rules.
 func getMatchingCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *issues_model.PullRequest) (matchingRules []*issues_model.CodeOwnerRule, complete bool, err error) {
-	rules, err := getCodeOwnerRules(ctx, repo, pr)
+	rules, err := getCodeOwnerRules(ctx, pr)
 	if err != nil {
 		return nil, false, err
 	}
@@ -111,7 +110,7 @@ func getMatchingCodeOwnerRules(ctx context.Context, repo *git.Repository, pr *is
 	}
 
 	// get the mergebase
-	mergeBase, err := git.MergeBase(ctx, pr.BaseRepo, git.BranchPrefix+pr.BaseBranch, pr.GetGitHeadRefName())
+	mergeBase, err := issues_model.StackComparisonBase(ctx, pr)
 	if err != nil {
 		return nil, false, err
 	}
@@ -304,7 +303,9 @@ func PullRequestCodeOwnersReview(ctx context.Context, pr *issues_model.PullReque
 		return nil, err
 	}
 
-	pr.Issue.Repo = pr.BaseRepo
+	if err := issue.LoadRepo(ctx); err != nil {
+		return nil, err
+	}
 
 	repo, closer, err := git.RepositoryFromContextOrOpen(ctx, pr.BaseRepo)
 	if err != nil {

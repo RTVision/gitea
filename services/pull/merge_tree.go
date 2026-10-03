@@ -17,8 +17,8 @@ import (
 // checkConflictsMergeTree uses git merge-tree to check for conflicts and if none are found checks if the patch is empty
 // return true if there are conflicts otherwise return false
 // pr.Status and pr.ConflictedFiles will be updated as necessary
-func checkConflictsMergeTree(ctx context.Context, pr *issues_model.PullRequest, baseCommitID string) (bool, error) {
-	treeHash, conflict, conflictFiles, err := git.MergeTree(ctx, pr.BaseRepo, baseCommitID, pr.HeadCommitID, pr.MergeBase)
+func checkConflictsMergeTree(ctx context.Context, pr *issues_model.PullRequest, baseCommitID, mergeBase string) (bool, error) {
+	treeHash, conflict, conflictFiles, err := git.MergeTree(ctx, pr.BaseRepo, baseCommitID, pr.HeadCommitID, mergeBase)
 	if err != nil {
 		return false, fmt.Errorf("MergeTree: %w", err)
 	}
@@ -105,7 +105,7 @@ func checkPullRequestMergeableByMergeTree(ctx context.Context, pr *issues_model.
 		return fmt.Errorf("GetBranchCommitID: can't find commit ID for base: %w", err)
 	}
 
-	pr.MergeBase, err = git.MergeBase(ctx, pr.BaseRepo, baseCommitID, pr.HeadCommitID)
+	mergeBase, err := git.MergeBase(ctx, pr.BaseRepo, baseCommitID, pr.HeadCommitID)
 	if err != nil {
 		// if there is no merge base, then it's empty, still need to allow the pull request to be created
 		// not quite right (e.g.: why not reset the fields like below), but no interest to do more investigation at the moment
@@ -114,18 +114,23 @@ func checkPullRequestMergeableByMergeTree(ctx context.Context, pr *issues_model.
 		return nil
 	}
 
+	pr.MergeBase, err = pullRequestComparisonBase(ctx, pr, mergeBase)
+	if err != nil {
+		return err
+	}
+
 	// reset conflicted files and changed protected files
 	pr.ConflictedFiles = nil
 	pr.ChangedProtectedFiles = nil
 
 	// 6. if base == head, then it's an ancestor
-	if pr.HeadCommitID == pr.MergeBase {
+	if pr.HeadCommitID == mergeBase {
 		pr.Status = issues_model.PullRequestStatusAncestor
 		return nil
 	}
 
 	// 7. Check for conflicts
-	conflicted, err := checkConflictsMergeTree(ctx, pr, baseCommitID)
+	conflicted, err := checkConflictsMergeTree(ctx, pr, baseCommitID, mergeBase)
 	if err != nil {
 		log.Error("checkConflictsMergeTree: %v", err)
 		pr.Status = issues_model.PullRequestStatusError

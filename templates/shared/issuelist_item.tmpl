@@ -7,7 +7,7 @@
 	<div class="item-leading">
 		{{/* using some tw helpers is the only way to align the checkbox */}}
 		<div class="flex-text-inline tw-mt-[3px]">
-			{{if $root.CanWriteIssuesOrPulls}}
+			{{if and $root.CanWriteIssuesOrPulls (or (not $root.Repository) (eq .RepoID $root.Repository.ID))}}
 				<input type="checkbox" autocomplete="off" class="issue-checkbox tw-mr-[14px]" data-issue-id="{{.ID}}" aria-label="{{ctx.Locale.Tr "repo.issues.action_check"}}: {{.Title}}">
 			{{end}}
 			{{template "shared/issueicon" .}}
@@ -40,7 +40,7 @@
 		</div>
 		<div class="item-body tw-gap-2">
 			<a class="index flex-text-inline" href="{{if .Link}}{{.Link}}{{else}}{{$root.Link}}/{{.Index}}{{end}}">
-				{{if eq $root.listType "dashboard"}}
+				{{if or (eq $root.listType "dashboard") (and $root.Repository (ne .RepoID $root.Repository.ID))}}
 					{{.Repo.FullName}}#{{.Index}}
 				{{else}}
 					#{{.Index}}

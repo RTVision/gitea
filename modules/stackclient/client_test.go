@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.dev/modules/json"
+	api "gitea.dev/modules/structs"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +120,38 @@ func TestClientRejectsRedirectToAnotherHost(t *testing.T) {
 	assert.Equal(t, 2, requests, "the idempotent GET retries, but neither request reaches the redirected host")
 	var apiErr ErrAPI
 	assert.NotErrorAs(t, err, &apiErr)
+}
+
+func TestClientQualifiedStackReferences(t *testing.T) {
+	client, err := New("https://code.example.test", "main", "repo", "secret")
+	require.NoError(t, err)
+	references := []api.PullRequestReference{{RepositoryID: 10, PullRequest: 1}, {RepositoryID: 20, PullRequest: 1}}
+	requests := make([]map[string]any, 0, 4)
+	client.HTTP.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		assert.Contains(t, r.URL.Path, "/api/v1/repos/main/repo/stacks")
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		requests = append(requests, body)
+		return response(http.StatusOK, `{"number":1,"revision":2}`, nil), nil
+	})
+	_, err = client.CreateStackReferences(t.Context(), "main", api.StackModeMerge, references)
+	require.NoError(t, err)
+	_, err = client.AppendStackReferences(t.Context(), 1, 2, references[1:])
+	require.NoError(t, err)
+	_, err = client.InsertLayerReference(t.Context(), 1, 2, references[1])
+	require.NoError(t, err)
+	_, err = client.SynchronizeStack(t.Context(), 1, 2, []api.PullRequestStackHead{{RepositoryID: 20, PullRequest: 1, HeadSHA: "head", ParentSHA: "parent"}})
+	require.NoError(t, err)
+	assert.Len(t, requests, 4)
+	assert.Equal(t, []any{map[string]any{"repository_id": float64(10), "pull_request": float64(1)}, map[string]any{"repository_id": float64(20), "pull_request": float64(1)}}, requests[0]["pull_request_refs"])
+	assert.NotContains(t, requests[0], "pull_requests")
+	assert.Equal(t, map[string]any{"repository_id": float64(20), "pull_request": float64(1)}, requests[2]["pull_request_ref"])
+	assert.Equal(t, []any{map[string]any{"repository_id": float64(20), "pull_request": float64(1), "head_sha": "head", "parent_sha": "parent"}}, requests[3]["heads"])
+	fork, err := client.ForRepository("fork/repo")
+	require.NoError(t, err)
+	assert.Equal(t, "fork", fork.Owner)
+	assert.Equal(t, client.HTTP, fork.HTTP)
+	assert.Equal(t, client.Token, fork.Token)
+	_, err = client.ForRepository("fork/repo/extra")
+	require.Error(t, err)
 }

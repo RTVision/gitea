@@ -138,7 +138,7 @@ const (
 //   - merge: both the head commits must be verified and Gitea must sign the merge commit.
 //   - rebase, rebase-merge, squash: Gitea rewrites the commits and signs each, so only Gitea's
 //     signing ability is checked.
-func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *access_model.Permission, pr *issues_model.PullRequest, mergeCheckType MergeCheckType, mergeStyle repo_model.MergeStyle, forceMerge bool) error {
+func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *access_model.Permission, pr *issues_model.PullRequest, mergeCheckType MergeCheckType, mergeStyle repo_model.MergeStyle, forceMerge bool, landingTargets ...*Target) error {
 	return db.WithTx(stdCtx, func(ctx context.Context) error {
 		if err := checkStackMergeOrder(ctx, pr); err != nil {
 			return err
@@ -170,11 +170,23 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 			return ErrIsWorkInProgress
 		}
 
-		if !pr.IsStatusMergeable() && !pr.IsEmpty() {
+		landing := false
+		if len(landingTargets) > 0 {
+			target := landingTargets[0]
+			repoID, branch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
+			if err != nil {
+				return err
+			}
+			if target == nil || target.Repo == nil || target.Repo.ID != repoID || target.Branch != branch {
+				return issues_model.ErrInvalidStack
+			}
+			landing = target.Repo.ID != pr.BaseRepoID
+		}
+		if !landing && !pr.IsStatusMergeable() && !pr.IsEmpty() {
 			return ErrNotMergeableState
 		}
 
-		if pr.IsChecking() {
+		if !landing && pr.IsChecking() {
 			return ErrIsChecking
 		}
 
@@ -193,7 +205,11 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 
 			// * if the doer tries to "Force Merge", check whether it is really allowed
 			if forceMerge {
-				isRepoAdmin := access_model.IsUserRepoAdmin(ctx, pr.BaseRepo, doer)
+				policyRepo, err := getPullPolicyRepository(ctx, pr)
+				if err != nil {
+					return err
+				}
+				isRepoAdmin := access_model.IsUserRepoAdmin(ctx, policyRepo, doer)
 				protectedBranchRule, errForceMerge := getPullProtectedBranch(ctx, pr)
 				if errForceMerge != nil {
 					return fmt.Errorf("GetFirstMatchProtectedBranchRule failed, repo: %v, base branch: %v, err: %w", pr.BaseRepoID, pr.BaseBranch, errForceMerge)
@@ -245,14 +261,26 @@ func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest,
 		return nil
 	}
 
-	gitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, pr.BaseRepo)
+	repoID, branch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
+	if err != nil {
+		return err
+	}
+	policyRepo, err := repo_model.GetRepositoryByID(ctx, repoID)
+	if err != nil {
+		return err
+	}
+	gitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, policyRepo)
 	if err != nil {
 		return err
 	}
 	defer closer.Close()
+	headRef := pr.GetGitHeadRefName()
+	if repoID != pr.BaseRepoID {
+		headRef = issues_model.StackHeadRefName(pr.ID)
+	}
 
 	if mergeStyle == repo_model.MergeStyleFastForwardOnly || mergeStyle == repo_model.MergeStyleMerge {
-		verified, err := asymkey_service.AllHeadCommitsVerified(ctx, pr, gitRepo)
+		verified, err := asymkey_service.AllHeadCommitsVerified(ctx, pr, gitRepo, branch, headRef)
 		if err != nil {
 			return err
 		}
@@ -262,7 +290,7 @@ func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest,
 	}
 
 	if mergeStyle != repo_model.MergeStyleFastForwardOnly {
-		if _, _, _, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, pr.BaseBranch, pr.GetGitHeadRefName()); err != nil {
+		if _, _, _, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, branch, headRef, policyRepo); err != nil {
 			return err
 		}
 	}
@@ -391,7 +419,7 @@ func getMergerForManuallyMergedPullRequest(ctx context.Context, pr *issues_model
 // When a pull request got manually merged mark the pull request as merged
 func manuallyMerged(ctx context.Context, pr *issues_model.PullRequest) bool {
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
-	if err != nil || (stack != nil && stack.ActiveOperationID != 0) {
+	if err != nil || (stack != nil && (stack.ActiveOperationID != 0 || stack.RepoID != pr.BaseRepoID)) {
 		return false
 	}
 	if err := checkStackMergeOrder(ctx, pr); err != nil {

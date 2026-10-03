@@ -175,15 +175,15 @@ func TestStackMergeModeUpdate(t *testing.T) {
 	run("push", bare, "side")
 	side := run("rev-parse", "HEAD")
 	journal := &stackJournal{Stage: "restack", Layers: []*stackLayerJournal{
-		{HeadBranch: "branch2", ExpectedHead: oldLower, Phase: "ready"},
-		{HeadBranch: "pr-to-update", ExpectedHead: side, Phase: "ready"},
+		{PullID: 2, HeadRepoID: repo.ID, HeadBranch: "branch2", ExpectedHead: oldLower, Phase: "ready"},
+		{PullID: 5, HeadRepoID: repo.ID, HeadBranch: "pr-to-update", ExpectedHead: side, Phase: "ready"},
 	}}
 	stack = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequestStack{ID: stack.ID})
-	require.NoError(t, adoptFastForwardedStackHeads(ctx, stack, journal))
+	require.NoError(t, adoptFastForwardedStackHeads(ctx, journal))
 	assert.Equal(t, lower, journal.Layers[0].ExpectedHead, "a fast-forward push is adopted on retry")
 	assert.Equal(t, side, journal.Layers[1].ExpectedHead, "a diverged head is never adopted")
 	journal.Stage, journal.Layers[0].ExpectedHead = "publish", oldLower
-	require.NoError(t, adoptFastForwardedStackHeads(ctx, stack, journal))
+	require.NoError(t, adoptFastForwardedStackHeads(ctx, journal))
 	assert.Equal(t, oldLower, journal.Layers[0].ExpectedHead, "published candidates were built from the recorded head")
 
 	op = &issues_model.StackOperation{StackID: stack.ID, ActorID: owner.ID, ExpectedRevision: stack.Revision, Kind: "update", State: "running"}

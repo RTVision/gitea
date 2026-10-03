@@ -12,10 +12,12 @@ import (
 	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	"gitea.dev/modules/git"
+	"gitea.dev/modules/httplib"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TODO TestPullRequest_PushToBaseRepo
@@ -115,4 +117,30 @@ func TestBuildSquashMergeCommitMessages(t *testing.T) {
 		msg := buildSquashMergeCommitMessages(c.msg, c.coAuthors)
 		assert.Equal(t, c.expected, msg, "msg: %s", c.msg)
 	}
+}
+
+func TestDefaultMergeMessageLandingTarget(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	targetRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 3})
+	targetRepo.DefaultBranch = "upstream-default"
+	target := &Target{Repo: targetRepo, Branch: "release"}
+	message, body, err := GetDefaultMergeMessage(ctx, nil, pr, "", target)
+	require.NoError(t, err)
+	pullURL := httplib.MakeAbsoluteURL(ctx, "/user2/repo1/pulls/3")
+	assert.Equal(t, "Merge pull request 'issue3' ("+pullURL+") from user2/repo1:branch2 into release", message)
+	assert.Contains(t, body, "Reviewed-on: "+pullURL)
+	assert.EqualValues(t, 1, pr.BaseRepoID)
+	assert.Equal(t, "master", pr.BaseBranch)
+	repo, err := git.ForceFastImportWithInit(ctx, t.TempDir(), []git.FastImportCommit{
+		{Ref: "refs/heads/upstream-default", Files: []git.FastImportFile{{Path: ".gitea/default_merge_message/DEFAULT_TEMPLATE.md", Content: "${BaseRepoOwnerName}/${BaseRepoName}:${BaseBranch} ${PullRequestReference}"}}},
+	})
+	require.NoError(t, err)
+	gitRepo, err := git.OpenRepository(ctx, repo)
+	require.NoError(t, err)
+	defer gitRepo.Close()
+	message, _, err = GetDefaultMergeMessage(ctx, gitRepo, pr, repo_model.MergeStyleSquash, target)
+	require.NoError(t, err)
+	assert.Equal(t, "org3/repo3:release "+pullURL, message)
 }

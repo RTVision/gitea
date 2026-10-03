@@ -9,11 +9,14 @@ import (
 	"slices"
 
 	"gitea.dev/models/db"
+	repo_model "gitea.dev/models/repo"
 )
 
 // StackLayer is one pull request of an open stack, as the pull request list shows it.
 type StackLayer struct {
 	StackID        int64
+	RepoID         int64
+	Repo           *repo_model.Repository `xorm:"-"`
 	Mode           string
 	Position       int
 	IssueID        int64
@@ -64,7 +67,7 @@ func FindOpenStackLayers(ctx context.Context, repoID int64) ([]*StackLayer, erro
 		Join("INNER", "issue", "issue.id = pull_request.issue_id").
 		Join("LEFT", "stack_operation", "stack_operation.id = pull_request_stack.active_operation_id").
 		Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ?", repoID, StackStateOpen).
-		Select("stack_entry.stack_id, pull_request_stack.mode, stack_entry.position, issue.id AS issue_id, issue.`index`, issue.name AS title, issue.is_closed, pull_request.has_merged, stack_operation.state AS operation_state").
+		Select("stack_entry.stack_id, pull_request_stack.mode, stack_entry.position, issue.id AS issue_id, issue.repo_id, issue.`index`, issue.name AS title, issue.is_closed, pull_request.has_merged, stack_operation.state AS operation_state").
 		Asc("stack_entry.stack_id", "stack_entry.position").
 		Find(&layers)
 	return layers, err
