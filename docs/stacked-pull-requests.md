@@ -69,6 +69,10 @@ bottom, with the trunk branch below them. Review the
 individual layer diff as usual. A closed but unmerged predecessor does not satisfy
 the stack's landing order.
 
+The layer dropdown, stack box and stack page show each layer's latest checks and
+official review counts, matching the pull request list. These indicators summarize
+existing checks and reviews; the stack page lists any remaining landing blockers.
+
 The repository's pull request list shows each open stack as one expandable row
 with its mode, size and a per-layer status bar, listing the layers that match the
 current filters. Rows start collapsed and expand while a filter or search is active.
@@ -133,9 +137,11 @@ parent commit boundaries. It builds candidates before publishing source refs and
 uses expected-old-head leases when pushing. Source branch force-push permissions
 and signing requirements still apply.
 
-Landing selects the next open layer, a prefix, or the whole stack, using Gitea's
-merge, squash or rebase merge style. The worker merges one pull request at a time,
-records the actual result, rebases the remaining layers and rechecks eligibility
+The stack page defaults to landing the whole remaining stack. Choose **Through**
+a layer to land only that layer and its unmerged predecessors. When the repository
+allows only one compatible merge method, the page shows its name without a selector.
+Landing uses Gitea's merge, squash or rebase merge style. The worker merges one pull
+request at a time, records the actual result, rebases the remaining layers and rechecks eligibility
 before proceeding. It waits when required checks or reviews are outstanding.
 
 Landing can partially complete. If two pull requests merge and the third is

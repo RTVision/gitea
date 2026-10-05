@@ -7,8 +7,14 @@
 			<summary class="tw-cursor-pointer"><span class="tw-font-semibold">{{ctx.Locale.Tr "repo.pulls.part_of_stack" $data.Stack.ID}}</span> <span class="tw-text-text-light">{{ctx.Locale.TrN (len $data.Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len $data.Entries)}}</span></summary>
 			<ul class="stack-layer-list flex-divided-list tw-mt-3">
 				{{range $_, $entry := $data.TopDownEntries}}
-					<li class="item stack-layer flex-left-right tw-items-start {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}>
-						<a class="flex-text-block tw-items-start tw-min-w-0" href="{{.Pull.Issue.Link}}">{{template "shared/issueicon" .Pull.Issue}}<span class="tw-break-anywhere">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
+					<li class="item stack-layer flex-left-right tw-items-start tw-flex-wrap {{if eq .Pull.ID $.Issue.PullRequest.ID}}tw-font-semibold{{end}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="true"{{end}}>
+						<div class="flex-text-block tw-items-start tw-min-w-0">
+							{{template "shared/issueicon" .Pull.Issue}}
+							<div class="tw-min-w-0">
+								<a class="tw-break-anywhere" href="{{.Pull.Issue.Link}}">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</a>
+								{{template "repo/stack/entry_status" .}}
+							</div>
+						</div>
 						<span class="ui label">{{if .Pull.HasMerged}}{{ctx.Locale.Tr "repo.pulls.merged"}}{{else if .Pull.Issue.IsClosed}}{{ctx.Locale.Tr "repo.pulls.closed"}}{{else}}{{ctx.Locale.Tr "repo.issues.open_title"}}{{end}}</span>
 					</li>
 				{{end}}

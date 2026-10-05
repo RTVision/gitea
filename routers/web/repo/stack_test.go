@@ -6,14 +6,20 @@ package repo
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
+	"gitea.dev/modules/commitstatus"
+	"gitea.dev/modules/git"
+	"gitea.dev/modules/git/gitrepo"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
 	"gitea.dev/services/contexttest"
@@ -57,6 +63,93 @@ func TestStackMemberReadPermission(t *testing.T) {
 	}
 	_, err = loadPullStackEntries(ctx, stack.ID)
 	assert.ErrorIs(t, err, issues_model.ErrStackNotExist)
+}
+
+func TestForkStackEntryStatus(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	defer test.MockVariableValue(&setting.RepoRootPath, t.TempDir())()
+	ctx, _ := contexttest.MockContext(t, "/user13/repo11/pulls/1")
+	contexttest.LoadUser(t, ctx, 13)
+	require.NoError(t, db.Insert(ctx, &repo_model.RepoUnit{RepoID: 11, Type: unit.TypePullRequests, Config: &repo_model.PullRequestsConfig{}}))
+	contexttest.LoadRepo(t, ctx, 11)
+	fork := ctx.Repo.Repository
+	main := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 3})
+	_, err := db.GetEngine(ctx).ID(pr.ID).NoAutoTime().Cols("base_repo_id").Update(&issues_model.PullRequest{BaseRepoID: fork.ID})
+	require.NoError(t, err)
+	_, err = db.GetEngine(ctx).ID(pr.IssueID).Cols("repo_id").Update(&issues_model.Issue{RepoID: fork.ID})
+	require.NoError(t, err)
+	require.NotEqual(t, pr.Index, pr.ID)
+	require.NotEqual(t, pr.ID, pr.IssueID)
+	require.NoError(t, unittest.SyncDirs(filepath.Join(setting.GetGiteaTestSourceRoot(), "tests", "gitea-repositories-meta", fork.FullName()+".git"), gitrepo.RepoLocalPath(fork)))
+	gitRepo, err := git.OpenRepository(ctx, fork)
+	require.NoError(t, err)
+	defer gitRepo.Close()
+	head, err := gitRepo.GetBranchCommit(ctx, pr.HeadBranch)
+	require.NoError(t, err)
+	boundary, err := git.MergeBase(ctx, gitRepo, git.RefNameFromBranch(pr.BaseBranch).String(), head.ID.String())
+	require.NoError(t, err)
+	refDir := filepath.Join(gitrepo.RepoLocalPath(fork), "refs", "pull", strconv.FormatInt(pr.Index, 10))
+	require.NoError(t, os.MkdirAll(refDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(refDir, "head"), []byte(head.ID.String()+"\n"), 0o644))
+	stack := &issues_model.PullRequestStack{RepoID: main.ID, TrunkBranch: "master", State: issues_model.StackStateOpen}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx,
+		&issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1, HeadSHA: head.ID.String(), OldParentSHA: boundary},
+		&issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(fork.ID, pr.HeadBranch)},
+	))
+	seedStatus := func(repo *repo_model.Repository, context string, state commitstatus.CommitStatusState) {
+		t.Helper()
+		require.NoError(t, git_model.NewCommitStatus(ctx, git_model.NewCommitStatusOptions{
+			Repo: repo, Creator: ctx.Doer, SHA: head.ID,
+			CommitStatus: &git_model.CommitStatus{Context: context, State: state},
+		}))
+	}
+	seedStatus(main, "ci", commitstatus.CommitStatusFailure)
+	seedStatus(main, "ci", commitstatus.CommitStatusSuccess)
+	seedStatus(fork, "ci", commitstatus.CommitStatusFailure)
+	for i, review := range []*issues_model.Review{
+		{Type: issues_model.ReviewTypeApprove, Official: true},
+		{Type: issues_model.ReviewTypeApprove, Official: true, Stale: true},
+		{Type: issues_model.ReviewTypeApprove},
+		{Type: issues_model.ReviewTypeApprove, Official: true, Dismissed: true},
+		{Type: issues_model.ReviewTypeReject, Official: true},
+		{Type: issues_model.ReviewTypeRequest, Official: true},
+		{Type: issues_model.ReviewTypePending, Official: true},
+	} {
+		review.IssueID, review.ReviewerID = pr.IssueID, int64(i+1)
+		require.NoError(t, db.Insert(ctx, review))
+	}
+	for _, check := range []struct {
+		state     commitstatus.CommitStatusState
+		localeKey string
+	}{
+		{commitstatus.CommitStatusPending, "repo.pulls.status_checking"},
+		{commitstatus.CommitStatusFailure, "repo.pulls.status_checks_failure"},
+		{commitstatus.CommitStatusSuccess, "repo.pulls.status_checks_success"},
+	} {
+		seedStatus(main, "lint", check.state)
+		entries, err := loadPullStackEntries(ctx, stack.ID)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		entry := entries[0]
+		assert.Equal(t, pr.ID, entry.Pull.ID)
+		assert.Equal(t, fork.ID, entry.Pull.BaseRepoID)
+		require.Len(t, entry.CommitStatuses, 2)
+		states := make(map[string]commitstatus.CommitStatusState, 2)
+		for _, status := range entry.CommitStatuses {
+			assert.Equal(t, main.ID, status.RepoID)
+			assert.Equal(t, head.ID.String(), status.SHA)
+			states[status.Context] = status.State
+		}
+		assert.Equal(t, map[string]commitstatus.CommitStatusState{"ci": commitstatus.CommitStatusSuccess, "lint": check.state}, states)
+		require.NotNil(t, entry.CommitStatus)
+		assert.Equal(t, check.state, entry.CommitStatus.State)
+		assert.Equal(t, check.localeKey, entry.CheckStatusLocaleKey())
+		assert.EqualValues(t, 2, entry.ApprovalCount)
+		assert.EqualValues(t, 1, entry.ChangeRequestCount)
+		assert.EqualValues(t, 1, entry.WaitingReviewCount)
+	}
 }
 
 func TestForkPullMergedTargetDeleted(t *testing.T) {

@@ -14,11 +14,13 @@ import (
 	"strings"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	perm_model "gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
+	"gitea.dev/modules/commitstatus"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/svg"
@@ -35,9 +37,25 @@ const (
 )
 
 type pullStackEntryData struct {
-	Entry     *issues_model.StackEntry
-	Pull      *issues_model.PullRequest
-	Readiness string
+	Entry              *issues_model.StackEntry
+	Pull               *issues_model.PullRequest
+	Readiness          string
+	CommitStatuses     []*git_model.CommitStatus
+	CommitStatus       *git_model.CommitStatus
+	ApprovalCount      int64
+	ChangeRequestCount int64
+	WaitingReviewCount int64
+}
+
+func (data *pullStackEntryData) CheckStatusLocaleKey() string {
+	switch data.CommitStatus.State {
+	case commitstatus.CommitStatusSuccess:
+		return "repo.pulls.status_checks_success"
+	case commitstatus.CommitStatusFailure:
+		return "repo.pulls.status_checks_failure"
+	default:
+		return "repo.pulls.status_checking"
+	}
 }
 
 type pullStackHeaderData struct {
@@ -246,6 +264,35 @@ func loadPullStackEntries(ctx *context.Context, stackID int64) ([]*pullStackEntr
 		pr.Issue.Repo, pr.BaseRepo = repo, repo
 		data = append(data, &pullStackEntryData{Entry: entry, Pull: pr})
 	}
+	if len(data) == 0 {
+		return data, nil
+	}
+	issues := make(issues_model.IssueList, len(data))
+	for i, entry := range data {
+		issues[i] = entry.Pull.Issue
+	}
+	approvalCounts, err := issues.GetApprovalCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	statuses, lastStatus, err := pull_service.GetIssuesAllCommitStatus(ctx, ctx.Doer, issues)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range data {
+		entry.CommitStatuses = statuses[entry.Pull.ID]
+		entry.CommitStatus = lastStatus[entry.Pull.ID]
+		for _, count := range approvalCounts[entry.Pull.IssueID] {
+			switch count.Type {
+			case issues_model.ReviewTypeApprove:
+				entry.ApprovalCount = count.Count
+			case issues_model.ReviewTypeReject:
+				entry.ChangeRequestCount = count.Count
+			case issues_model.ReviewTypeRequest:
+				entry.WaitingReviewCount = count.Count
+			}
+		}
+	}
 	return data, nil
 }
 
@@ -297,20 +344,20 @@ func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
 	if stack == nil {
 		return
 	}
-	entries, err := loadPullStackEntries(ctx, stack.ID)
-	if errors.Is(err, issues_model.ErrStackNotExist) {
-		return
-	}
-	if err != nil {
-		ctx.ServerError("loadPullStackEntries", err)
-		return
-	}
 	repo, err := readableStackRepository(ctx, stack.RepoID)
 	if errors.Is(err, issues_model.ErrStackNotExist) {
 		return
 	}
 	if err != nil {
 		ctx.ServerError("readableStackRepository", err)
+		return
+	}
+	entries, err := loadPullStackEntries(ctx, stack.ID)
+	if errors.Is(err, issues_model.ErrStackNotExist) {
+		return
+	}
+	if err != nil {
+		ctx.ServerError("loadPullStackEntries", err)
 		return
 	}
 	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Repo: repo, Stack: stack, Entries: entries}
