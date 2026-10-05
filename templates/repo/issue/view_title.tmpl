@@ -58,7 +58,13 @@
 				{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 				<div class="menu stack-menu stack-layer-list flex-items-menu items-width-limit">
 					{{range $_, $entry := .TopDownEntries}}
-						<a class="item stack-layer{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>{{template "shared/issueicon" .Pull.Issue}}<span class="gt-ellipsis">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span></a>
+						<a class="item stack-layer{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>
+							<span class="tw-self-start">{{template "shared/issueicon" .Pull.Issue}}</span>
+							<div class="tw-min-w-0">
+								<span class="gt-ellipsis tw-block">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span>
+								{{template "repo/stack/entry_status" .}}
+							</div>
+						</a>
 					{{end}}
 					<div class="header flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="gt-ellipsis">{{.Stack.TrunkBranch}}</span></div>
 					<div class="divider"></div>

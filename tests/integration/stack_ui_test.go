@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
+	"gitea.dev/modules/git"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
@@ -121,6 +125,126 @@ func TestPullListGroupsStacks(t *testing.T) {
 	assert.Positive(t, doc.Find(`.pagination a[href*="page=2"]`).Length())
 	assert.Zero(t, doc.Find(`.pagination a[href*="page=3"]`).Length(), "a stack takes one page slot")
 	assert.Equal(t, []string{"#5", "#3", "#2"}, indexes(list("?view=grouped&page=2")))
+}
+
+func TestPullStackEntryStatus(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	gitRepo, err := git.OpenRepository(ctx, repo)
+	require.NoError(t, err)
+	defer gitRepo.Close()
+	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: "master", Mode: issues_model.StackModeMerge, State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	var parentID int64
+	for i, pullID := range []int64{1, 2, 5} {
+		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pullID})
+		sha, err := gitRepo.GetRefCommitID(ctx, pr.GetGitHeadRefName())
+		require.NoError(t, err)
+		boundary, err := git.MergeBase(ctx, gitRepo, git.RefNameFromBranch(pr.BaseBranch).String(), sha)
+		require.NoError(t, err)
+		require.NoError(t, db.Insert(ctx,
+			&issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: i + 1, ParentPullRequestID: parentID, HeadSHA: sha, OldParentSHA: boundary},
+			&issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)},
+		))
+		parentID = pr.ID
+	}
+	_, err = db.GetEngine(ctx).In("issue_id", 2, 3, 11).Cols("official").Update(&issues_model.Review{Official: false})
+	require.NoError(t, err)
+	for i, review := range []*issues_model.Review{
+		{Type: issues_model.ReviewTypeApprove},
+		{Type: issues_model.ReviewTypeApprove, Stale: true},
+		{Type: issues_model.ReviewTypeReject},
+		{Type: issues_model.ReviewTypeRequest},
+	} {
+		review.IssueID, review.ReviewerID, review.Official = 11, int64(i+1), true
+		require.NoError(t, db.Insert(ctx, review))
+	}
+	for _, check := range []struct {
+		pullID int64
+		state  commitstatus.CommitStatusState
+	}{{5, commitstatus.CommitStatusSuccess}, {2, commitstatus.CommitStatusFailure}} {
+		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: check.pullID})
+		sha, err := gitRepo.GetRefCommitID(ctx, pr.GetGitHeadRefName())
+		require.NoError(t, err)
+		require.NoError(t, git_model.NewCommitStatus(ctx, git_model.NewCommitStatusOptions{
+			Repo: repo, Creator: owner, SHA: git.MustIDFromString(sha),
+			CommitStatus: &git_model.CommitStatus{Context: "ci", State: check.state, TargetURL: "https://example.com/ci"},
+		}))
+	}
+	assertLayers := func(layers *goquery.Selection) {
+		t.Helper()
+		require.Equal(t, 3, layers.Length())
+		links := layers.Map(func(_ int, layer *goquery.Selection) string {
+			if layer.Is("a") {
+				return layer.AttrOr("href", "")
+			}
+			return layer.Find("a").First().AttrOr("href", "")
+		})
+		assert.Equal(t, []string{"/user2/repo1/pulls/5", "/user2/repo1/pulls/3", "/user2/repo1/pulls/2"}, links)
+		for i, label := range []string{"All checks were successful", "Some checks failed"} {
+			checks := layers.Eq(i).Find(".stack-checks")
+			require.Equal(t, 1, checks.Length())
+			assert.Equal(t, "img", checks.AttrOr("role", ""))
+			assert.Equal(t, label+", 1 check", checks.AttrOr("aria-label", ""))
+			assert.Equal(t, label, checks.AttrOr("data-tooltip-content", ""))
+			assert.Equal(t, "1 check", strings.TrimSpace(checks.Text()))
+		}
+		assert.Equal(t, "2 approvals", strings.TrimSpace(layers.First().Find(".approvals").Text()))
+		assert.Equal(t, "1 change request", strings.TrimSpace(layers.First().Find(".rejects").Text()))
+		assert.Equal(t, "1 waiting review", strings.TrimSpace(layers.First().Find(".waiting").Text()))
+		assert.Zero(t, layers.Eq(1).Find(".approvals, .rejects, .waiting").Length())
+		assert.Zero(t, layers.Last().Find(".stack-entry-status").Length())
+		assert.Zero(t, layers.Find("a a").Length())
+	}
+	session := loginUser(t, "user2")
+	pullPage := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, "/user2/repo1/pulls/5"), http.StatusOK).Body)
+	assertLayers(pullPage.Find(".stack-menu .stack-layer"))
+	assertLayers(pullPage.Find(".timeline-item .stack-layer"))
+	stackPath := fmt.Sprintf("/user2/repo1/pulls/stacks/%d", stack.ID)
+	stackPage := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, stackPath), http.StatusOK).Body)
+	assertLayers(stackPage.Find(".stack-layer-list > .stack-layer"))
+	landingSelector := fmt.Sprintf(`form[action="%s/land"]`, stackPath)
+	landingForm := stackPage.Find(landingSelector)
+	require.Equal(t, 1, landingForm.Length())
+	assert.Equal(t, "Layers to land", strings.TrimSpace(landingForm.Find(`label[for="stack-through"]`).Text()))
+	through := landingForm.Find(`select[name="through"]`)
+	require.Equal(t, 1, through.Length())
+	assert.Equal(t, []string{"3", "2"}, through.Find("option").Map(func(_ int, option *goquery.Selection) string {
+		return option.AttrOr("value", "")
+	}))
+	selected := through.Find("option[selected]")
+	require.Equal(t, 1, selected.Length())
+	assert.Equal(t, "3", selected.AttrOr("value", ""))
+	assert.Equal(t, "Whole stack", strings.TrimSpace(selected.Text()))
+	assert.Equal(t, "Through #3", strings.TrimSpace(through.Find(`option[value="2"]`).Text()))
+	assert.Zero(t, through.Find(`option[value="1"]`).Length())
+	styles := landingForm.Find(`select[name="merge_style"]`)
+	require.Equal(t, 1, styles.Length())
+	assert.Equal(t, []string{"merge", "squash", "fast-forward-only"}, styles.Find("option").Map(func(_ int, option *goquery.Selection) string {
+		return option.AttrOr("value", "")
+	}))
+	assert.Zero(t, landingForm.Find(`input[name="merge_style"]`).Length())
+
+	pullUnit := repo.MustGetUnit(ctx, unit.TypePullRequests)
+	pullUnit.Config = &repo_model.PullRequestsConfig{AllowSquash: true}
+	require.NoError(t, repo_model.UpdateRepoUnitConfig(ctx, pullUnit))
+	stackPage = NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, stackPath), http.StatusOK).Body)
+	landingForm = stackPage.Find(landingSelector)
+	require.Equal(t, 1, landingForm.Length())
+	assert.Zero(t, landingForm.Find(`select[name="merge_style"]`).Length())
+	style := landingForm.Find(`[name="merge_style"]`)
+	require.Equal(t, 1, style.Length())
+	assert.True(t, style.Is("input"))
+	assert.Equal(t, "hidden", style.AttrOr("type", ""))
+	assert.Equal(t, "squash", style.AttrOr("value", ""))
+	assert.Equal(t, "Create squash commit", strings.TrimSpace(landingForm.Find("#stack-style").Text()))
+
+	pullUnit.PullRequestsConfig().AllowSquash = false
+	require.NoError(t, repo_model.UpdateRepoUnitConfig(ctx, pullUnit))
+	stackPage = NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, http.MethodGet, stackPath), http.StatusOK).Body)
+	assert.Zero(t, stackPage.Find(landingSelector).Length())
 }
 
 func TestPullListShowsForkSuffix(t *testing.T) {

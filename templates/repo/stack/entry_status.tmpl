@@ -1,0 +1,21 @@
+{{if or .CommitStatus .ApprovalCount .ChangeRequestCount .WaitingReviewCount}}
+	<div class="stack-entry-status flex-text-block tw-flex-wrap tw-text-12 tw-font-normal">
+		{{if .CommitStatus}}
+			{{$checkSummary := ctx.Locale.Tr .CheckStatusLocaleKey}}
+			{{$checkCount := ctx.Locale.TrN (len .CommitStatuses) "repo.pulls.check_count_1" "repo.pulls.check_count_n" (len .CommitStatuses)}}
+			<span class="stack-checks flex-text-inline" role="img" aria-label="{{$checkSummary}}, {{$checkCount}}" data-tooltip-content="{{$checkSummary}}">
+				{{template "repo/icons/commit_status" .CommitStatus}}
+				{{$checkCount}}
+			</span>
+		{{end}}
+		{{if .ApprovalCount}}
+			<span class="approvals tw-text-green flex-text-inline">{{svg "octicon-check" 14}}{{ctx.Locale.TrN .ApprovalCount "repo.pulls.approve_count_1" "repo.pulls.approve_count_n" .ApprovalCount}}</span>
+		{{end}}
+		{{if .ChangeRequestCount}}
+			<span class="rejects tw-text-red flex-text-inline">{{svg "octicon-diff" 14}}{{ctx.Locale.TrN .ChangeRequestCount "repo.pulls.reject_count_1" "repo.pulls.reject_count_n" .ChangeRequestCount}}</span>
+		{{end}}
+		{{if .WaitingReviewCount}}
+			<span class="waiting flex-text-inline">{{svg "octicon-eye" 14}}{{ctx.Locale.TrN .WaitingReviewCount "repo.pulls.waiting_count_1" "repo.pulls.waiting_count_n" .WaitingReviewCount}}</span>
+		{{end}}
+	</div>
+{{end}}
