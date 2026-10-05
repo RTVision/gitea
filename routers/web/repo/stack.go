@@ -273,11 +273,11 @@ func loadPullStackEntries(ctx *context.Context, stackID int64) ([]*pullStackEntr
 	}
 	approvalCounts, err := issues.GetApprovalCounts(ctx)
 	if err != nil {
-		return nil, err
+		log.Error("GetApprovalCounts for stack %d: %v", stackID, err)
 	}
 	statuses, lastStatus, err := pull_service.GetIssuesAllCommitStatus(ctx, ctx.Doer, issues)
 	if err != nil {
-		return nil, err
+		log.Error("GetIssuesAllCommitStatus for stack %d: %v", stackID, err)
 	}
 	for _, entry := range data {
 		entry.CommitStatuses = statuses[entry.Pull.ID]

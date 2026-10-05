@@ -4,11 +4,15 @@
 package repo
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gitea.dev/models/db"
@@ -26,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"xorm.io/xorm/contexts"
 )
 
 func TestSuggestForkStackSelection(t *testing.T) {
@@ -64,6 +69,23 @@ func TestStackMemberReadPermission(t *testing.T) {
 	_, err = loadPullStackEntries(ctx, stack.ID)
 	assert.ErrorIs(t, err, issues_model.ErrStackNotExist)
 }
+
+type stackEntryStatusQueryFailure struct {
+	ctx     context.Context
+	query   string
+	enabled atomic.Bool
+	fired   atomic.Bool
+}
+
+func (h *stackEntryStatusQueryFailure) BeforeProcess(c *contexts.ContextHook) (context.Context, error) {
+	if h.enabled.Load() && c.Ctx == h.ctx && strings.Contains(strings.NewReplacer("`", "", `"`, "").Replace(c.SQL), h.query) {
+		h.fired.Store(true)
+		return nil, errors.New("optional stack query failed")
+	}
+	return c.Ctx, nil
+}
+
+func (*stackEntryStatusQueryFailure) AfterProcess(*contexts.ContextHook) error { return nil }
 
 func TestForkStackEntryStatus(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -149,6 +171,40 @@ func TestForkStackEntryStatus(t *testing.T) {
 		assert.EqualValues(t, 2, entry.ApprovalCount)
 		assert.EqualValues(t, 1, entry.ChangeRequestCount)
 		assert.EqualValues(t, 1, entry.WaitingReviewCount)
+	}
+	for _, failedLookup := range []string{"statuses", "reviews"} {
+		t.Run(failedLookup, func(t *testing.T) {
+			query := "FROM review"
+			if failedLookup == "statuses" {
+				query = "FROM repository WHERE id IN"
+			}
+			hook := &stackEntryStatusQueryFailure{ctx: ctx, query: query}
+			hook.enabled.Store(true)
+			unittest.GetXORMEngine().AddHook(hook)
+			t.Cleanup(func() { hook.enabled.Store(false) })
+			entries, err := loadPullStackEntries(ctx, stack.ID)
+			require.True(t, hook.fired.Load(), "the optional query must fail")
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			entry := entries[0]
+			assert.Equal(t, pr.ID, entry.Pull.ID)
+			assert.Equal(t, pr.IssueID, entry.Pull.Issue.ID)
+			assert.Equal(t, fork.ID, entry.Pull.BaseRepo.ID)
+			if failedLookup == "statuses" {
+				assert.Empty(t, entry.CommitStatuses)
+				assert.Nil(t, entry.CommitStatus)
+				assert.EqualValues(t, 2, entry.ApprovalCount)
+				assert.EqualValues(t, 1, entry.ChangeRequestCount)
+				assert.EqualValues(t, 1, entry.WaitingReviewCount)
+			} else {
+				require.Len(t, entry.CommitStatuses, 2)
+				require.NotNil(t, entry.CommitStatus)
+				assert.Equal(t, commitstatus.CommitStatusSuccess, entry.CommitStatus.State)
+				assert.Zero(t, entry.ApprovalCount)
+				assert.Zero(t, entry.ChangeRequestCount)
+				assert.Zero(t, entry.WaitingReviewCount)
+			}
+		})
 	}
 }
 
