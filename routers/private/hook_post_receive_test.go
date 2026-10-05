@@ -33,12 +33,12 @@ func TestHandlePullRequestMerging(t *testing.T) {
 
 	ctx, resp := contexttest.MockPrivateContext(t, "/")
 	ctx.Doer = user2
-	hookPostReceiveHandlePullRequestMerging(ctx, &private.HookOptions{
+	assert.True(t, hookPostReceiveHandlePullRequestMerging(ctx, &private.HookOptions{
 		PullRequestID: pr.ID,
 		UserID:        2,
-	}, []*repo_module.PushUpdateOptions{
+	}, pr.BaseRepo, []*repo_module.PushUpdateOptions{
 		{NewCommitID: "01234567"},
-	})
+	}))
 	assert.Empty(t, resp.Body.String())
 	pr, err = issues_model.GetPullRequestByID(t.Context(), pr.ID)
 	assert.NoError(t, err)

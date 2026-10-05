@@ -149,6 +149,8 @@ func TestScheduleAutoMergeSerializesStackMembership(t *testing.T) {
 					_, err = db.GetEngine(ctx).ID(pullID).Cols("base_branch").Update(&issues_model.PullRequest{BaseBranch: "branch2"})
 					require.NoError(t, err)
 				}
+				_, err = db.GetEngine(ctx).ID(pullID).NoAutoTime().Cols("merged_unix").Update(&issues_model.PullRequest{MergedUnix: 1234567890})
+				require.NoError(t, err)
 				pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pullID})
 				createMembership := func(ctx context.Context) error {
 					if appendLayer {
