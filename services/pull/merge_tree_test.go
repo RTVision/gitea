@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"gitea.dev/models/db"
@@ -16,6 +17,8 @@ import (
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
 	"gitea.dev/modules/git/gitrepo"
+	"gitea.dev/modules/setting"
+	"gitea.dev/modules/test"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,6 +167,8 @@ func TestStackPatchCheckerPreservesComparisonBase(t *testing.T) {
 	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
 	require.NoError(t, pr.LoadBaseRepo(ctx))
 	require.NoError(t, pr.LoadHeadRepo(ctx))
+	defer test.MockVariableValue(&setting.RepoRootPath, t.TempDir())()
+	require.NoError(t, unittest.SyncDirs(filepath.Join(setting.GetGiteaTestSourceRoot(), "tests/gitea-repositories-meta", pr.BaseRepo.FullName()+".git"), gitrepo.RepoLocalPath(pr.BaseRepo)))
 	pr.BaseBranch, pr.HeadBranch = "stack-old-parent", "stack-new-head"
 	input := `commit refs/heads/stack-old-parent
 mark :1

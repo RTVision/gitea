@@ -89,7 +89,7 @@ func pinStackEntry(ctx context.Context, stack *issues_model.PullRequestStack, en
 	if err := fetchStackObject(ctx, pr.BaseRepo, pr.HeadRepo, head, pr.GetGitHeadRefName()); err != nil {
 		return err
 	}
-	_, err = db.GetEngine(ctx).ID(pr.ID).And("has_merged = ?", false).Cols("merge_base").Update(&issues_model.PullRequest{MergeBase: entry.OldParentSHA})
+	_, err = db.GetEngine(ctx).ID(pr.ID).And("has_merged = ?", false).NoAutoTime().Cols("merge_base").Update(&issues_model.PullRequest{MergeBase: entry.OldParentSHA})
 	return err
 }
 

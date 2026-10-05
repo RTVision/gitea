@@ -114,7 +114,7 @@ func HookPostReceive(ctx *gitea_context.PrivateContext) {
 
 	// handle pull request merging, a pull request action should push at least 1 commit
 	if opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
-		if !hookPostReceiveHandlePullRequestMerging(ctx, opts, updates) {
+		if !hookPostReceiveHandlePullRequestMerging(ctx, opts, repo, updates) {
 			return
 		}
 	}
@@ -230,7 +230,7 @@ func hookPostReceiveRespondWithTrailer(ctx *gitea_context.PrivateContext, opts *
 }
 
 // hookPostReceiveHandlePullRequestMerging handle pull request merging, a pull request action should push at least 1 commit
-func hookPostReceiveHandlePullRequestMerging(ctx *gitea_context.PrivateContext, opts *private.HookOptions, updates []*repo_module.PushUpdateOptions) bool {
+func hookPostReceiveHandlePullRequestMerging(ctx *gitea_context.PrivateContext, opts *private.HookOptions, repo *repo_model.Repository, updates []*repo_module.PushUpdateOptions) bool {
 	if len(updates) == 0 {
 		ctx.PrivateInternalErrorf("Pushing a merged PR (pr:%d) no commits pushed ", opts.PullRequestID)
 		return false
@@ -247,7 +247,7 @@ func hookPostReceiveHandlePullRequestMerging(ctx *gitea_context.PrivateContext, 
 		pr.MergedBaseCommitID = update.OldCommitID
 	}
 
-	if err := pull_service.PrepareStackMergedReceipt(ctx, pr, ctx.Repo.Repository.ID, update.RefFullName.BranchName(), update.OldCommitID, update.NewCommitID); err != nil {
+	if err := pull_service.PrepareStackMergedReceipt(ctx, pr, repo.ID, update.RefFullName.BranchName(), update.OldCommitID, update.NewCommitID); err != nil {
 		ctx.PrivateInternalErrorf("failed to record stack landing destination for pr %d: %v", pr.ID, err)
 		return false
 	}
