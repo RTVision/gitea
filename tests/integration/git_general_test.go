@@ -499,6 +499,7 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 				repo, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), baseCtx.Username, baseCtx.Reponame)
 				require.NoError(t, err)
 				prUnit := repo.MustGetUnit(t.Context(), unit_model.TypePullRequests)
+				prUnit.ID = 0
 				prUnit.PullRequestsConfig().DefaultTargetBranch = branch
 				require.NoError(t, repo_service.UpdateRepositoryUnits(t.Context(), repo, []repo_model.RepoUnit{*prUnit}, nil))
 			}
