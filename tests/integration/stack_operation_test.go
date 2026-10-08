@@ -81,7 +81,7 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 				require.NoError(t, err)
 				assert.Empty(t, operations)
 
-				require.ErrorIs(t, pull_service.Merge(upper, actor, style, "", "", false), pull_service.ErrPullRequestStacked)
+				require.ErrorIs(t, pull_service.Merge(t.Context(), upper.ID, actor, style, "", "", false), pull_service.ErrPullRequestStacked)
 				if style == repo_model.MergeStyleMerge {
 					_, err := db.GetEngine(t.Context()).Insert(&git_model.ProtectedBranch{RepoID: repo.ID, RuleName: "release", EnableStatusCheck: true, StatusCheckContexts: []string{"stack-ci"}})
 					require.NoError(t, err)

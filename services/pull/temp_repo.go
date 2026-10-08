@@ -97,7 +97,7 @@ func createTemporaryRepoForPR(ctx context.Context, pr *issues_model.PullRequest,
 	baseRepoPath := gitrepo.RepoLocalPath(target.Repo.CodeStorageRepo())
 	headRepoPath := gitrepo.RepoLocalPath(pr.HeadRepo.CodeStorageRepo())
 
-	if err := git.InitRepositoryLocal(ctx, tmpBasePath, false, target.Repo.ObjectFormatName); err != nil {
+	if err := git.InitRepositoryLocal(ctx, tmpBasePath, false, target.Repo.ObjectFormatName, ""); err != nil {
 		return nil, nil, fmt.Errorf("InitRepository[PR:%d]: %w", pr.ID, err)
 	}
 

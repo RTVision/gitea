@@ -33,6 +33,7 @@ import (
 	"gitea.dev/modelmigration/v1_8"
 	"gitea.dev/modelmigration/v1_9"
 	"gitea.dev/modelmigration/v28"
+	"gitea.dev/modelmigration/v29"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
@@ -433,6 +434,11 @@ func prepareMigrationTasks() []*migration {
 		newMigration(357, "Add can delete to branch protection", v28.AddCanDeleteToProtectedBranch),
 		newMigration(358, "Add mode to pull request stack", v28.AddModeToPullRequestStack),
 		newMigration(359, "Record pull request landing repository", v28.AddPullRequestMergedTarget),
+		// Preserve migration IDs already applied by fork installations.
+		newMigration(360, "Add Actions job queue indexes", v28.AddActionQueueIndexes),
+		newMigration(361, "Add AutoMerge merged_commit_id column", v28.AddAutoMergeMergedCommitID),
+		newMigration(362, "Add index on action_run commit_sha", v29.AddActionRunCommitSHAIndex),
+		newMigration(363, "Normalize legacy team authorize values", v29.NormalizeLegacyTeamAuthorize),
 	}
 	return preparedMigrations
 }

@@ -4,6 +4,7 @@
 package pull
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"gitea.dev/modules/git/gitrepo"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
+	"gitea.dev/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +80,20 @@ func TestForkStackMergeRecovery(t *testing.T) {
 	var mismatch ErrSHADoesNotMatch
 	require.ErrorAs(t, err, &mismatch)
 	forkRun("update-ref", "refs/heads/upper", head)
+	pr.MergedRepoID, pr.MergedBranch, pr.MergedBaseCommitID, pr.MergeBase = main.ID, "release", base, boundary
+	require.NoError(t, recordMergeIntent(ctx, pr, actor, head, false))
+	intent := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID})
+	assert.Equal(t, main.ID, intent.MergedRepoID)
+	assert.Equal(t, "release", intent.MergedBranch)
+	assert.Equal(t, base, intent.MergedBaseCommitID)
+	assert.Equal(t, boundary, intent.MergeBase)
+	landed, err := hasPullRequestCommitBeenMerged(ctx, intent)
+	require.NoError(t, err)
+	assert.True(t, landed)
+	restored, err := restoreInterruptedMerge(ctx, intent)
+	require.NoError(t, err)
+	assert.False(t, restored, "stack recovery must validate its journal and source head")
+	assert.False(t, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID}).HasMerged)
 	merged, err = reconcileStackMerge(ctx, layer, pr, actor)
 	require.NoError(t, err)
 	require.True(t, merged)
@@ -100,4 +116,40 @@ func TestForkStackMergeRecovery(t *testing.T) {
 	assert.Equal(t, head, mainRun("rev-parse", "release"))
 	assert.Equal(t, head, forkRun("rev-parse", saved.GetGitHeadRefName()))
 	assert.True(t, git.IsReferenceExist(ctx, main, issues_model.StackHeadRefName(pr.ID)))
+}
+
+func TestForkStackMergedReceipt(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	main := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	fork := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 3})
+	pr.BaseRepoID = fork.ID
+	pr.BaseBranch = "lower"
+	_, err := db.GetEngine(t.Context()).ID(pr.ID).Cols("base_repo_id", "base_branch").Update(pr)
+	require.NoError(t, err)
+	_, err = db.GetEngine(t.Context()).ID(pr.IssueID).Cols("repo_id").Update(&issues_model.Issue{RepoID: fork.ID})
+	require.NoError(t, err)
+	stack := &issues_model.PullRequestStack{RepoID: main.ID, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(t.Context(), stack))
+	require.NoError(t, db.Insert(t.Context(), &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1, OldParentSHA: "parent"}))
+	require.NoError(t, db.Insert(t.Context(), &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(fork.ID, pr.HeadBranch)}))
+	op := &issues_model.StackOperation{StackID: stack.ID, ExpectedRevision: 1, Kind: "land", State: "running", JournalJSON: fmt.Sprintf(`{"stage":"confirm","layers":[{"pull_id":%d,"phase":"merging","landing_base_sha":"before","merge_candidate_sha":"after","old_parent":"parent"}]}`, pr.ID)}
+	require.NoError(t, issues_model.CreateStackOperation(t.Context(), op))
+	actor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	require.ErrorIs(t, PrepareStackMergedReceipt(t.Context(), pr, fork.ID, stack.TrunkBranch, "before", "after"), ErrPullRequestStacked)
+	assert.False(t, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID}).HasMerged)
+	assert.False(t, unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID}).IsClosed)
+	require.NoError(t, PrepareStackMergedReceipt(t.Context(), pr, main.ID, stack.TrunkBranch, "before", "after"))
+	ok, err := MarkAsMerged(t.Context(), pr, "after", timeutil.TimeStampNow(), actor, pr.Status)
+	require.NoError(t, err)
+	require.True(t, ok)
+	merged := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID})
+	assert.True(t, merged.HasMerged)
+	assert.Equal(t, fork.ID, merged.BaseRepoID)
+	assert.Equal(t, "lower", merged.BaseBranch)
+	assert.Equal(t, main.ID, merged.MergedRepoID)
+	assert.Equal(t, stack.TrunkBranch, merged.MergedBranch)
+	assert.Equal(t, "after", merged.MergedCommitID)
+	assert.Equal(t, "before", merged.MergedBaseCommitID)
+	assert.Equal(t, "parent", merged.MergeBase)
 }
