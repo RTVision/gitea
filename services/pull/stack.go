@@ -72,7 +72,7 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		return nil, err
 	}
 	defer cleanup()
-	if err := git.InitRepositoryLocal(ctx, tmpPath, false, repo.ObjectFormatName); err != nil {
+	if err := git.InitRepositoryLocal(ctx, tmpPath, false, repo.ObjectFormatName, ""); err != nil {
 		return nil, err
 	}
 	parentSHA, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+trunk)

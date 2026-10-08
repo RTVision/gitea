@@ -68,14 +68,17 @@ func GetPullRequestViewedFiles(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   format: int64
@@ -104,14 +107,17 @@ func UpdatePullRequestViewedFiles(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   format: int64

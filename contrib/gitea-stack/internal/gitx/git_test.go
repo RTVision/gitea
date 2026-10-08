@@ -88,6 +88,8 @@ func mustRemoteHead(t *testing.T, repo Repo, remote, branch string) string {
 func TestRebaseUsesSavedLayerBoundary(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "work")
 	git(t, filepath.Dir(dir), "init", "-b", "main", dir)
+	git(t, dir, "config", "user.name", "Stack Test")
+	git(t, dir, "config", "user.email", "stack@example.test")
 	write(t, filepath.Join(dir, "base"), "base\n")
 	oldBase := commit(t, dir, "base")
 	git(t, dir, "switch", "-c", "feature")

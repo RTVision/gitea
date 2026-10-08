@@ -499,6 +499,7 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 				repo, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), baseCtx.Username, baseCtx.Reponame)
 				require.NoError(t, err)
 				prUnit := repo.MustGetUnit(t.Context(), unit_model.TypePullRequests)
+				prUnit.ID = 0
 				prUnit.PullRequestsConfig().DefaultTargetBranch = branch
 				require.NoError(t, repo_service.UpdateRepositoryUnits(t.Context(), repo, []repo_model.RepoUnit{*prUnit}, nil))
 			}
@@ -838,11 +839,6 @@ func doAutoPRMerge(baseCtx *APITestContext, dstPath string) func(t *testing.T) {
 func doCreateAgitFlowPull(dstPath string, ctx *APITestContext, headBranch string) func(t *testing.T) {
 	return func(t *testing.T) {
 		defer tests.PrintCurrentTest(t)()
-
-		// skip this test if git version is low
-		if !git.DefaultFeatures().SupportProcReceive {
-			return
-		}
 
 		gitRepo, err := git.OpenRepositoryLocal(t.Context(), dstPath)
 		require.NoError(t, err)

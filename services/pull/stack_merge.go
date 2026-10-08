@@ -156,12 +156,12 @@ func reconcileStackMerge(ctx context.Context, layer *stackLayerJournal, pr *issu
 		return false, ErrSHADoesNotMatch{GivenSHA: layer.ExpectedHead, CurrentSHA: head}
 	}
 	pr.MergedRepoID, pr.MergedBranch, pr.MergedBaseCommitID, pr.MergeBase = repoID, branch, layer.LandingBaseSHA, layer.OldParent
-	merged, err := SetMerged(ctx, pr, layer.MergeCandidateSHA, timeutil.TimeStampNow(), actor, pr.Status)
+	merged, err := MarkAsMerged(ctx, pr, layer.MergeCandidateSHA, timeutil.TimeStampNow(), actor, pr.Status)
 	if err != nil {
 		return false, err
 	}
 	if merged {
-		return true, handleMergePostProcess(ctx, pr.ID, actor, false)
+		return true, nil
 	}
 	return false, nil
 }

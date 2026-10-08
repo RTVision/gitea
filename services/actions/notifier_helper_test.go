@@ -135,6 +135,22 @@ func TestValidateStackWorkflowPayloadFailsClosed(t *testing.T) {
 	assert.Error(t, validateStackWorkflowPayload(stack, payload))
 }
 
+func TestGetApprovalUsersAddsForkPullRequestAuthorUnlessDefaultBranchWorkflow(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1})
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	approvalUsers, err := getApprovalUsers(t.Context(), &notifyInput{Doer: doer, PullRequest: pr, Event: webhook_module.HookEventPullRequest}, true)
+	require.NoError(t, err)
+	require.Len(t, approvalUsers, 2)
+	assert.Equal(t, []int64{doer.ID, pr.Issue.PosterID}, []int64{approvalUsers[0].ID, approvalUsers[1].ID})
+
+	approvalUsers, err = getApprovalUsers(t.Context(), &notifyInput{Doer: doer, PullRequest: pr, Event: webhook_module.HookEventIssueComment}, true)
+	require.NoError(t, err)
+	assert.Equal(t, []*user_model.User{doer}, approvalUsers)
+}
+
 func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
 	forkPR := &issues_model.PullRequest{
 		Flow:       issues_model.PullRequestFlowGithub,

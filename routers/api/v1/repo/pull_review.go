@@ -165,18 +165,22 @@ func EditPullReview(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
@@ -245,25 +249,31 @@ func GetPullReviewReactions(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: page
+	//   description: Page number
 	//   in: query
 	//   type: integer
 	// - name: limit
+	//   description: Page size
 	//   in: query
 	//   type: integer
 	// responses:
@@ -330,18 +340,22 @@ func PostPullReviewReaction(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
@@ -371,18 +385,22 @@ func DeletePullReviewReaction(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
@@ -807,7 +825,7 @@ func CreatePullReview(ctx *context.APIContext) {
 	// create review and associate all pending review comments
 	review, _, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, pr.Issue, reviewType, opts.Body, opts.CommitID, nil)
 	if err != nil {
-		if errors.Is(err, pull_service.ErrSubmitReviewOnClosedPR) {
+		if errors.Is(err, pull_service.ErrSubmitReviewOnClosedPR) || issues_model.IsContentEmptyErr(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err.Error())
 		} else {
 			ctx.APIErrorInternal(err)
@@ -899,7 +917,7 @@ func SubmitPullReview(ctx *context.APIContext) {
 	// create review and associate all pending review comments
 	review, _, err = pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, pr.Issue, reviewType, opts.Body, headCommitID, nil)
 	if err != nil {
-		if errors.Is(err, pull_service.ErrSubmitReviewOnClosedPR) {
+		if errors.Is(err, pull_service.ErrSubmitReviewOnClosedPR) || issues_model.IsContentEmptyErr(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err.Error())
 		} else {
 			ctx.APIErrorInternal(err)
@@ -923,10 +941,6 @@ func preparePullReviewType(ctx *context.APIContext, pr *issues_model.PullRequest
 		return -1, true
 	}
 
-	needsBody := true
-	hasBody := len(strings.TrimSpace(body)) > 0
-
-	var reviewType issues_model.ReviewType
 	switch event {
 	case api.ReviewStateApproved:
 		// can not approve your own PR
@@ -934,8 +948,7 @@ func preparePullReviewType(ctx *context.APIContext, pr *issues_model.PullRequest
 			ctx.APIError(http.StatusUnprocessableEntity, "approve your own pull is not allowed")
 			return -1, true
 		}
-		reviewType = issues_model.ReviewTypeApprove
-		needsBody = false
+		return issues_model.ReviewTypeApprove, false
 
 	case api.ReviewStateRequestChanges:
 		// can not reject your own PR
@@ -943,28 +956,17 @@ func preparePullReviewType(ctx *context.APIContext, pr *issues_model.PullRequest
 			ctx.APIError(http.StatusUnprocessableEntity, "reject your own pull is not allowed")
 			return -1, true
 		}
-		reviewType = issues_model.ReviewTypeReject
-		needsBody = !hasComments
-
-	case api.ReviewStateComment:
-		reviewType = issues_model.ReviewTypeComment
-		needsBody = false
-		// if there is no body we need to ensure that there are comments
-		if !hasBody && !hasComments {
-			ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("review event %s requires a body or a comment", event))
+		if strings.TrimSpace(body) == "" && !hasComments {
+			ctx.APIError(http.StatusUnprocessableEntity, "review event REQUEST_CHANGES requires a body or a comment")
 			return -1, true
 		}
+		return issues_model.ReviewTypeReject, false
+
+	case api.ReviewStateComment:
+		return issues_model.ReviewTypeComment, false
 	default:
-		reviewType = issues_model.ReviewTypePending
+		return issues_model.ReviewTypePending, false
 	}
-
-	// reject reviews with empty body if a body is required for this call
-	if needsBody && !hasBody {
-		ctx.APIError(http.StatusUnprocessableEntity, fmt.Sprintf("review event %s requires a body", event))
-		return -1, true
-	}
-
-	return reviewType, false
 }
 
 // prepareSingleReview return review, related pull and false or nil, nil and true if an error happen

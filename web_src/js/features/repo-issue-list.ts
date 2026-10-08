@@ -106,7 +106,7 @@ function initDropdownUserRemoteSearch(el: Element) {
     fullTextSearch: true,
     selectOnKeydown: false,
     action: (_text: string, value: string) => {
-      window.location.assign(actionJumpUrl.replace('{username}', encodeURIComponent(value)));
+      window.location.assign(actionJumpUrl.replace('{username}', () => encodeURIComponent(value)));
     },
   });
 
@@ -177,7 +177,7 @@ async function pinMoveEnd(e: SortableEvent) {
   await POST(url, {data: {id, position: e.newIndex! + 1}});
 }
 
-async function initIssuePinSort() {
+function initIssuePinSort() {
   const pinDiv = document.querySelector<HTMLElement>('#issue-pins');
 
   if (pinDiv === null) return;

@@ -173,10 +173,12 @@ func StackCapabilities(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
@@ -208,17 +210,21 @@ func ListPullRequestStacks(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: page
+	//   description: Page number
 	//   in: query
 	//   type: integer
 	// - name: limit
+	//   description: Page size
 	//   in: query
 	//   type: integer
 	// responses:
@@ -277,10 +283,12 @@ func CreatePullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
@@ -318,14 +326,17 @@ func GetPullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -352,14 +363,17 @@ func AppendPullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -407,14 +421,17 @@ func InsertPullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -468,14 +485,17 @@ func DeletePullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -530,14 +550,17 @@ func RebasePullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -566,14 +589,17 @@ func UpdatePullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -602,14 +628,17 @@ func LandPullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -640,14 +669,17 @@ func SynchronizePullRequestStack(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -695,22 +727,27 @@ func ListPullRequestStackOperations(ctx *context.APIContext) {
 	// summary: List pull request stack operations
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
 	//   format: int64
 	// - name: page
+	//   description: Page number
 	//   in: query
 	//   type: integer
 	// - name: limit
+	//   description: Page size
 	//   in: query
 	//   type: integer
 	// responses:
@@ -763,19 +800,23 @@ func GetPullRequestStackOperation(ctx *context.APIContext) {
 	// summary: Get a pull request stack operation
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
 	//   format: int64
 	// - name: operation
+	//   description: Stack operation ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -802,19 +843,23 @@ func CancelPullRequestStackOperation(ctx *context.APIContext) {
 	// summary: Cancel a pull request stack operation
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
 	//   format: int64
 	// - name: operation
+	//   description: Stack operation ID
 	//   in: path
 	//   required: true
 	//   type: integer
@@ -845,19 +890,23 @@ func RetryPullRequestStackOperation(ctx *context.APIContext) {
 	// summary: Retry a pull request stack operation
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   required: true
 	//   type: string
 	// - name: id
+	//   description: Stack ID
 	//   in: path
 	//   required: true
 	//   type: integer
 	//   format: int64
 	// - name: operation
+	//   description: Stack operation ID
 	//   in: path
 	//   required: true
 	//   type: integer

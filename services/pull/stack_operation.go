@@ -446,7 +446,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err := saveStackJournal(ctx, op, journal); err != nil {
 				return err
 			}
-			mergeErr := mergeWithStackOperation(pr, actor, repo_model.MergeStyle(op.MergeStyle), layer.ExpectedHead, message, false, op.ID, &stackMergePublication{op: op, journal: journal, layer: layer})
+			mergeErr := mergeWithStackOperation(ctx, pr.ID, actor, repo_model.MergeStyle(op.MergeStyle), layer.ExpectedHead, message, false, op.ID, &stackMergePublication{op: op, journal: journal, layer: layer})
 			confirmed, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
 			if err != nil {
 				return err

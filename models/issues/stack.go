@@ -32,7 +32,7 @@ func LockStackMembership(ctx context.Context, pullIDs ...int64) error {
 	pullIDs = slices.Clone(pullIDs)
 	slices.Sort(pullIDs)
 	for _, id := range slices.Compact(pullIDs) {
-		if _, err := db.GetEngine(ctx).ID(id).NoAutoTime().SetExpr("id", "id").Update(new(PullRequest)); err != nil {
+		if _, err := db.GetEngine(ctx).ID(id).NoAutoTime().SetExpr("issue_id", "issue_id").Update(new(PullRequest)); err != nil {
 			return err
 		}
 	}
