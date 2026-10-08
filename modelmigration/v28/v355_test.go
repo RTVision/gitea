@@ -28,8 +28,12 @@ func TestAddReviewIDToReaction(t *testing.T) {
 	if x == nil || t.Failed() {
 		return
 	}
-	_, err := x.Exec("INSERT INTO reaction (id, type, issue_id, comment_id, user_id, original_author_id, original_author, created_unix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 42, "heart", 1, 0, 1, 0, "migrated", 123)
+	reaction := Reaction{Type: "heart", IssueID: 1, UserID: 1, OriginalAuthor: "migrated", CreatedUnix: 123}
+	sess := x.NewSession()
+	defer sess.Close()
+	_, err := sess.NoAutoTime().Insert(&reaction)
 	require.NoError(t, err)
+	require.Positive(t, reaction.ID)
 	require.NoError(t, AddPullRequestStacks(t.Context(), x))
 	require.NoError(t, AddReviewIDToReaction(t.Context(), x))
 	for _, table := range []string{"pull_request_stack", "stack_entry", "stack_branch_claim", "stack_operation"} {
@@ -45,10 +49,10 @@ func TestAddReviewIDToReaction(t *testing.T) {
 		ReviewID       int64
 	}
 	var migrated migratedReaction
-	has, err := x.SQL("SELECT id, original_author, created_unix, review_id FROM reaction WHERE id = ?", 42).Get(&migrated)
+	has, err := x.SQL("SELECT id, original_author, created_unix, review_id FROM reaction WHERE id = ?", reaction.ID).Get(&migrated)
 	require.NoError(t, err)
 	require.True(t, has)
-	require.EqualValues(t, 42, migrated.ID)
+	require.Equal(t, reaction.ID, migrated.ID)
 	require.Equal(t, "migrated", migrated.OriginalAuthor)
 	require.Equal(t, timeutil.TimeStamp(123), migrated.CreatedUnix)
 	require.Zero(t, migrated.ReviewID)
