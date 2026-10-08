@@ -165,18 +165,22 @@ func EditPullReview(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
@@ -245,25 +249,31 @@ func GetPullReviewReactions(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: page
+	//   description: Page number
 	//   in: query
 	//   type: integer
 	// - name: limit
+	//   description: Page size
 	//   in: query
 	//   type: integer
 	// responses:
@@ -330,18 +340,22 @@ func PostPullReviewReaction(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true
@@ -371,18 +385,22 @@ func DeletePullReviewReaction(ctx *context.APIContext) {
 	// - application/json
 	// parameters:
 	// - name: owner
+	//   description: Repository owner
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: repo
+	//   description: Repository name
 	//   in: path
 	//   type: string
 	//   required: true
 	// - name: index
+	//   description: Pull request index
 	//   in: path
 	//   type: integer
 	//   required: true
 	// - name: id
+	//   description: Review ID
 	//   in: path
 	//   type: integer
 	//   required: true

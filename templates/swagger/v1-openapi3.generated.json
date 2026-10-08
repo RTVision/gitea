@@ -30581,6 +30581,7 @@
         "operationId": "repoRevertPullRequest",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -30589,6 +30590,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -30597,6 +30599,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -30869,6 +30872,7 @@
         "operationId": "repoEditPullReview",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -30877,6 +30881,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -30885,6 +30890,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -30893,6 +30899,7 @@
             }
           },
           {
+            "description": "Review ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -31133,6 +31140,7 @@
         "operationId": "repoDeletePullReviewReaction",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -31141,6 +31149,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -31149,6 +31158,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -31157,6 +31167,7 @@
             }
           },
           {
+            "description": "Review ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -31192,6 +31203,7 @@
         "operationId": "repoGetPullReviewReactions",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -31200,6 +31212,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -31208,6 +31221,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -31216,6 +31230,7 @@
             }
           },
           {
+            "description": "Review ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -31224,6 +31239,7 @@
             }
           },
           {
+            "description": "Page number",
             "in": "query",
             "name": "page",
             "schema": {
@@ -31231,6 +31247,7 @@
             }
           },
           {
+            "description": "Page size",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -31255,6 +31272,7 @@
         "operationId": "repoPostPullReviewReaction",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -31263,6 +31281,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -31271,6 +31290,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -31279,6 +31299,7 @@
             }
           },
           {
+            "description": "Review ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -31450,6 +31471,7 @@
         "operationId": "repoGetPullRequestViewedFiles",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -31458,6 +31480,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -31466,6 +31489,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -31492,6 +31516,7 @@
         "operationId": "repoUpdatePullRequestViewedFiles",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -31500,6 +31525,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -31508,6 +31534,7 @@
             }
           },
           {
+            "description": "Pull request index",
             "in": "path",
             "name": "index",
             "required": true,
@@ -32713,6 +32740,7 @@
         "operationId": "repoListPullRequestStacks",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32721,6 +32749,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32729,6 +32758,7 @@
             }
           },
           {
+            "description": "Page number",
             "in": "query",
             "name": "page",
             "schema": {
@@ -32736,6 +32766,7 @@
             }
           },
           {
+            "description": "Page size",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -32760,6 +32791,7 @@
         "operationId": "repoCreatePullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32768,6 +32800,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32809,6 +32842,7 @@
         "operationId": "repoGetStackCapabilities",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32817,6 +32851,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32841,6 +32876,7 @@
         "operationId": "repoDeletePullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32849,6 +32885,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32857,6 +32894,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -32897,6 +32935,7 @@
         "operationId": "repoGetPullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32905,6 +32944,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32913,6 +32953,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -32939,6 +32980,7 @@
         "operationId": "repoAppendPullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -32947,6 +32989,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -32955,6 +32998,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33000,6 +33044,7 @@
         "operationId": "repoInsertPullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33008,6 +33053,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33016,6 +33062,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33061,6 +33108,7 @@
         "operationId": "repoLandPullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33069,6 +33117,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33077,6 +33126,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33119,6 +33169,7 @@
         "operationId": "repoListPullRequestStackOperations",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33127,6 +33178,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33135,6 +33187,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33144,6 +33197,7 @@
             }
           },
           {
+            "description": "Page number",
             "in": "query",
             "name": "page",
             "schema": {
@@ -33151,6 +33205,7 @@
             }
           },
           {
+            "description": "Page size",
             "in": "query",
             "name": "limit",
             "schema": {
@@ -33177,6 +33232,7 @@
         "operationId": "repoGetPullRequestStackOperation",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33185,6 +33241,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33193,6 +33250,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33202,6 +33260,7 @@
             }
           },
           {
+            "description": "Stack operation ID",
             "in": "path",
             "name": "operation",
             "required": true,
@@ -33230,6 +33289,7 @@
         "operationId": "repoCancelPullRequestStackOperation",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33238,6 +33298,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33246,6 +33307,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33255,6 +33317,7 @@
             }
           },
           {
+            "description": "Stack operation ID",
             "in": "path",
             "name": "operation",
             "required": true,
@@ -33286,6 +33349,7 @@
         "operationId": "repoRetryPullRequestStackOperation",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33294,6 +33358,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33302,6 +33367,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33311,6 +33377,7 @@
             }
           },
           {
+            "description": "Stack operation ID",
             "in": "path",
             "name": "operation",
             "required": true,
@@ -33342,6 +33409,7 @@
         "operationId": "repoRebasePullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33350,6 +33418,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33358,6 +33427,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33400,6 +33470,7 @@
         "operationId": "repoSynchronizePullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33408,6 +33479,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33416,6 +33488,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,
@@ -33461,6 +33534,7 @@
         "operationId": "repoUpdatePullRequestStack",
         "parameters": [
           {
+            "description": "Repository owner",
             "in": "path",
             "name": "owner",
             "required": true,
@@ -33469,6 +33543,7 @@
             }
           },
           {
+            "description": "Repository name",
             "in": "path",
             "name": "repo",
             "required": true,
@@ -33477,6 +33552,7 @@
             }
           },
           {
+            "description": "Stack ID",
             "in": "path",
             "name": "id",
             "required": true,

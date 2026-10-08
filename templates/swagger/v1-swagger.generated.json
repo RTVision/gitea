@@ -17460,12 +17460,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -17473,6 +17475,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
@@ -17786,24 +17789,28 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Review ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -17960,35 +17967,41 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Review ID",
             "name": "id",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Page number",
             "name": "page",
             "in": "query"
           },
           {
             "type": "integer",
+            "description": "Page size",
             "name": "limit",
             "in": "query"
           }
@@ -18017,24 +18030,28 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Review ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -18074,24 +18091,28 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Review ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -18248,12 +18269,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -18261,6 +18284,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
@@ -18287,12 +18311,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -18300,6 +18326,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Pull request index",
             "name": "index",
             "in": "path",
             "required": true
@@ -19391,23 +19418,27 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Page number",
             "name": "page",
             "in": "query"
           },
           {
             "type": "integer",
+            "description": "Page size",
             "name": "limit",
             "in": "query"
           }
@@ -19436,12 +19467,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19481,12 +19514,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19512,12 +19547,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19525,6 +19562,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19551,12 +19589,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19564,6 +19604,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19604,12 +19645,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19617,6 +19660,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19662,12 +19706,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19675,6 +19721,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19717,12 +19764,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19730,6 +19779,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19766,12 +19816,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19779,17 +19831,20 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
           },
           {
             "type": "integer",
+            "description": "Page number",
             "name": "page",
             "in": "query"
           },
           {
             "type": "integer",
+            "description": "Page size",
             "name": "limit",
             "in": "query"
           }
@@ -19814,12 +19869,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19827,6 +19884,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19834,6 +19892,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack operation ID",
             "name": "operation",
             "in": "path",
             "required": true
@@ -19859,12 +19918,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19872,6 +19933,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19879,6 +19941,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack operation ID",
             "name": "operation",
             "in": "path",
             "required": true
@@ -19907,12 +19970,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19920,6 +19985,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -19927,6 +19993,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack operation ID",
             "name": "operation",
             "in": "path",
             "required": true
@@ -19958,12 +20025,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -19971,6 +20040,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -20013,12 +20083,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -20026,6 +20098,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
@@ -20068,12 +20141,14 @@
         "parameters": [
           {
             "type": "string",
+            "description": "Repository owner",
             "name": "owner",
             "in": "path",
             "required": true
           },
           {
             "type": "string",
+            "description": "Repository name",
             "name": "repo",
             "in": "path",
             "required": true
@@ -20081,6 +20156,7 @@
           {
             "type": "integer",
             "format": "int64",
+            "description": "Stack ID",
             "name": "id",
             "in": "path",
             "required": true
