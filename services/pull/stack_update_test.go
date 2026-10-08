@@ -103,6 +103,8 @@ func TestStackMergeModeUpdate(t *testing.T) {
 		run("commit", "-m", name)
 	}
 	run("init", "--initial-branch=release")
+	run("config", "user.name", "Stack Test")
+	run("config", "user.email", "stack@example.com")
 	commit("base")
 	run("checkout", "-b", "branch2")
 	commit("lower")

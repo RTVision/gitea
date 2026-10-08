@@ -39,6 +39,14 @@ func IsCodeOwnerFile(f string) bool {
 
 // Get all code owner rules for a given pr + repo combination.
 func getCodeOwnerRules(ctx context.Context, pr *issues_model.PullRequest) ([]*issues_model.CodeOwnerRule, error) {
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		return nil, err
+	}
+	if err := pr.LoadIssue(ctx); err != nil {
+		return nil, err
+	}
+	pr.Issue.Repo = pr.BaseRepo
+
 	repoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
 	if err != nil {
 		return nil, err
