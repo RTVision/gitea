@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -89,7 +90,9 @@ func TestNativeForkStackLanding(t *testing.T) {
 				assert.Equal(t, originalIssueID, unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{ID: comment.ID}).IssueID)
 				assert.Equal(t, 2, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: main.ID}).NumPulls)
 				assert.Equal(t, 0, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: fork.ID}).NumPulls)
-				unittest.AssertExistsAndLoadBean(t, &activities_model.Action{RepoID: main.ID, OpType: activities_model.ActionCreatePullRequest, Content: "2|Upper layer"})
+				var opened []*activities_model.Action // content is TEXT, which MSSQL cannot compare in a condition
+				require.NoError(t, db.GetEngine(t.Context()).Where("repo_id = ? AND op_type = ?", main.ID, activities_model.ActionCreatePullRequest).Find(&opened))
+				assert.True(t, slices.ContainsFunc(opened, func(a *activities_model.Action) bool { return a.Content == "2|Upper layer" }))
 				_, err = git.GetFullCommitID(t.Context(), fork, "refs/pull/1/head")
 				assert.Error(t, err)
 
