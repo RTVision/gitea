@@ -289,10 +289,10 @@ func TestAPICron(t *testing.T) {
 			AddTokenAuth(token)
 		resp := MakeRequest(t, req, http.StatusOK)
 
-		assert.Equal(t, "30", resp.Header().Get("X-Total-Count"))
+		assert.Equal(t, "31", resp.Header().Get("X-Total-Count"))
 
 		crons := DecodeJSON(t, resp, []api.Cron{})
-		assert.Len(t, crons, 30)
+		assert.Len(t, crons, 30) // one default-sized page of the 31 tasks
 	})
 
 	t.Run("Execute", func(t *testing.T) {

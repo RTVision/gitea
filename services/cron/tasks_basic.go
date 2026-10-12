@@ -17,6 +17,7 @@ import (
 	"gitea.dev/services/migrations"
 	mirror_service "gitea.dev/services/mirror"
 	packages_cleanup_service "gitea.dev/services/packages/cleanup"
+	pull_service "gitea.dev/services/pull"
 	repo_service "gitea.dev/services/repository"
 	archiver_service "gitea.dev/services/repository/archiver"
 )
@@ -176,4 +177,15 @@ func initBasicTasks() {
 		registerCleanupPackages()
 	}
 	registerSyncRepoLicenses()
+	registerMoveForkStackLayers()
+}
+
+func registerMoveForkStackLayers() {
+	RegisterTaskFatal("move_fork_stack_layers", &BaseConfig{
+		Enabled:    true,
+		RunAtStart: true,
+		Schedule:   "@midnight",
+	}, func(ctx context.Context, _ *user_model.User, _ *BaseConfig) error {
+		return pull_service.MoveForkStackLayers(ctx)
+	})
 }

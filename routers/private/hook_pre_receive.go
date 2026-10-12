@@ -152,6 +152,16 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		}
 	}
 
+	if !ctx.opts.IsWiki {
+		if mirror, err := issues_model.IsStackMirrorBranch(ctx, repo.ID, branchName); err != nil {
+			ctx.PrivateInternalErrorf("Unable to check stack branch: %v", err)
+			return
+		} else if mirror {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "%s", issues_model.ErrStackMirrorBranch)
+			return
+		}
+	}
+
 	if ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
 		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID, repo.ID); err != nil {
 			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)

@@ -398,6 +398,23 @@ func appendStack(ctx context.Context, client *stackclient.Client, number, revisi
 	return client.AppendStack(ctx, number, revision, pulls)
 }
 
+// bindServerLayers records the numbers of fork layers the server moved into the stack repository.
+func bindServerLayers(state *localstate.State, server *api.PullRequestStack) {
+	for i, entry := range server.Entries {
+		if i >= len(state.Layers) || entry == nil || entry.PullRequest == nil || entry.PullRequest.Head == nil {
+			return
+		}
+		layer := &state.Layers[i]
+		if entry.PullRequest.Head.Ref != layer.Branch {
+			return
+		}
+		layer.PullRequest, layer.RepositoryID = entry.PullRequest.Index, pullRepositoryID(entry.PullRequest)
+		if layer.Repository != "" {
+			layer.Repository = pullRepository(entry.PullRequest)
+		}
+	}
+}
+
 func (a *application) client(state *localstate.State) (*stackclient.Client, error) {
 	remote, err := a.selectedRemote(state)
 	if state != nil && state.UpstreamRemote != "" {
@@ -1143,7 +1160,8 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			if err != nil {
 				return mapAPIError(err)
 			}
-			if pull.Base.Ref != parent {
+			mirrored := i > 0 && pull.Base.Ref == fmt.Sprintf("stack/pr-%d", state.Layers[i-1].PullRequest) // the server's copy of a fork parent
+			if pull.Base.Ref != parent && !mirrored {
 				return fail(3, "restructure_required", "#%d targets %s; unstack and explicitly restructure before changing it to %s", layer.PullRequest, pull.Base.Ref, parent)
 			}
 			continue
@@ -1190,6 +1208,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 		if err != nil {
 			return mapAPIError(err)
 		}
+		bindServerLayers(state, server)
 		state.Stack, state.LastRevision = server.Number, server.Revision
 	} else {
 		server, err := client.GetStack(ctx, stackNumber)
@@ -1205,6 +1224,7 @@ func (a *application) submit(ctx context.Context, args []string) error {
 			if err != nil {
 				return mapAPIError(err)
 			}
+			bindServerLayers(state, server)
 		}
 		state.LastRevision = server.Revision
 	}
@@ -1354,7 +1374,8 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 				baseRepository = pull.Stack.Base.Repository.FullName
 			}
 		}
-		if baseRef != parent || pull.Head == nil || pull.Head.Ref == "" || baseRepository != "" && baseRepository != parentRepository {
+		mirrored := i > 0 && baseRef == fmt.Sprintf("stack/pr-%d", apiPulls[i-1].Index) && baseRepository == client.Owner+"/"+client.Repo
+		if (baseRef != parent && !mirrored) || pull.Head == nil || pull.Head.Ref == "" || !mirrored && baseRepository != "" && baseRepository != parentRepository {
 			return fail(3, "invalid_chain", "#%d does not target %s", number, parent)
 		}
 		stack := int64(0)
@@ -1447,6 +1468,7 @@ func (a *application) adopt(ctx context.Context, args []string) error {
 		if server, err = createStack(ctx, client, *trunk, state.Mode, state.Layers); err != nil {
 			return mapAPIError(err)
 		}
+		bindServerLayers(state, server)
 	}
 	state.Stack, state.LastRevision = server.Number, server.Revision
 	if err := a.store.Save(state); err != nil {
@@ -1513,6 +1535,7 @@ func (a *application) sync(ctx context.Context) error {
 	if err := checkServerMode(state, server); err != nil {
 		return err
 	}
+	bindServerLayers(state, server)
 	landedPulls := make(map[api.PullRequestReference]bool, len(server.Entries))
 	for _, entry := range server.Entries {
 		if entry.PullRequest != nil && entry.LandedSHA != "" {

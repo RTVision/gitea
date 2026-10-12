@@ -619,6 +619,9 @@ func PushToBaseRepo(ctx context.Context, pr *issues_model.PullRequest) error {
 	if err := git.UpdateRef(ctx, pr.BaseRepo, pr.GetGitHeadRefName(), headCommitID); err != nil {
 		return err
 	}
+	if err := syncStackMirror(ctx, pr); err != nil {
+		log.Error("sync stack mirror of %-v: %v", pr, err)
+	}
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil {
 		return err

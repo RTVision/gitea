@@ -156,6 +156,15 @@ func DeleteIssue(ctx context.Context, doer *user_model.User, issue *issues_model
 		return err
 	}
 
+	if issue.IsPull && issue.PullRequest != nil {
+		// dissolving its stacks hands their mirror branches over, so no mirror sync may still be writing them
+		release, err := issues_model.LockPullStackMirrors(ctx, issue.PullRequest.ID)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
+
 	// delete entries in database
 	attachmentPaths, err := deleteIssue(ctx, issue)
 	if err != nil {
@@ -256,6 +265,7 @@ func deleteIssue(ctx context.Context, issue *issues_model.Issue) ([]string, erro
 			&issues_model.IssueDependency{DependencyID: issue.ID},
 			&issues_model.Comment{DependentIssueID: issue.ID},
 			&issues_model.IssuePin{IssueID: issue.ID},
+			&issues_model.IssueRedirect{IssueID: issue.ID},
 		); err != nil {
 			return nil, err
 		}
