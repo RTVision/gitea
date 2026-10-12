@@ -439,6 +439,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(361, "Add AutoMerge merged_commit_id column", v28.AddAutoMergeMergedCommitID),
 		newMigration(362, "Add index on action_run commit_sha", v29.AddActionRunCommitSHAIndex),
 		newMigration(363, "Normalize legacy team authorize values", v29.NormalizeLegacyTeamAuthorize),
+		newMigration(364, "Track previous remember-me token hashes", v29.AddPreviousAuthTokenHash),
 	}
 	return preparedMigrations
 }

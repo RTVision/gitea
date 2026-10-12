@@ -410,7 +410,7 @@ func PullStacks(ctx *context.Context) {
 			continue
 		}
 		if err != nil {
-			ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
+			ctx.ServerError("loadPullStackData", err)
 			return
 		}
 		data = append(data, stackData)
@@ -425,7 +425,7 @@ func PullStacks(ctx *context.Context) {
 func getPullStack(ctx *context.Context) *issues_model.PullRequestStack {
 	stack, err := issues_model.GetStackByID(ctx, ctx.PathParamInt64("id"))
 	if err != nil {
-		ctx.NotFoundOrServerError("GetStackByID", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
+		ctx.ServerError("GetStackByID", err)
 		return nil
 	}
 	if stack.RepoID != ctx.Repo.Repository.ID {
@@ -442,7 +442,7 @@ func PullStack(ctx *context.Context) {
 	}
 	data, err := loadPullStackData(ctx, stack)
 	if err != nil {
-		ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
+		ctx.ServerError("loadPullStackData", err)
 		return
 	}
 	ctx.Data["Title"] = ctx.Tr("repo.pulls.stack_number", stack.ID)
@@ -715,7 +715,7 @@ func PullStackAction(ctx *context.Context) {
 	if action == "retry" || action == "cancel" {
 		op, err := issues_model.GetStackOperation(ctx, ctx.FormInt64("operation"))
 		if err != nil {
-			ctx.NotFoundOrServerError("GetStackOperation", db.IsErrNotExist, err)
+			ctx.ServerError("GetStackOperation", err)
 			return
 		}
 		if op.StackID != stack.ID {
@@ -800,7 +800,7 @@ func PullStackStatus(ctx *context.Context) {
 	}
 	data, err := loadPullStackData(ctx, stack)
 	if err != nil {
-		ctx.NotFoundOrServerError("loadPullStackData", func(err error) bool { return errors.Is(err, issues_model.ErrStackNotExist) }, err)
+		ctx.ServerError("loadPullStackData", err)
 		return
 	}
 	ctx.Data["PullStackData"] = data

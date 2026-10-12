@@ -232,6 +232,15 @@ func TestForkPullMergedTargetDeleted(t *testing.T) {
 	assert.Equal(t, int64(10), pull.MergedRepoID)
 }
 
+func TestPullStackNotFound(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx, _ := contexttest.MockContext(t, "/user2/repo1/pulls/stacks/0")
+	contexttest.LoadRepo(t, ctx, 1)
+	ctx.SetPathParam("id", "0")
+	assert.Nil(t, getPullStack(ctx))
+	assert.Equal(t, http.StatusNotFound, ctx.Resp.WrittenStatus())
+}
+
 func TestForkStackWebCapabilities(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx, _ := contexttest.MockContext(t, "/user12/repo10/pulls/stacks")
@@ -262,6 +271,15 @@ func TestForkStackWebCapabilities(t *testing.T) {
 	retryCtx.Req.Form.Set("operation", strconv.FormatInt(op.ID, 10))
 	PullStackAction(retryCtx)
 	assert.Equal(t, http.StatusForbidden, resp.Code, "retry uses the stored landing kind")
+
+	missingCtx, _ := contexttest.MockContext(t, "/user12/repo10/pulls/stacks")
+	contexttest.LoadUser(t, missingCtx, 13)
+	contexttest.LoadRepo(t, missingCtx, 10)
+	missingCtx.SetPathParam("id", strconv.FormatInt(stack.ID, 10))
+	missingCtx.SetPathParam("action", "retry")
+	missingCtx.Req.Form.Set("operation", "0")
+	PullStackAction(missingCtx)
+	assert.Equal(t, http.StatusNotFound, missingCtx.Resp.WrittenStatus())
 
 	contexttest.LoadUser(t, ctx, 12)
 	contexttest.LoadRepo(t, ctx, 10)
