@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
+	"gitea.dev/modules/git/gitrepo"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
@@ -284,12 +287,21 @@ func TestForkStackMirrorChain(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, outside, kept)
 
-		// a sync whose ref write landed but was never recorded recovers once the fork moves on
+		// a sync whose ref write landed but was never recorded recovers once the fork moves on, even if the
+		// recovering write fails too
 		lowerEntry := unittest.AssertExistsAndLoadBean(t, &issues_model.StackEntry{StackID: stack.Number, PullRequestID: lower.ID})
 		require.NoError(t, git.UpdateRef(t.Context(), main, "refs/heads/stack/pr-1", outside))
 		_, err = db.GetEngine(t.Context()).ID(lowerEntry.ID).Cols("mirror_next_sha").Update(&issues_model.StackEntry{MirrorNextSHA: outside})
 		require.NoError(t, err)
+		refLock := filepath.Join(gitrepo.RepoLocalPath(main), "refs", "heads", "stack", "pr-1.lock")
+		require.NoError(t, os.WriteFile(refLock, nil, 0o644))
 		testCreateFileInBranch(t, actor, fork, createFileInBranchOptions{OldBranch: "lower"}, map[string]string{"lower-fix.txt": "fix\n"})
+		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
+		kept, err = git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-1")
+		require.NoError(t, err)
+		assert.Equal(t, outside, kept)
+		require.NoError(t, os.Remove(refLock))
+		testCreateFileInBranch(t, actor, fork, createFileInBranchOptions{OldBranch: "lower"}, map[string]string{"lower-fix-2.txt": "fix\n"})
 		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
 		lowerHead, err := git.GetFullCommitID(t.Context(), fork, "refs/heads/lower")
 		require.NoError(t, err)

@@ -195,8 +195,9 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 		return fmt.Errorf("mirror %s moved outside the stack from %s to %s", entry.MirrorBranch, entry.MirrorSHA, current)
 	}
 	if current != head {
-		entry.MirrorNextSHA = head
-		if _, err := db.GetEngine(ctx).ID(entry.ID).Cols("mirror_next_sha").Update(entry); err != nil {
+		// the accepted tip becomes the recorded one, so a failed write leaves it owned
+		entry.MirrorSHA, entry.MirrorNextSHA = current, head
+		if _, err := db.GetEngine(ctx).ID(entry.ID).Cols("mirror_sha", "mirror_next_sha").Update(entry); err != nil {
 			return err
 		}
 		if err := writeStackMirror(ctx, repo, pr.HeadRepo, entry.MirrorBranch, current, head, nil); err != nil {

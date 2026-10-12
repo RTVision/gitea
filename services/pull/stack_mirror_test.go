@@ -48,7 +48,7 @@ func TestPruneStackMirrorsKeepsChangedBranches(t *testing.T) {
 	// an unused mirror whose tip the stack did not write is no longer managed but kept
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
 	require.NoError(t, db.Insert(t.Context(), stack))
-	entry := &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 1, Position: 1, MirrorBranch: "stack/pr-98", MirrorSHA: "0123456789012345678901234567890123456789"}
+	entry := &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 1, Position: 1, MirrorBranch: "stack/pr-98", MirrorSHA: "0123456789012345678901234567890123456789", MirrorNextSHA: "1123456789012345678901234567890123456789"}
 	require.NoError(t, db.Insert(t.Context(), entry))
 	pruneStackMirrors(t.Context(), stack, 2)
 
@@ -58,4 +58,5 @@ func TestPruneStackMirrorsKeepsChangedBranches(t *testing.T) {
 	entry = unittest.AssertExistsAndLoadBean(t, &issues_model.StackEntry{ID: entry.ID})
 	assert.Empty(t, entry.MirrorBranch)
 	assert.Empty(t, entry.MirrorSHA)
+	assert.Empty(t, entry.MirrorNextSHA)
 }
