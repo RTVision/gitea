@@ -23,6 +23,8 @@ import (
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
 	notify_service "gitea.dev/services/notify"
+
+	"xorm.io/builder"
 )
 
 type CreateStackOptions struct {
@@ -666,7 +668,7 @@ func Unstack(ctx context.Context, doer *user_model.User, stackID, expectedRevisi
 	if err != nil {
 		return err
 	}
-	release, err := lockStackMirrors(ctx, stack) // a sync waiting on a mirror must not write it after it becomes an ordinary branch
+	release, err := issues_model.LockStackMirrors(ctx, builder.Eq{"stack_entry.stack_id": stack.ID}) // a sync waiting on a mirror must not write it after it becomes an ordinary branch
 	if err != nil {
 		return err
 	}

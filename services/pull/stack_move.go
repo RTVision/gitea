@@ -150,16 +150,15 @@ func finishStackMove(ctx context.Context, move *movedStackPull) error {
 		log.Error("syncCommitDivergence for moved pull request %d: %v", pr.ID, err)
 	}
 	StartPullRequestCheckImmediately(ctx, pr)
-	notify_service.NewPullRequest(ctx, pr, nil)
-	if pr.IsWorkInProgress(ctx) {
-		return nil
-	}
-	reviewNotifiers, err := issue_service.PullRequestCodeOwnersReview(ctx, pr)
-	if err != nil {
-		log.Error("PullRequestCodeOwnersReview for moved pull request %d: %v", pr.ID, err)
-	} else if len(reviewNotifiers) > 0 {
+	// review requests come first, as for a new pull request, and a failure keeps the move pending before anyone is notified
+	if !pr.IsWorkInProgress(ctx) {
+		reviewNotifiers, err := issue_service.PullRequestCodeOwnersReview(ctx, pr)
+		if err != nil {
+			return err
+		}
 		issue_service.ReviewRequestNotify(ctx, pr.Issue, pr.Issue.Poster, reviewNotifiers)
 	}
+	notify_service.NewPullRequest(ctx, pr, nil)
 	return nil
 }
 

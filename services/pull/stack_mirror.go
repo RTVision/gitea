@@ -5,6 +5,7 @@ package pull
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -31,10 +32,6 @@ func stackChildBase(stackRepoID int64, parent *issues_model.PullRequest) string 
 		return parent.HeadBranch
 	}
 	return stackMirrorBranch(parent.Index)
-}
-
-func stackMirrorLockKey(repoID int64, branch string) string {
-	return fmt.Sprintf("stack_mirror_%d_%s", repoID, branch)
 }
 
 // stackMirrorWrite records a mirror ref change so a rolled back transaction can undo it.
@@ -157,7 +154,7 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 	if err != nil || !has || entry.MirrorBranch == "" {
 		return err
 	}
-	releaser, err := globallock.Lock(ctx, stackMirrorLockKey(stack.RepoID, entry.MirrorBranch))
+	releaser, err := globallock.Lock(ctx, issues_model.StackMirrorLockKey(stack.RepoID, entry.MirrorBranch))
 	if err != nil {
 		return err
 	}
@@ -231,17 +228,31 @@ func pruneStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack
 		if entry.MirrorBranch == "" {
 			continue
 		}
-		if err := globallock.LockAndDo(ctx, stackMirrorLockKey(repo.ID, entry.MirrorBranch), func(ctx context.Context) error {
+		branch := entry.MirrorBranch
+		if err := globallock.LockAndDo(ctx, issues_model.StackMirrorLockKey(repo.ID, branch), func(ctx context.Context) error {
+			// unstacking or deleting the stack hands the branch over, so it is no longer ours to delete
+			current, err := issues_model.GetStackByID(ctx, stack.ID)
+			if errors.Is(err, issues_model.ErrStackNotExist) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+			if current.State != issues_model.StackStateOpen && current.State != issues_model.StackStateComplete {
+				return nil
+			}
+			if has, err := db.GetEngine(ctx).ID(entry.ID).Get(entry); err != nil || !has || entry.MirrorBranch != branch {
+				return err
+			}
 			targets, err := issues_model.GetUnmergedPullRequestsByBaseInfo(ctx, repo.ID, entry.MirrorBranch)
 			if err != nil || len(targets) > 0 {
 				return err
 			}
-			current, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+entry.MirrorBranch)
+			tip, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+entry.MirrorBranch)
 			if err != nil && !git.IsErrNotExist(err) {
 				return err
 			}
-			if current != "" {
-				if err := updateStackMirrorRef(ctx, repo, entry.MirrorBranch, current, ""); err != nil {
+			if tip != "" {
+				if err := updateStackMirrorRef(ctx, repo, entry.MirrorBranch, tip, ""); err != nil {
 					return err
 				}
 			}
@@ -252,35 +263,9 @@ func pruneStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack
 			_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch").Update(entry)
 			return err
 		}); err != nil {
-			log.Error("prune stack mirror %s: %v", entry.MirrorBranch, err)
+			log.Error("prune stack mirror %s: %v", branch, err)
 		}
 	}
-}
-
-// lockStackMirrors holds every mirror lock of a stack, taken before a transaction that releases the mirrors.
-func lockStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack) (func(), error) {
-	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
-	if err != nil {
-		return nil, err
-	}
-	var releasers []globallock.ReleaseFunc
-	release := func() {
-		for _, releaser := range slices.Backward(releasers) {
-			releaser()
-		}
-	}
-	for _, entry := range entries {
-		if entry.MirrorBranch == "" {
-			continue
-		}
-		releaser, err := globallock.Lock(ctx, stackMirrorLockKey(stack.RepoID, entry.MirrorBranch))
-		if err != nil {
-			release()
-			return nil, err
-		}
-		releasers = append(releasers, releaser)
-	}
-	return release, nil
 }
 
 // ReconcileStackMirrors catches up every mirror of open stacks, recovering syncs interrupted by a restart.
