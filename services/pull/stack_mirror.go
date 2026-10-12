@@ -169,7 +169,7 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 	}
 	defer releaser()
 	// pruning or unstacking may have released the mirror while this waited for the lock
-	if has, err = db.GetEngine(ctx).ID(entry.ID).Get(entry); err != nil || !has || entry.MirrorBranch == "" {
+	if has, err = db.GetEngine(ctx).ID(entry.ID).NoAutoCondition().Get(entry); err != nil || !has || entry.MirrorBranch == "" {
 		return err
 	}
 	if stack, err = issues_model.GetStackByID(ctx, stack.ID); err != nil || stack.State != issues_model.StackStateOpen {
@@ -266,7 +266,7 @@ func pruneStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack
 			if current.State != issues_model.StackStateOpen && current.State != issues_model.StackStateComplete {
 				return nil
 			}
-			if has, err := db.GetEngine(ctx).ID(entry.ID).Get(entry); err != nil || !has || entry.MirrorBranch != branch {
+			if has, err := db.GetEngine(ctx).ID(entry.ID).NoAutoCondition().Get(entry); err != nil || !has || entry.MirrorBranch != branch {
 				return err
 			}
 			targets, err := issues_model.GetUnmergedPullRequestsByBaseInfo(ctx, repo.ID, entry.MirrorBranch)
