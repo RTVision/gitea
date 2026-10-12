@@ -72,6 +72,7 @@ type StackEntry struct {
 	OldParentSHA        string `xorm:"VARCHAR(64)"`
 	HeadSHA             string `xorm:"VARCHAR(64)"`
 	LandedCommitSHA     string `xorm:"VARCHAR(64)"`
+	MirrorBranch        string // stack repository branch tracking a fork head so the layer above can target it
 }
 
 // StackBranchClaim separates current ownership from immutable membership history.

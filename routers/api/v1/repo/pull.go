@@ -13,6 +13,7 @@ import (
 
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
+	perm_model "gitea.dev/models/perm"
 	access_model "gitea.dev/models/perm/access"
 	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
@@ -207,7 +208,9 @@ func GetPullRequest(ctx *context.APIContext) {
 	pr, err := issues_model.GetPullRequestByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
 	if err != nil {
 		if issues_model.IsErrPullRequestNotExist(err) {
-			ctx.APIErrorNotFound()
+			if !redirectMovedAPIPull(ctx) {
+				ctx.APIErrorNotFound()
+			}
 		} else {
 			ctx.APIErrorInternal(err)
 		}
@@ -1681,4 +1684,24 @@ func GetPullRequestFiles(ctx *context.APIContext) {
 	ctx.AppendAccessControlExposeHeaders("X-Page", "X-PerPage", "X-PageCount", "X-HasMore")
 
 	ctx.JSON(http.StatusOK, &apiFiles)
+}
+
+// redirectMovedAPIPull points a pull request moved to another repository at its new API location.
+func redirectMovedAPIPull(ctx *context.APIContext) bool {
+	issue, err := issues_model.GetRedirectedIssue(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
+	if err != nil || !issue.IsPull {
+		return false
+	}
+	if err := issue.LoadRepo(ctx); err != nil {
+		return false
+	}
+	if allowed, err := access_model.HasAccessUnit(ctx, ctx.Doer, issue.Repo, unit.TypePullRequests, perm_model.AccessModeRead); err != nil || !allowed {
+		return false
+	}
+	location := fmt.Sprintf("%s/pulls/%d", issue.Repo.APIURL(ctx), issue.Index)
+	if ctx.Req.URL.RawQuery != "" {
+		location += "?" + ctx.Req.URL.RawQuery
+	}
+	ctx.Redirect(location, http.StatusMovedPermanently)
+	return true
 }

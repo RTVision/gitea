@@ -116,7 +116,9 @@ func getPullInfo(ctx *context.Context) (issue *issues_model.Issue, ok bool) {
 	issue, err := issues_model.GetIssueByIndex(ctx, ctx.Repo.Repository.ID, ctx.PathParamInt64("index"))
 	if err != nil {
 		if issues_model.IsErrIssueNotExist(err) {
-			ctx.NotFound(err)
+			if !redirectMovedIssue(ctx) {
+				ctx.NotFound(err)
+			}
 		} else {
 			ctx.ServerError("GetIssueByIndex", err)
 		}

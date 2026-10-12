@@ -789,9 +789,10 @@ func TestForkStackWorkflow(t *testing.T) {
 	forkRepo := &api.Repository{ID: 20, FullName: "owner/repo"}
 	bottom := &api.PullRequest{Index: 1, Base: &api.PRBranchInfo{Ref: "main", Sha: trunk, Repository: mainRepo}, Head: &api.PRBranchInfo{Ref: "layer-1", Sha: lower, Repository: forkRepo}}
 	top := &api.PullRequest{Index: 1, Base: &api.PRBranchInfo{Ref: "layer-1", Sha: lower, Repository: forkRepo}, Head: &api.PRBranchInfo{Ref: "layer-2", Sha: upper, Repository: forkRepo}}
+	moved := &api.PullRequest{Index: 2, Base: &api.PRBranchInfo{Ref: "stack/pr-1", Sha: lower, Repository: mainRepo}, Head: top.Head} // adoption moves the fork layer
 	stack := &api.PullRequestStack{Number: 5, Trunk: "main", Repository: mainRepo, State: "open", Mode: api.StackModeRebase, Revision: 1, Entries: []*api.PullRequestStackEntry{
 		{Position: 1, PullRequest: bottom, HeadSHA: lower, ParentSHA: trunk},
-		{Position: 2, PullRequest: top, HeadSHA: upper, ParentSHA: lower},
+		{Position: 2, PullRequest: moved, HeadSHA: upper, ParentSHA: lower},
 	}}
 	createdPulls := 0
 	originalTransport := http.DefaultTransport
@@ -816,8 +817,8 @@ func TestForkStackWorkflow(t *testing.T) {
 			}
 		case "GET /api/v1/repos/main/repo/pulls/1":
 			result = bottom
-		case "GET /api/v1/repos/owner/repo/pulls/1":
-			result = top
+		case "GET /api/v1/repos/main/repo/pulls/2":
+			result = moved
 		case "POST /api/v1/repos/main/repo/stacks":
 			var option api.CreatePullRequestStackOption
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&option))
@@ -831,7 +832,7 @@ func TestForkStackWorkflow(t *testing.T) {
 		case "POST /api/v1/repos/main/repo/stacks/5/sync":
 			var option api.SynchronizePullRequestStackOption
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&option))
-			assert.Equal(t, []api.PullRequestStackHead{{RepositoryID: 10, PullRequest: 1, HeadSHA: lower, ParentSHA: trunk}, {RepositoryID: 20, PullRequest: 1, HeadSHA: upper, ParentSHA: lower}}, option.Heads)
+			assert.Equal(t, []api.PullRequestStackHead{{RepositoryID: 10, PullRequest: 1, HeadSHA: lower, ParentSHA: trunk}, {RepositoryID: 10, PullRequest: 2, HeadSHA: upper, ParentSHA: lower}}, option.Heads)
 			result = stack
 		default:
 			t.Fatalf("unexpected API request %s %s", r.Method, r.URL.Path)
@@ -852,10 +853,9 @@ func TestForkStackWorkflow(t *testing.T) {
 	assert.Equal(t, "origin", state.Remote)
 	assert.Equal(t, "upstream", state.UpstreamRemote)
 	assert.Equal(t, "main/repo", state.Layers[0].Repository)
-	assert.Equal(t, "owner/repo", state.Layers[1].Repository)
-	_, err = layerIndex(state, "#1")
-	requireCommandError(t, err, 2, "usage")
-	index, err := layerIndex(state, "owner/repo#1")
+	assert.Equal(t, "main/repo", state.Layers[1].Repository)
+	assert.Equal(t, int64(2), state.Layers[1].PullRequest)
+	index, err := layerIndex(state, "main/repo#2")
 	require.NoError(t, err)
 	assert.Equal(t, 1, index)
 	require.NoError(t, app.submit(t.Context(), nil))
@@ -864,7 +864,7 @@ func TestForkStackWorkflow(t *testing.T) {
 	mainHead := gitLine(t, work, "commit-tree", lower+"^{tree}", "-p", trunk, "-m", "landed bottom")
 	runGit(t, work, "push", "upstream", mainHead+":refs/heads/main")
 	stack.Entries[0].LandedSHA = mainHead
-	top.Stack = &api.PullRequestStackRef{Number: 5, Size: 2, Position: 2, Mode: api.StackModeRebase, Repository: mainRepo, Base: &api.PullRequestStackBase{Ref: "main", Sha: mainHead, Repository: mainRepo}}
+	moved.Stack = &api.PullRequestStackRef{Number: 5, Size: 2, Position: 2, Mode: api.StackModeRebase, Repository: mainRepo, Base: &api.PullRequestStackBase{Ref: "main", Sha: mainHead, Repository: mainRepo}}
 	require.NoError(t, app.sync(t.Context()))
 	state, err = store.Load()
 	require.NoError(t, err)
@@ -872,11 +872,11 @@ func TestForkStackWorkflow(t *testing.T) {
 	assert.Equal(t, mainHead, state.Layers[0].LandedSHA)
 	assert.Empty(t, state.Layers[1].LandedSHA)
 	assert.Equal(t, trunk, gitLine(t, work, "rev-parse", "refs/remotes/origin/main"))
-	require.NoError(t, app.adopt(t.Context(), []string{"--remote", "origin", "--upstream", "upstream", "--trunk", "main", "--prs", "owner/repo#1"}))
+	require.NoError(t, app.adopt(t.Context(), []string{"--remote", "origin", "--upstream", "upstream", "--trunk", "main", "--prs", "main/repo#2"}))
 	state, err = store.Load()
 	require.NoError(t, err)
 	require.Len(t, state.Layers, 2)
 	assert.Equal(t, int64(10), state.Layers[0].RepositoryID)
-	assert.Equal(t, int64(20), state.Layers[1].RepositoryID)
+	assert.Equal(t, int64(10), state.Layers[1].RepositoryID)
 	assert.Equal(t, lower, state.Layers[1].ParentSHA)
 }

@@ -39,11 +39,12 @@ gitea-stack init --remote origin --upstream upstream --trunk main feat/api feat/
 gitea-stack submit
 ```
 
-The first PR targets the main repository's trunk. Later PRs belong to the fork
-and target the preceding source branch. The stack belongs to the main repository;
-landing publishes each layer into its trunk while retaining the fork PR's number,
-discussion and immediate base. `sync` fetches the trunk from `upstream` and source
-branches from `origin`; `push` publishes source branches only to `origin`.
+The first PR targets the main repository's trunk. Later PRs are opened in the fork
+against the preceding source branch, and submitting moves them into the main
+repository, where they target a mirror of the preceding layer. The local state
+records their new numbers. Landing publishes each layer into the main repository's
+trunk. `sync` fetches the trunk from `upstream` and source branches from `origin`;
+`push` publishes source branches only to `origin`.
 
 A contributor can manage a stack when they authored every layer and can push to
 every fork source branch. Landing requires merge permission on the main

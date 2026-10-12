@@ -440,6 +440,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(362, "Add index on action_run commit_sha", v29.AddActionRunCommitSHAIndex),
 		newMigration(363, "Normalize legacy team authorize values", v29.NormalizeLegacyTeamAuthorize),
 		newMigration(364, "Track previous remember-me token hashes", v29.AddPreviousAuthTokenHash),
+		newMigration(365, "Move fork stack layers into the stack repository", v29.AddStackMirrorBranchAndIssueRedirect),
 	}
 	return preparedMigrations
 }

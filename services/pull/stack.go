@@ -84,7 +84,7 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 	}
 	parentRepoID := repo.ID
 	var sourceRepoID int64
-	parentBranch := trunk
+	parentBranch, childBase := trunk, trunk
 	var parentID, parentIndex int64
 	seenIDs := map[int64]bool{}
 	seenBranches := map[string]bool{issues_model.StackBranchKey(repo.ID, trunk): true}
@@ -97,10 +97,11 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		if err := pr.LoadIssue(ctx); err != nil {
 			return checks[:i], err
 		}
-		if id == retargetID && pr.BaseRepoID == parentRepoID {
-			pr.BaseBranch = parentBranch
+		if id == retargetID && (pr.BaseRepoID == parentRepoID || pr.BaseRepoID == repo.ID) {
+			pr.BaseRepoID, pr.BaseBranch = parentRepoID, parentBranch
 		}
-		baseMatches := pr.BaseRepoID == parentRepoID && pr.BaseBranch == parentBranch
+		// a layer in the stack repository targets its fork parent through the parent's mirror branch
+		baseMatches := (pr.BaseRepoID == parentRepoID && pr.BaseBranch == parentBranch) || (pr.BaseRepoID == repo.ID && pr.BaseBranch == childBase)
 		if i == 0 && !baseMatches {
 			member, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 			if err != nil {
@@ -124,7 +125,7 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 						if err != nil {
 							return checks[:i], err
 						}
-						baseMatches = mergedRepo.ID == repo.ID && mergedBranch == trunk && pr.BaseRepoID == parent.HeadRepoID && pr.BaseBranch == parent.HeadBranch
+						baseMatches = mergedRepo.ID == repo.ID && mergedBranch == trunk && ((pr.BaseRepoID == parent.HeadRepoID && pr.BaseBranch == parent.HeadBranch) || (pr.BaseRepoID == repo.ID && pr.BaseBranch == stackChildBase(repo.ID, parent)))
 					}
 				}
 			}
@@ -183,6 +184,10 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		seenIDs[id], seenBranches[branchKey] = true, true
 		parentRepoID = pr.HeadRepoID
 		parentID, parentIndex, parentBranch, parentSHA = id, pr.Index, pr.HeadBranch, headSHA
+		childBase = ""
+		if pr.BaseRepoID == repo.ID {
+			childBase = stackChildBase(repo.ID, pr)
+		}
 	}
 	return checks, nil
 }
@@ -294,6 +299,7 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 		return nil, fmt.Errorf("%w: unknown stack mode %q", issues_model.ErrInvalidStack, opts.Mode)
 	}
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, Mode: opts.Mode, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
+	var moved []*movedStackPull
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, opts.PullRequestIDs...); err != nil {
 			return err
@@ -311,11 +317,16 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 		if _, err = db.GetEngine(ctx).Insert(stack); err != nil {
 			return err
 		}
-		return insertStackEntries(ctx, stack, entries)
+		if err = insertStackEntries(ctx, stack, entries); err != nil {
+			return err
+		}
+		moved, err = moveStackLayers(ctx, doer, repo, stack)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
+	finishStackMoves(ctx, moved)
 	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
@@ -328,6 +339,7 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 		return nil, issues_model.ErrInvalidStack
 	}
 	var stack *issues_model.PullRequestStack
+	var moved []*movedStackPull
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, pullIDs...); err != nil {
 			return err
@@ -381,11 +393,13 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 			return err
 		}
 		stack.Revision = expectedRevision + 1
-		return nil
+		moved, err = moveStackLayers(ctx, doer, repo, stack)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
+	finishStackMoves(ctx, moved)
 	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
@@ -405,7 +419,7 @@ func stackInsertPoint(ctx context.Context, stack *issues_model.PullRequestStack,
 		if at < 0 && pr.BaseRepoID == stack.RepoID && pr.BaseBranch == stack.TrunkBranch {
 			at = i
 		}
-		if layers[i].HeadRepoID == pr.BaseRepoID && layers[i].HeadBranch == pr.BaseBranch {
+		if (layers[i].HeadRepoID == pr.BaseRepoID && layers[i].HeadBranch == pr.BaseBranch) || (layers[i].BaseRepoID == stack.RepoID && pr.BaseRepoID == stack.RepoID && pr.BaseBranch == stackChildBase(stack.RepoID, layers[i])) {
 			at = i + 1
 		}
 	}
@@ -460,6 +474,7 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 	}
 	var above *issues_model.PullRequest
 	var oldBase string
+	var moved []*movedStackPull
 	err = db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, pullID); err != nil {
 			return err
@@ -518,15 +533,6 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 		if err != nil {
 			return err
 		}
-		if above != nil {
-			if above.BaseRepoID != pr.HeadRepoID {
-				return fmt.Errorf("%w: inserting this layer would change the next PR's repository", issues_model.ErrInvalidStack)
-			}
-			oldBase = above.BaseBranch
-			if err = changeTargetBranchLocked(ctx, above, doer, pr.HeadBranch); err != nil {
-				return err
-			}
-		}
 		position := entries[len(entries)-1].Position + 1
 		if above != nil {
 			position = entries[at].Position
@@ -546,14 +552,28 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 				return err
 			}
 		}
+		if moved, err = moveStackLayers(ctx, doer, repo, stack); err != nil {
+			return err
+		}
+		if above != nil {
+			if pr, err = issues_model.GetPullRequestByID(ctx, pullID); err != nil {
+				return err
+			}
+			oldBase = above.BaseBranch
+			if err = changeTargetBranchLocked(ctx, above, doer, stackChildBase(repo.ID, pr)); err != nil {
+				return err
+			}
+		}
 		stack.Revision = expectedRevision + 1
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	finishStackMoves(ctx, moved)
 	if above != nil {
 		notify_service.PullRequestChangeTargetBranch(ctx, doer, above, oldBase)
+		pruneStackMirrors(ctx, stack, doer.ID)
 	}
 	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
@@ -580,6 +600,9 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 		}
 		if !layer.HasMerged {
 			anchors[issues_model.StackBranchKey(layer.HeadRepoID, layer.HeadBranch)] = layer
+			if layer.BaseRepoID == stack.RepoID && layer.HeadRepoID != stack.RepoID {
+				anchors[issues_model.StackBranchKey(stack.RepoID, stackChildBase(stack.RepoID, layer))] = layer
+			}
 			bottom = cmp.Or(bottom, layer)
 		}
 	}
@@ -588,7 +611,7 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 	}
 	branches := []string{stack.TrunkBranch}
 	for _, layer := range anchors {
-		branches = append(branches, layer.HeadBranch)
+		branches = append(branches, layer.HeadBranch, stackChildBase(stack.RepoID, layer))
 	}
 	pulls, err := issues_model.FindStackInsertCandidatePulls(ctx, stack.RepoID, branches, limit)
 	if err != nil || len(pulls) == 0 {

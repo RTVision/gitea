@@ -501,6 +501,7 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				return err
 			}
 			cleanupStackCandidates(ctx, repo, op.ID)
+			pruneStackMirrors(ctx, stack, actor.ID)
 			return nil
 
 		default:

@@ -42,10 +42,26 @@ func CheckStackBranchMutation(ctx context.Context, repoID int64, branch string) 
 			return err
 		}
 	}
+	if !used {
+		used, err = IsStackMirrorBranch(ctx, repoID, branch)
+		if err != nil {
+			return err
+		}
+	}
 	if used {
 		return ErrBranchInStack
 	}
 	return nil
+}
+
+var ErrStackMirrorBranch = util.ErrorWrap(util.ErrPermissionDenied, "branch mirrors a fork layer of an open pull request stack; push to the layer's source branch instead")
+
+// IsStackMirrorBranch reports whether an open stack maintains the branch as a copy of a fork layer's head.
+func IsStackMirrorBranch(ctx context.Context, repoID int64, branch string) (bool, error) {
+	return db.GetEngine(ctx).Table("stack_entry").
+		Join("INNER", "pull_request_stack", "pull_request_stack.id = stack_entry.stack_id").
+		Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ? AND stack_entry.mirror_branch = ?", repoID, StackStateOpen, branch).
+		Exist(new(StackEntry))
 }
 
 // OpenStackLayer locates a layer of an open stack.

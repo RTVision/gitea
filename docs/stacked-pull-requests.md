@@ -2,9 +2,10 @@
 
 A stack is an ordered chain of pull requests owned by the repository containing
 its trunk. Source branches can live in that repository or in one direct fork with
-the same visibility. In the fork workflow, the first PR targets the main repository;
-later PRs belong to the fork and target the preceding source branch. Each layer
-lands into the main repository's trunk. The trunk can be any repository branch.
+the same visibility. In the fork workflow, the first PR targets the main repository
+and later PRs are opened in the fork against the preceding source branch; joining a
+stack moves them into the main repository. Each layer lands into the main
+repository's trunk. The trunk can be any repository branch.
 
 Each pull request retains its own discussion, reviews and diff. Required reviews,
 status checks, protected-file rules and CODEOWNERS are evaluated against the
@@ -51,12 +52,27 @@ in. Source branches from several repositories, duplicate membership, multiple op
 pull requests sharing a head branch, and already scheduled ordinary auto-merges
 cannot be adopted.
 
-Fork PRs retain their repository, number, discussion and immediate base after
-lower layers land. The stack records the main repository's trunk as their effective
-landing target. Merged PR payloads expose `merged_repo_id` and `merged_branch` so
-clients can locate the published commit. All source rewrites still require
-permission on the fork branch; write access to the main repository does not grant
-write access to the fork.
+A pull request opened in the fork moves into the main repository when it is adopted,
+appended or inserted, so the main repository's workflows, webhooks, CODEOWNERS and
+pull request list treat it like any other pull request from a fork. It keeps its
+discussion, reviews and attachments but receives a new number; the old fork URL
+redirects to it. Labels, milestones, projects and pins of the fork are dropped.
+Moving notifies the main repository as if the pull request had just been opened.
+
+A pull request based on a fork layer needs a base branch in the main repository, so
+the stack keeps a mirror of that layer's head named `stack/pr-<number>`. Mirrors
+follow pushes to the fork branch without triggering push workflows or webhooks,
+reject direct pushes, and are deleted once no open pull request targets them. After
+a layer lands, the layer above is retargeted onto the trunk. Unstacking leaves
+mirrors as ordinary branches that no longer follow the fork; adopting the chain
+again resumes them.
+
+Fork layers merged before this behaviour keep their fork repository and number, and
+their payloads expose `merged_repo_id` and `merged_branch` so clients can locate the
+published commit. Open fork layers of existing stacks are moved by the
+`move_fork_stack_layers` cron task, which runs at startup. All source rewrites still
+require permission on the fork branch; write access to the main repository does not
+grant write access to the fork.
 
 Contributors without write access to the main repository can create, extend,
 synchronize, rebase, update and unstack their own fork layers. They must be the
