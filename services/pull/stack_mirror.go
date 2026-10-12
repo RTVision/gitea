@@ -101,10 +101,10 @@ func ensureStackMirror(ctx context.Context, repo *repo_model.Repository, entry *
 		return err
 	}
 	if old != "" {
-		// only an unstacked stack's own mirror of this layer may be taken back; any other branch belongs to someone else
+		// only an unstacked stack's own, untouched mirror of this layer may be taken back; any other branch belongs to someone else
 		owned, err := db.GetEngine(ctx).Table("stack_entry").
 			Join("INNER", "pull_request_stack", "pull_request_stack.id = stack_entry.stack_id").
-			Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ? AND stack_entry.pull_request_id = ? AND stack_entry.mirror_branch = ?", repo.ID, issues_model.StackStateUnstacked, pr.ID, branch).
+			Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ? AND stack_entry.pull_request_id = ? AND stack_entry.mirror_branch = ? AND stack_entry.mirror_sha = ?", repo.ID, issues_model.StackStateUnstacked, pr.ID, branch, old).
 			Exist(new(issues_model.StackEntry))
 		if err != nil {
 			return err
@@ -123,8 +123,8 @@ func ensureStackMirror(ctx context.Context, repo *repo_model.Repository, entry *
 	if err := writeStackMirror(ctx, repo, pr.HeadRepo, branch, old, head, doerID, moves); err != nil {
 		return err
 	}
-	entry.MirrorBranch = branch
-	_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch").Update(entry)
+	entry.MirrorBranch, entry.MirrorSHA = branch, head
+	_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch", "mirror_sha").Update(entry)
 	return err
 }
 
@@ -181,10 +181,19 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 	if err != nil && !git.IsErrNotExist(err) {
 		return err
 	}
-	if current == head {
+	if current != head {
+		// the stack only moves the tip it last wrote, so a branch released and then changed by someone else is never overwritten
+		if current != entry.MirrorSHA {
+			return fmt.Errorf("mirror %s moved outside the stack from %s to %s", entry.MirrorBranch, entry.MirrorSHA, current)
+		}
+		if err := writeStackMirror(ctx, repo, pr.HeadRepo, entry.MirrorBranch, current, head, pr.HeadRepo.OwnerID, nil); err != nil {
+			return err
+		}
+	} else if entry.MirrorSHA == head {
 		return nil
 	}
-	if err := writeStackMirror(ctx, repo, pr.HeadRepo, entry.MirrorBranch, current, head, pr.HeadRepo.OwnerID, nil); err != nil {
+	entry.MirrorSHA = head
+	if _, err := db.GetEngine(ctx).ID(entry.ID).Cols("mirror_sha").Update(entry); err != nil {
 		return err
 	}
 	AddTestPullRequestTask(TestPullRequestOptions{RepoID: repo.ID, Branch: entry.MirrorBranch})
@@ -251,16 +260,17 @@ func pruneStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack
 			if err != nil && !git.IsErrNotExist(err) {
 				return err
 			}
-			if tip != "" {
+			// a tip the stack did not write belongs to someone else; stop managing the branch but keep it
+			if tip != "" && tip == entry.MirrorSHA {
 				if err := updateStackMirrorRef(ctx, repo, entry.MirrorBranch, tip, ""); err != nil {
 					return err
 				}
+				if err := git_model.MarkBranchAsDeleted(ctx, repo.ID, entry.MirrorBranch, doerID); err != nil && !git_model.IsErrBranchNotExist(err) {
+					return err
+				}
 			}
-			if err := git_model.MarkBranchAsDeleted(ctx, repo.ID, entry.MirrorBranch, doerID); err != nil && !git_model.IsErrBranchNotExist(err) {
-				return err
-			}
-			entry.MirrorBranch = ""
-			_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch").Update(entry)
+			entry.MirrorBranch, entry.MirrorSHA = "", ""
+			_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch", "mirror_sha").Update(entry)
 			return err
 		}); err != nil {
 			log.Error("prune stack mirror %s: %v", branch, err)

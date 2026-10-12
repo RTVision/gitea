@@ -273,5 +273,15 @@ func TestForkStackMirrorChain(t *testing.T) {
 		mirror, err := git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-4")
 		require.NoError(t, err)
 		assert.Equal(t, insertedHead, mirror)
+
+		// a mirror changed outside the stack, as after it was released, is never overwritten by a later sync
+		outside, err := git.GetFullCommitID(t.Context(), main, "refs/heads/main")
+		require.NoError(t, err)
+		require.NoError(t, git.UpdateRef(t.Context(), main, "refs/heads/stack/pr-2", outside))
+		testCreateFileInBranch(t, actor, fork, createFileInBranchOptions{OldBranch: "mid"}, map[string]string{"mid-fix.txt": "fix\n"})
+		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
+		kept, err = git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-2")
+		require.NoError(t, err)
+		assert.Equal(t, outside, kept)
 	})
 }

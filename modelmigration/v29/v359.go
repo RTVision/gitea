@@ -14,6 +14,7 @@ import (
 func AddStackMirrorBranchAndIssueRedirect(_ context.Context, x base.EngineMigration) error {
 	type StackEntry struct {
 		MirrorBranch string
+		MirrorSHA    string `xorm:"VARCHAR(64)"`
 	}
 	type IssueRedirect struct {
 		ID      int64 `xorm:"pk autoincr"`

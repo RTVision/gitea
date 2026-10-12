@@ -27,7 +27,7 @@ func TestPruneStackMirrorsSkipsReleasedBranches(t *testing.T) {
 	// an unstacked stack's mirror is an ordinary branch nobody targets, which pruning must leave alone
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: "master", State: issues_model.StackStateUnstacked, Revision: 1}
 	require.NoError(t, db.Insert(t.Context(), stack))
-	entry := &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 1, Position: 1, MirrorBranch: "stack/pr-99"}
+	entry := &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 1, Position: 1, MirrorBranch: "stack/pr-99", MirrorSHA: tip}
 	require.NoError(t, db.Insert(t.Context(), entry))
 	pruneStackMirrors(t.Context(), stack, 2)
 
