@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"gitea.dev/models/db"
 	git_model "gitea.dev/models/git"
@@ -58,12 +59,16 @@ func updateStackMirrorRef(ctx context.Context, repo *repo_model.Repository, bran
 }
 
 // writeStackMirror points a mirror branch at commit without push hooks, so it triggers no workflows or webhooks.
-func writeStackMirror(ctx context.Context, repo, headRepo *repo_model.Repository, branch, old, commit string, doerID int64) error {
+// A non-nil moves records the ref change as soon as it lands, so a rollback undoes it even if a later step fails.
+func writeStackMirror(ctx context.Context, repo, headRepo *repo_model.Repository, branch, old, commit string, doerID int64, moves *stackMoves) error {
 	if err := git.FetchRemoteTempCommit(ctx, repo, headRepo, commit); err != nil {
 		return err
 	}
 	if err := updateStackMirrorRef(ctx, repo, branch, old, commit); err != nil {
 		return err
+	}
+	if moves != nil {
+		moves.mirrors = append(moves.mirrors, &stackMirrorWrite{repo: repo, branch: branch, old: old, commit: commit})
 	}
 	gitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, repo)
 	if err != nil {
@@ -118,10 +123,9 @@ func ensureStackMirror(ctx context.Context, repo *repo_model.Repository, entry *
 	if err != nil {
 		return err
 	}
-	if err := writeStackMirror(ctx, repo, pr.HeadRepo, branch, old, head, doerID); err != nil {
+	if err := writeStackMirror(ctx, repo, pr.HeadRepo, branch, old, head, doerID, moves); err != nil {
 		return err
 	}
-	moves.mirrors = append(moves.mirrors, &stackMirrorWrite{repo: repo, branch: branch, old: old, commit: head})
 	entry.MirrorBranch = branch
 	_, err = db.GetEngine(ctx).ID(entry.ID).Cols("mirror_branch").Update(entry)
 	return err
@@ -129,6 +133,12 @@ func ensureStackMirror(ctx context.Context, repo *repo_model.Repository, entry *
 
 // revertStackMirrors undoes mirror refs written by a transaction that rolled back.
 func revertStackMirrors(ctx context.Context, writes []*stackMirrorWrite) {
+	if len(writes) == 0 {
+		return
+	}
+	// the rollback may come from a cancelled request, which must not stop the cleanup
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
 	for _, w := range slices.Backward(writes) {
 		if err := updateStackMirrorRef(ctx, w.repo, w.branch, w.commit, w.old); err != nil {
 			log.Error("revert stack mirror %s in %s: %v", w.branch, w.repo.FullName(), err)
@@ -152,8 +162,11 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 		return err
 	}
 	defer releaser()
-	// pruning may have released the mirror while this waited for the lock
+	// pruning or unstacking may have released the mirror while this waited for the lock
 	if has, err = db.GetEngine(ctx).ID(entry.ID).Get(entry); err != nil || !has || entry.MirrorBranch == "" {
+		return err
+	}
+	if stack, err = issues_model.GetStackByID(ctx, stack.ID); err != nil || stack.State != issues_model.StackStateOpen {
 		return err
 	}
 	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
@@ -174,7 +187,7 @@ func syncStackMirror(ctx context.Context, pr *issues_model.PullRequest) error {
 	if current == head {
 		return nil
 	}
-	if err := writeStackMirror(ctx, repo, pr.HeadRepo, entry.MirrorBranch, current, head, pr.HeadRepo.OwnerID); err != nil {
+	if err := writeStackMirror(ctx, repo, pr.HeadRepo, entry.MirrorBranch, current, head, pr.HeadRepo.OwnerID, nil); err != nil {
 		return err
 	}
 	AddTestPullRequestTask(TestPullRequestOptions{RepoID: repo.ID, Branch: entry.MirrorBranch})
@@ -242,4 +255,45 @@ func pruneStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack
 			log.Error("prune stack mirror %s: %v", entry.MirrorBranch, err)
 		}
 	}
+}
+
+// lockStackMirrors holds every mirror lock of a stack, taken before a transaction that releases the mirrors.
+func lockStackMirrors(ctx context.Context, stack *issues_model.PullRequestStack) (func(), error) {
+	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	if err != nil {
+		return nil, err
+	}
+	var releasers []globallock.ReleaseFunc
+	release := func() {
+		for _, releaser := range slices.Backward(releasers) {
+			releaser()
+		}
+	}
+	for _, entry := range entries {
+		if entry.MirrorBranch == "" {
+			continue
+		}
+		releaser, err := globallock.Lock(ctx, stackMirrorLockKey(stack.RepoID, entry.MirrorBranch))
+		if err != nil {
+			release()
+			return nil, err
+		}
+		releasers = append(releasers, releaser)
+	}
+	return release, nil
+}
+
+// ReconcileStackMirrors catches up every mirror of open stacks, recovering syncs interrupted by a restart.
+func ReconcileStackMirrors(ctx context.Context) error {
+	var stackIDs []int64
+	if err := db.GetEngine(ctx).Table("stack_entry").Distinct("stack_entry.stack_id").
+		Join("INNER", "pull_request_stack", "pull_request_stack.id = stack_entry.stack_id").
+		Where("pull_request_stack.state = ? AND stack_entry.mirror_branch <> ''", issues_model.StackStateOpen).
+		Find(&stackIDs); err != nil {
+		return err
+	}
+	for _, id := range stackIDs {
+		syncStackMirrors(ctx, id)
+	}
+	return nil
 }

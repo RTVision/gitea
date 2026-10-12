@@ -16,6 +16,7 @@ import (
 	"gitea.dev/models/unit"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
+	"gitea.dev/modules/globallock"
 	"gitea.dev/modules/log"
 	issue_service "gitea.dev/services/issue"
 	notify_service "gitea.dev/services/notify"
@@ -111,12 +112,17 @@ func moveStackLayer(ctx context.Context, pr *issues_model.PullRequest, repo *rep
 // A move stays pending until this completes, so MoveForkStackLayers retries it after a failure or restart.
 func finishStackMoves(ctx context.Context, moved []*movedStackPull) {
 	for _, move := range moved {
-		if err := finishStackMove(ctx, move); err != nil {
+		if err := globallock.LockAndDo(ctx, fmt.Sprintf("stack_move_%d", move.pull.IssueID), func(ctx context.Context) error {
+			// a concurrent retry may have finished this move while this waited
+			if pending, err := issues_model.IsIssueRedirectPending(ctx, move.pull.IssueID); err != nil || !pending {
+				return err
+			}
+			if err := finishStackMove(ctx, move); err != nil {
+				return err
+			}
+			return issues_model.SettleIssueRedirect(ctx, move.pull.IssueID)
+		}); err != nil {
 			log.Error("finish moving pull request %d: %v", move.pull.ID, err)
-			continue
-		}
-		if err := issues_model.SettleIssueRedirect(ctx, move.pull.IssueID); err != nil {
-			log.Error("settle moved pull request %d: %v", move.pull.ID, err)
 		}
 	}
 }
@@ -190,7 +196,7 @@ func MoveForkStackLayers(ctx context.Context) error {
 		moved = append(moved, &movedStackPull{pull: pr, oldRepo: oldRepo, oldIndex: redirect.Index})
 	}
 	finishStackMoves(ctx, moved)
-	return nil
+	return ReconcileStackMirrors(ctx)
 }
 
 func moveForkStack(ctx context.Context, stackID int64) error {

@@ -662,7 +662,16 @@ func StackInsertCandidates(ctx context.Context, stack *issues_model.PullRequestS
 }
 
 func Unstack(ctx context.Context, doer *user_model.User, stackID, expectedRevision int64) error {
-	err := db.WithTx(ctx, func(ctx context.Context) error {
+	stack, err := issues_model.GetStackByID(ctx, stackID)
+	if err != nil {
+		return err
+	}
+	release, err := lockStackMirrors(ctx, stack) // a sync waiting on a mirror must not write it after it becomes an ordinary branch
+	if err != nil {
+		return err
+	}
+	defer release()
+	err = db.WithTx(ctx, func(ctx context.Context) error {
 		stack, err := issues_model.GetStackByID(ctx, stackID)
 		if err != nil {
 			return err

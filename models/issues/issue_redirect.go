@@ -46,3 +46,8 @@ func SettleIssueRedirect(ctx context.Context, issueID int64) error {
 	_, err := db.GetEngine(ctx).Where("issue_id = ? AND pending = ?", issueID, true).Cols("pending").Update(&IssueRedirect{Pending: false})
 	return err
 }
+
+// IsIssueRedirectPending reports whether the move of an issue still awaits notifying its new repository.
+func IsIssueRedirectPending(ctx context.Context, issueID int64) (bool, error) {
+	return db.GetEngine(ctx).Where("issue_id = ? AND pending = ?", issueID, true).Exist(new(IssueRedirect))
+}
