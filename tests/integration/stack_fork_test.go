@@ -283,5 +283,21 @@ func TestForkStackMirrorChain(t *testing.T) {
 		kept, err = git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-2")
 		require.NoError(t, err)
 		assert.Equal(t, outside, kept)
+
+		// a sync whose ref write landed but was never recorded recovers once the fork moves on
+		lowerEntry := unittest.AssertExistsAndLoadBean(t, &issues_model.StackEntry{StackID: stack.Number, PullRequestID: lower.ID})
+		require.NoError(t, git.UpdateRef(t.Context(), main, "refs/heads/stack/pr-1", outside))
+		_, err = db.GetEngine(t.Context()).ID(lowerEntry.ID).Cols("mirror_next_sha").Update(&issues_model.StackEntry{MirrorNextSHA: outside})
+		require.NoError(t, err)
+		testCreateFileInBranch(t, actor, fork, createFileInBranchOptions{OldBranch: "lower"}, map[string]string{"lower-fix.txt": "fix\n"})
+		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
+		lowerHead, err := git.GetFullCommitID(t.Context(), fork, "refs/heads/lower")
+		require.NoError(t, err)
+		mirror, err = git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-1")
+		require.NoError(t, err)
+		assert.Equal(t, lowerHead, mirror)
+		lowerEntry = unittest.AssertExistsAndLoadBean(t, &issues_model.StackEntry{ID: lowerEntry.ID})
+		assert.Equal(t, lowerHead, lowerEntry.MirrorSHA)
+		assert.Empty(t, lowerEntry.MirrorNextSHA)
 	})
 }
