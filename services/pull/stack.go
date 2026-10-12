@@ -97,11 +97,10 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		if err := pr.LoadIssue(ctx); err != nil {
 			return checks[:i], err
 		}
-		if id == retargetID && (pr.BaseRepoID == parentRepoID || pr.BaseRepoID == repo.ID) {
-			pr.BaseRepoID, pr.BaseBranch = parentRepoID, parentBranch
-		}
+		inStackRepo := pr.BaseRepoID == repo.ID
 		// a layer in the stack repository targets its fork parent through the parent's mirror branch
-		baseMatches := (pr.BaseRepoID == parentRepoID && pr.BaseBranch == parentBranch) || (pr.BaseRepoID == repo.ID && pr.BaseBranch == childBase)
+		baseMatches := (pr.BaseRepoID == parentRepoID && pr.BaseBranch == parentBranch) || (inStackRepo && pr.BaseBranch == childBase) ||
+			(id == retargetID && (pr.BaseRepoID == parentRepoID || inStackRepo))
 		if i == 0 && !baseMatches {
 			member, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 			if err != nil {
@@ -185,7 +184,7 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		parentRepoID = pr.HeadRepoID
 		parentID, parentIndex, parentBranch, parentSHA = id, pr.Index, pr.HeadBranch, headSHA
 		childBase = ""
-		if pr.BaseRepoID == repo.ID {
+		if inStackRepo {
 			childBase = stackChildBase(repo.ID, pr)
 		}
 	}
@@ -299,7 +298,7 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 		return nil, fmt.Errorf("%w: unknown stack mode %q", issues_model.ErrInvalidStack, opts.Mode)
 	}
 	stack := &issues_model.PullRequestStack{RepoID: repo.ID, TrunkBranch: opts.TrunkBranch, Mode: opts.Mode, State: issues_model.StackStateOpen, Revision: 1, CreatedByID: doer.ID}
-	var moved []*movedStackPull
+	moves := new(stackMoves)
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, opts.PullRequestIDs...); err != nil {
 			return err
@@ -320,13 +319,12 @@ func CreateStack(ctx context.Context, doer *user_model.User, repo *repo_model.Re
 		if err = insertStackEntries(ctx, stack, entries); err != nil {
 			return err
 		}
-		moved, err = moveStackLayers(ctx, doer, repo, stack)
-		return err
+		return moveStackLayers(ctx, doer, repo, stack, moves)
 	})
+	moves.settle(ctx, stack.ID, err)
 	if err != nil {
 		return nil, err
 	}
-	finishStackMoves(ctx, moved)
 	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
@@ -339,7 +337,7 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 		return nil, issues_model.ErrInvalidStack
 	}
 	var stack *issues_model.PullRequestStack
-	var moved []*movedStackPull
+	moves := new(stackMoves)
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, pullIDs...); err != nil {
 			return err
@@ -393,13 +391,12 @@ func AppendStack(ctx context.Context, doer *user_model.User, stackID, expectedRe
 			return err
 		}
 		stack.Revision = expectedRevision + 1
-		moved, err = moveStackLayers(ctx, doer, repo, stack)
-		return err
+		return moveStackLayers(ctx, doer, repo, stack, moves)
 	})
+	moves.settle(ctx, stackID, err)
 	if err != nil {
 		return nil, err
 	}
-	finishStackMoves(ctx, moved)
 	notifyStackChanged(ctx, doer, stack.ID, nil)
 	return stack, nil
 }
@@ -474,7 +471,7 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 	}
 	var above *issues_model.PullRequest
 	var oldBase string
-	var moved []*movedStackPull
+	moves := new(stackMoves)
 	err = db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, pullID); err != nil {
 			return err
@@ -552,7 +549,7 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 				return err
 			}
 		}
-		if moved, err = moveStackLayers(ctx, doer, repo, stack); err != nil {
+		if err = moveStackLayers(ctx, doer, repo, stack, moves); err != nil {
 			return err
 		}
 		if above != nil {
@@ -567,10 +564,10 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 		stack.Revision = expectedRevision + 1
 		return nil
 	})
+	moves.settle(ctx, stackID, err)
 	if err != nil {
 		return nil, err
 	}
-	finishStackMoves(ctx, moved)
 	if above != nil {
 		notify_service.PullRequestChangeTargetBranch(ctx, doer, above, oldBase)
 		pruneStackMirrors(ctx, stack, doer.ID)

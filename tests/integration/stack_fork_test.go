@@ -195,7 +195,83 @@ func TestMoveLegacyForkStackLayers(t *testing.T) {
 		mirror, err := git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-1")
 		require.NoError(t, err)
 		assert.Equal(t, lowerHead, mirror)
+		redirect := unittest.AssertExistsAndLoadBean(t, &issues_model.IssueRedirect{IssueID: moved.IssueID})
+		assert.False(t, redirect.Pending)
+
+		// a move interrupted before its new repository was notified is finished by the next run
+		_, err = db.GetEngine(t.Context()).ID(redirect.ID).Cols("pending").Update(&issues_model.IssueRedirect{Pending: true})
+		require.NoError(t, err)
 		require.NoError(t, pull_service.MoveForkStackLayers(t.Context()))
+		assert.False(t, unittest.AssertExistsAndLoadBean(t, &issues_model.IssueRedirect{ID: redirect.ID}).Pending)
 		assert.EqualValues(t, 2, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequestStack{ID: stack.ID}).Revision)
+	})
+}
+
+func TestForkStackMirrorChain(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		defer test.MockVariableValue(&setting.Repository.PullRequest.EnableStacks, true)()
+		actor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		main, err := repo_service.CreateRepository(t.Context(), actor, actor, repo_service.CreateRepoOptions{
+			Name: "mirror-chain-main", DefaultBranch: "main", AutoInit: true, Readme: "Default",
+		})
+		require.NoError(t, err)
+		fork, err := repo_service.ForkRepository(t.Context(), actor, actor, repo_service.ForkRepoOptions{BaseRepo: main, Name: "mirror-chain-source"})
+		require.NoError(t, err)
+		for _, branch := range [][2]string{{"main", "lower"}, {"lower", "mid"}, {"mid", "top"}, {"lower", "inserted"}} {
+			testCreateFileInBranch(t, actor, fork, createFileInBranchOptions{OldBranch: branch[0], NewBranch: branch[1]}, map[string]string{branch[1] + ".txt": branch[1] + "\n"})
+		}
+		token := getTokenForLoggedInUser(t, loginUser(t, actor.Name), auth_model.AccessTokenScopeWriteRepository)
+		openPull := func(repo *repo_model.Repository, head, base string) *api.PullRequest {
+			t.Helper()
+			return DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, "/api/v1/repos/"+repo.FullName()+"/pulls", &api.CreatePullRequestOption{
+				Head: head, Base: base, Title: head,
+			}).AddTokenAuth(token), http.StatusCreated), &api.PullRequest{})
+		}
+		lower := openPull(main, fork.FullName()+":lower", "main")
+		mid := openPull(fork, "mid", "lower")
+		top := openPull(fork, "top", "mid")
+		create := &api.CreatePullRequestStackOption{Trunk: "main", Mode: api.StackModeMerge, PullRequestRefs: []api.PullRequestReference{
+			{RepositoryID: main.ID, PullRequest: lower.Index}, {RepositoryID: fork.ID, PullRequest: mid.Index}, {RepositoryID: fork.ID, PullRequest: top.Index},
+		}}
+
+		// a branch the stack does not own is never overwritten, and mirrors written before the failure are undone
+		testCreateFileInBranch(t, actor, main, createFileInBranchOptions{OldBranch: "main", NewBranch: "stack/pr-2"}, map[string]string{"other.txt": "other\n"})
+		taken, err := git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-2")
+		require.NoError(t, err)
+		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, "/api/v1/repos/"+main.FullName()+"/stacks", create).AddTokenAuth(token), http.StatusUnprocessableEntity)
+		kept, err := git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-2")
+		require.NoError(t, err)
+		assert.Equal(t, taken, kept)
+		_, err = git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-1")
+		assert.Error(t, err)
+		assert.Equal(t, fork.ID, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: mid.ID}).BaseRepoID)
+		gitRepo, err := git.OpenRepository(t.Context(), main)
+		require.NoError(t, err)
+		require.NoError(t, repo_service.DeleteBranch(t.Context(), actor, main, gitRepo, "stack/pr-2"))
+		gitRepo.Close()
+
+		stack := DecodeJSON(t, MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, "/api/v1/repos/"+main.FullName()+"/stacks", create).AddTokenAuth(token), http.StatusCreated), &api.PullRequestStack{})
+		base := func(pull *api.PullRequest) string {
+			t.Helper()
+			pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pull.ID})
+			assert.Equal(t, main.ID, pr.BaseRepoID)
+			return pr.BaseBranch
+		}
+		assert.Equal(t, "stack/pr-2", base(top))
+		assert.Equal(t, "stack/pr-1", base(mid))
+
+		inserted := openPull(fork, "inserted", "lower")
+		current, err := issues_model.GetStackByID(t.Context(), stack.Number)
+		require.NoError(t, err)
+		_, err = pull_service.InsertStackLayer(t.Context(), actor, current.ID, current.Revision, inserted.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "stack/pr-1", base(inserted))
+		assert.Equal(t, "stack/pr-4", base(mid))
+		assert.Equal(t, "stack/pr-2", base(top))
+		insertedHead, err := git.GetFullCommitID(t.Context(), fork, "refs/heads/inserted")
+		require.NoError(t, err)
+		mirror, err := git.GetFullCommitID(t.Context(), main, "refs/heads/stack/pr-4")
+		require.NoError(t, err)
+		assert.Equal(t, insertedHead, mirror)
 	})
 }

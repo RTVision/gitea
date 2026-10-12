@@ -27,41 +27,56 @@ type movedStackPull struct {
 	oldIndex int64
 }
 
+// stackMoves collects what a transaction moving stack layers must finish after commit or undo after rollback.
+type stackMoves struct {
+	pulls   []*movedStackPull
+	mirrors []*stackMirrorWrite
+}
+
 // moveStackLayers moves layers owned by a fork into the stack repository, bottom up, and gives fork layers that have
 // a layer above them a mirror branch to target. It runs in the transaction that records the stack entries.
-func moveStackLayers(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, stack *issues_model.PullRequestStack) ([]*movedStackPull, error) {
+func moveStackLayers(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, stack *issues_model.PullRequestStack, moves *stackMoves) error {
 	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var moved []*movedStackPull
 	var parent *issues_model.PullRequest
 	var parentEntry *issues_model.StackEntry
 	for _, entry := range entries {
 		pr, err := issues_model.GetPullRequestByID(ctx, entry.PullRequestID)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if pr.HasMerged {
 			continue
 		}
 		base := stack.TrunkBranch
 		if parent != nil {
-			if err := ensureStackMirror(ctx, repo, parentEntry, parent, doer.ID); err != nil {
-				return nil, err
+			if err := ensureStackMirror(ctx, repo, parentEntry, parent, doer.ID, moves); err != nil {
+				return err
 			}
 			base = stackChildBase(repo.ID, parent)
 		}
 		if pr.BaseRepoID != repo.ID {
 			move, err := moveStackLayer(ctx, pr, repo, base)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			moved = append(moved, move)
+			moves.pulls = append(moves.pulls, move)
 		}
 		parent, parentEntry = pr, entry
 	}
-	return moved, nil
+	return nil
+}
+
+// settle finishes the moves of a committed transaction, or undoes the mirror refs of one that rolled back.
+func (moves *stackMoves) settle(ctx context.Context, stackID int64, err error) {
+	if err != nil {
+		revertStackMirrors(ctx, moves.mirrors)
+		return
+	}
+	finishStackMoves(ctx, moves.pulls)
+	syncStackMirrors(ctx, stackID)
 }
 
 func moveStackLayer(ctx context.Context, pr *issues_model.PullRequest, repo *repo_model.Repository, base string) (*movedStackPull, error) {
@@ -93,31 +108,53 @@ func moveStackLayer(ctx context.Context, pr *issues_model.PullRequest, repo *rep
 }
 
 // finishStackMoves publishes moved layers in their new repository; opening them there runs its workflows and webhooks.
+// A move stays pending until this completes, so MoveForkStackLayers retries it after a failure or restart.
 func finishStackMoves(ctx context.Context, moved []*movedStackPull) {
 	for _, move := range moved {
-		pr := move.pull
-		if err := PushToBaseRepo(ctx, pr); err != nil {
-			log.Error("PushToBaseRepo for moved pull request %d: %v", pr.ID, err)
+		if err := finishStackMove(ctx, move); err != nil {
+			log.Error("finish moving pull request %d: %v", move.pull.ID, err)
 			continue
 		}
+		if err := issues_model.SettleIssueRedirect(ctx, move.pull.IssueID); err != nil {
+			log.Error("settle moved pull request %d: %v", move.pull.ID, err)
+		}
+	}
+}
+
+func finishStackMove(ctx context.Context, move *movedStackPull) error {
+	pr := move.pull
+	if err := pr.LoadIssue(ctx); err != nil {
+		return err
+	}
+	if pr.HasMerged || pr.Issue.IsClosed {
+		return nil
+	}
+	if err := pr.Issue.LoadPoster(ctx); err != nil {
+		return err
+	}
+	if err := PushToBaseRepo(ctx, pr); err != nil {
+		return err
+	}
+	if move.oldRepo != nil {
 		if err := git.RemoveRef(ctx, move.oldRepo, git.RefNameFromPullIndex(move.oldIndex).String()); err != nil {
 			log.Warn("remove old head ref of moved pull request %d: %v", pr.ID, err)
 		}
-		if err := syncCommitDivergence(ctx, pr); err != nil {
-			log.Error("syncCommitDivergence for moved pull request %d: %v", pr.ID, err)
-		}
-		StartPullRequestCheckImmediately(ctx, pr)
-		notify_service.NewPullRequest(ctx, pr, nil)
-		if pr.IsWorkInProgress(ctx) {
-			continue
-		}
-		reviewNotifiers, err := issue_service.PullRequestCodeOwnersReview(ctx, pr)
-		if err != nil {
-			log.Error("PullRequestCodeOwnersReview for moved pull request %d: %v", pr.ID, err)
-		} else if len(reviewNotifiers) > 0 {
-			issue_service.ReviewRequestNotify(ctx, pr.Issue, pr.Issue.Poster, reviewNotifiers)
-		}
 	}
+	if err := syncCommitDivergence(ctx, pr); err != nil {
+		log.Error("syncCommitDivergence for moved pull request %d: %v", pr.ID, err)
+	}
+	StartPullRequestCheckImmediately(ctx, pr)
+	notify_service.NewPullRequest(ctx, pr, nil)
+	if pr.IsWorkInProgress(ctx) {
+		return nil
+	}
+	reviewNotifiers, err := issue_service.PullRequestCodeOwnersReview(ctx, pr)
+	if err != nil {
+		log.Error("PullRequestCodeOwnersReview for moved pull request %d: %v", pr.ID, err)
+	} else if len(reviewNotifiers) > 0 {
+		issue_service.ReviewRequestNotify(ctx, pr.Issue, pr.Issue.Poster, reviewNotifiers)
+	}
+	return nil
 }
 
 // MoveForkStackLayers moves fork-owned layers of stacks adopted before layers moved into the stack repository.
@@ -135,12 +172,30 @@ func MoveForkStackLayers(ctx context.Context) error {
 			log.Error("move fork layers of stack %d: %v", id, err)
 		}
 	}
+	pending, err := issues_model.GetPendingIssueRedirects(ctx)
+	if err != nil {
+		return err
+	}
+	moved := make([]*movedStackPull, 0, len(pending))
+	for _, redirect := range pending {
+		pr, err := issues_model.GetPullRequestByIssueID(ctx, redirect.IssueID)
+		if err != nil {
+			log.Error("load pending moved pull request of issue %d: %v", redirect.IssueID, err)
+			continue
+		}
+		oldRepo, err := repo_model.GetRepositoryByID(ctx, redirect.RepoID)
+		if err != nil && !repo_model.IsErrRepoNotExist(err) {
+			return err
+		}
+		moved = append(moved, &movedStackPull{pull: pr, oldRepo: oldRepo, oldIndex: redirect.Index})
+	}
+	finishStackMoves(ctx, moved)
 	return nil
 }
 
 func moveForkStack(ctx context.Context, stackID int64) error {
 	var doer *user_model.User
-	var moved []*movedStackPull
+	moves := new(stackMoves)
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		stack, err := issues_model.GetStackByID(ctx, stackID)
 		if err != nil {
@@ -167,13 +222,12 @@ func moveForkStack(ctx context.Context, stackID int64) error {
 		if _, doer, err = user_model.GetPossibleUserByID(ctx, stack.CreatedByID); err != nil {
 			return err
 		}
-		moved, err = moveStackLayers(ctx, doer, repo, stack)
-		return err
+		return moveStackLayers(ctx, doer, repo, stack, moves)
 	})
+	moves.settle(ctx, stackID, err)
 	if err != nil {
 		return err
 	}
-	finishStackMoves(ctx, moved)
 	notifyStackChanged(ctx, doer, stackID, nil)
 	return nil
 }

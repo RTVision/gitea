@@ -20,6 +20,7 @@ func AddStackMirrorBranchAndIssueRedirect(_ context.Context, x base.EngineMigrat
 		RepoID  int64 `xorm:"UNIQUE(repo_index) NOT NULL"`
 		Index   int64 `xorm:"UNIQUE(repo_index) NOT NULL"`
 		IssueID int64 `xorm:"INDEX NOT NULL"`
+		Pending bool  `xorm:"INDEX NOT NULL DEFAULT false"`
 	}
 	_, err := x.SyncWithOptions(xorm.SyncOptions{IgnoreConstrains: true, IgnoreDropIndices: true}, new(StackEntry), new(IssueRedirect))
 	return err

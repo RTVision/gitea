@@ -15,6 +15,7 @@ type IssueRedirect struct {
 	RepoID  int64 `xorm:"UNIQUE(repo_index) NOT NULL"`
 	Index   int64 `xorm:"UNIQUE(repo_index) NOT NULL"`
 	IssueID int64 `xorm:"INDEX NOT NULL"`
+	Pending bool  `xorm:"INDEX NOT NULL DEFAULT false"` // the new repository has not been notified of the move yet
 }
 
 func init() {
@@ -32,4 +33,16 @@ func GetRedirectedIssue(ctx context.Context, repoID, index int64) (*Issue, error
 		return nil, ErrIssueNotExist{RepoID: repoID, Index: index}
 	}
 	return GetIssueByID(ctx, redirect.IssueID)
+}
+
+// GetPendingIssueRedirects lists moves whose new repository has not been notified yet.
+func GetPendingIssueRedirects(ctx context.Context) ([]*IssueRedirect, error) {
+	redirects := make([]*IssueRedirect, 0)
+	return redirects, db.GetEngine(ctx).Where("pending = ?", true).Find(&redirects)
+}
+
+// SettleIssueRedirect records that the new repository of a moved issue was notified.
+func SettleIssueRedirect(ctx context.Context, issueID int64) error {
+	_, err := db.GetEngine(ctx).Where("issue_id = ? AND pending = ?", issueID, true).Cols("pending").Update(&IssueRedirect{Pending: false})
+	return err
 }

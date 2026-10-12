@@ -202,6 +202,8 @@ func GetPullRequest(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequest"
+	//   "301":
+	//     description: the pull request moved to another repository; the Location header gives its new URL
 	//   "404":
 	//     "$ref": "#/responses/notFound"
 

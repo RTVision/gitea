@@ -32,7 +32,7 @@ func MovePullRequest(ctx context.Context, pr *PullRequest, repo *repo_model.Repo
 	if err != nil {
 		return err
 	}
-	if err := db.Insert(ctx, &IssueRedirect{RepoID: oldRepoID, Index: oldIndex, IssueID: issue.ID}); err != nil {
+	if err := db.Insert(ctx, &IssueRedirect{RepoID: oldRepoID, Index: oldIndex, IssueID: issue.ID, Pending: true}); err != nil {
 		return err
 	}
 
