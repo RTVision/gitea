@@ -4,6 +4,7 @@
 package git
 
 import (
+	"context"
 	"testing"
 
 	"gitea.dev/models/db"
@@ -218,12 +219,22 @@ func TestProtectedBranchConfig(t *testing.T) {
 	require.NoError(t, db.Insert(ctx, pb))
 	loaded := unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
 	assert.Equal(t, pb.ProtectedBranchConfig, loaded.ProtectedBranchConfig)
+	edited := ProtectedBranchConfig{
+		CanPush: true, CanDelete: true, RequireSignedCommits: true, RequiredApprovals: 2,
+		WhitelistUserIDs: []int64{2, 4, 5}, WhitelistTeamIDs: []int64{1, 2, 3}, StatusCheckContexts: []string{"ci"},
+	}
+	require.NoError(t, db.WithTx(ctx, func(ctx context.Context) error {
+		_, err := db.GetEngine(ctx).ID(pb.ID).Cols("config").Update(&ProtectedBranch{ProtectedBranchConfig: edited})
+		return err
+	}))
 	require.NoError(t, RemoveUserIDFromProtectedBranch(ctx, loaded, 2))
 	require.NoError(t, RemoveTeamIDFromProtectedBranch(ctx, loaded, 1))
 	loaded = unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
-	assert.Equal(t, []int64{4}, loaded.WhitelistUserIDs)
-	assert.Equal(t, []int64{2}, loaded.WhitelistTeamIDs)
-	assert.True(t, loaded.CanPush)
+	assert.Equal(t, []int64{4, 5}, loaded.WhitelistUserIDs)
+	assert.Equal(t, []int64{2, 3}, loaded.WhitelistTeamIDs)
+	edited.WhitelistUserIDs = []int64{4, 5}
+	edited.WhitelistTeamIDs = []int64{2, 3}
+	assert.Equal(t, edited, loaded.ProtectedBranchConfig)
 	loaded.ProtectedBranchConfig = ProtectedBranchConfig{}
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	require.NoError(t, UpdateProtectBranch(ctx, repo, loaded, WhitelistOptions{}))

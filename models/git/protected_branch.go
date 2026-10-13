@@ -540,11 +540,11 @@ func updateUserWhitelist(ctx context.Context, repo *repo_model.Repository, curre
 		}
 		user, err := user_model.GetUserByID(ctx, userID)
 		if err != nil {
-			return nil, fmt.Errorf("GetUserByID [user_id: %d, repo_id: %d]: %w", userID, repo.ID, err)
+			return nil, fmt.Errorf("updateUserWhitelist: GetUserByID [user_id: %d, repo_id: %d]: %w", userID, repo.ID, err)
 		}
 		perm, err := access_model.GetIndividualUserRepoPermission(ctx, repo, user)
 		if err != nil {
-			return nil, fmt.Errorf("GetIndividualUserRepoPermission [user_id: %d, repo_id: %d]: %w", userID, repo.ID, err)
+			return nil, fmt.Errorf("updateUserWhitelist: GetIndividualUserRepoPermission [user_id: %d, repo_id: %d]: %w", userID, repo.ID, err)
 		}
 
 		if !perm.CanWrite(unit.TypeCode) {
@@ -603,36 +603,50 @@ func DeleteProtectedBranch(ctx context.Context, repo *repo_model.Repository, id 
 
 // removeIDsFromProtectedBranch is a helper function to remove IDs from protected branch options
 func removeIDsFromProtectedBranch(ctx context.Context, p *ProtectedBranch, userID, teamID int64) error {
-	lenUserIDs, lenForcePushIDs, lenApprovalIDs, lenMergeIDs := len(p.WhitelistUserIDs), len(p.ForcePushAllowlistUserIDs), len(p.ApprovalsWhitelistUserIDs), len(p.MergeWhitelistUserIDs)
-	lenTeamIDs, lenForcePushTeamIDs, lenApprovalTeamIDs, lenMergeTeamIDs := len(p.WhitelistTeamIDs), len(p.ForcePushAllowlistTeamIDs), len(p.ApprovalsWhitelistTeamIDs), len(p.MergeWhitelistTeamIDs)
-
-	if userID > 0 {
-		p.WhitelistUserIDs = util.SliceRemoveAll(p.WhitelistUserIDs, userID)
-		p.ForcePushAllowlistUserIDs = util.SliceRemoveAll(p.ForcePushAllowlistUserIDs, userID)
-		p.ApprovalsWhitelistUserIDs = util.SliceRemoveAll(p.ApprovalsWhitelistUserIDs, userID)
-		p.MergeWhitelistUserIDs = util.SliceRemoveAll(p.MergeWhitelistUserIDs, userID)
-	}
-
-	if teamID > 0 {
-		p.WhitelistTeamIDs = util.SliceRemoveAll(p.WhitelistTeamIDs, teamID)
-		p.ForcePushAllowlistTeamIDs = util.SliceRemoveAll(p.ForcePushAllowlistTeamIDs, teamID)
-		p.ApprovalsWhitelistTeamIDs = util.SliceRemoveAll(p.ApprovalsWhitelistTeamIDs, teamID)
-		p.MergeWhitelistTeamIDs = util.SliceRemoveAll(p.MergeWhitelistTeamIDs, teamID)
-	}
-
-	if (lenUserIDs != len(p.WhitelistUserIDs) ||
-		lenForcePushIDs != len(p.ForcePushAllowlistUserIDs) ||
-		lenApprovalIDs != len(p.ApprovalsWhitelistUserIDs) ||
-		lenMergeIDs != len(p.MergeWhitelistUserIDs)) ||
-		(lenTeamIDs != len(p.WhitelistTeamIDs) ||
-			lenForcePushTeamIDs != len(p.ForcePushAllowlistTeamIDs) ||
-			lenApprovalTeamIDs != len(p.ApprovalsWhitelistTeamIDs) ||
-			lenMergeTeamIDs != len(p.MergeWhitelistTeamIDs)) {
-		if _, err := db.GetEngine(ctx).ID(p.ID).Cols("config").Update(p); err != nil {
-			return fmt.Errorf("updateProtectedBranches: %v", err)
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		// Lock the rule before loading JSON so cleanup preserves concurrent edits.
+		if _, err := db.Exec(ctx, "UPDATE protected_branch SET priority = priority WHERE id = ?", p.ID); err != nil {
+			return fmt.Errorf("removeIDsFromProtectedBranch: lock rule %d: %w", p.ID, err)
 		}
-	}
-	return nil
+		current, exists, err := db.GetByID[ProtectedBranch](ctx, p.ID)
+		if err != nil {
+			return fmt.Errorf("removeIDsFromProtectedBranch: load rule %d: %w", p.ID, err)
+		}
+		if !exists {
+			return nil
+		}
+		p.ProtectedBranchConfig = current.ProtectedBranchConfig
+		lenUserIDs, lenForcePushIDs, lenApprovalIDs, lenMergeIDs := len(p.WhitelistUserIDs), len(p.ForcePushAllowlistUserIDs), len(p.ApprovalsWhitelistUserIDs), len(p.MergeWhitelistUserIDs)
+		lenTeamIDs, lenForcePushTeamIDs, lenApprovalTeamIDs, lenMergeTeamIDs := len(p.WhitelistTeamIDs), len(p.ForcePushAllowlistTeamIDs), len(p.ApprovalsWhitelistTeamIDs), len(p.MergeWhitelistTeamIDs)
+
+		if userID > 0 {
+			p.WhitelistUserIDs = util.SliceRemoveAll(p.WhitelistUserIDs, userID)
+			p.ForcePushAllowlistUserIDs = util.SliceRemoveAll(p.ForcePushAllowlistUserIDs, userID)
+			p.ApprovalsWhitelistUserIDs = util.SliceRemoveAll(p.ApprovalsWhitelistUserIDs, userID)
+			p.MergeWhitelistUserIDs = util.SliceRemoveAll(p.MergeWhitelistUserIDs, userID)
+		}
+
+		if teamID > 0 {
+			p.WhitelistTeamIDs = util.SliceRemoveAll(p.WhitelistTeamIDs, teamID)
+			p.ForcePushAllowlistTeamIDs = util.SliceRemoveAll(p.ForcePushAllowlistTeamIDs, teamID)
+			p.ApprovalsWhitelistTeamIDs = util.SliceRemoveAll(p.ApprovalsWhitelistTeamIDs, teamID)
+			p.MergeWhitelistTeamIDs = util.SliceRemoveAll(p.MergeWhitelistTeamIDs, teamID)
+		}
+
+		if (lenUserIDs != len(p.WhitelistUserIDs) ||
+			lenForcePushIDs != len(p.ForcePushAllowlistUserIDs) ||
+			lenApprovalIDs != len(p.ApprovalsWhitelistUserIDs) ||
+			lenMergeIDs != len(p.MergeWhitelistUserIDs)) ||
+			(lenTeamIDs != len(p.WhitelistTeamIDs) ||
+				lenForcePushTeamIDs != len(p.ForcePushAllowlistTeamIDs) ||
+				lenApprovalTeamIDs != len(p.ApprovalsWhitelistTeamIDs) ||
+				lenMergeTeamIDs != len(p.MergeWhitelistTeamIDs)) {
+			if _, err := db.GetEngine(ctx).ID(p.ID).Cols("config").Update(p); err != nil {
+				return fmt.Errorf("removeIDsFromProtectedBranch: update rule %d: %w", p.ID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // RemoveUserIDFromProtectedBranch removes all user ids from protected branch options

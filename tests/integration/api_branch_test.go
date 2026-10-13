@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -552,4 +553,31 @@ func TestAPIBranchProtectionDeployKeyAllowlists(t *testing.T) {
 		assert.Equal(t, []string{"gitea:deploy-key"}, bp.PushWhitelistUsernames)
 		assert.Equal(t, []string{"gitea:deploy-key"}, bp.ForcePushAllowlistUsernames)
 	})
+}
+
+func TestAPIBranchProtectionCleanup(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	const ruleName = "cleanup-preserves-settings"
+	testAPICreateBranchProtection(t, ruleName, 1, http.StatusCreated)
+	testAPIEditBranchProtection(t, ruleName, &api.BranchProtection{
+		EnablePush: true, EnablePushWhitelist: true, PushWhitelistUsernames: []string{"user2"},
+	}, http.StatusOK)
+	stale, err := git_model.GetProtectedBranchRuleByName(t.Context(), 1, ruleName)
+	require.NoError(t, err)
+	require.NotNil(t, stale)
+	testAPIEditBranchProtection(t, ruleName, &api.BranchProtection{
+		EnablePush: true, EnablePushWhitelist: true, PushWhitelistUsernames: []string{"user2"},
+		RequireSignedCommits: true, EnableDeletion: true, RequiredApprovals: 2,
+		EnableStatusCheck: true, StatusCheckContexts: []string{"ci"},
+	}, http.StatusOK)
+	require.NoError(t, db.WithTx(t.Context(), func(ctx context.Context) error {
+		return git_model.RemoveUserIDFromProtectedBranch(ctx, stale, 2)
+	}))
+	updated := testAPIGetBranchProtection(t, ruleName, http.StatusOK)
+	assert.Empty(t, updated.PushWhitelistUsernames)
+	assert.True(t, updated.RequireSignedCommits)
+	assert.True(t, updated.EnableDeletion)
+	assert.EqualValues(t, 2, updated.RequiredApprovals)
+	assert.True(t, updated.EnableStatusCheck)
+	assert.Equal(t, []string{"ci"}, updated.StatusCheckContexts)
 }
