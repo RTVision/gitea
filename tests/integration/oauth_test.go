@@ -1456,7 +1456,11 @@ func TestOAuthUserInfoTokenScope(t *testing.T) {
 			assert.Equal(t, tc.wantScope, response.Scope)
 			req := NewRequest(t, "GET", "/login/oauth/userinfo")
 			req.SetHeader("Authorization", "Bearer "+response.AccessToken)
-			MakeRequest(t, req, tc.status)
+			resp := MakeRequest(t, req, tc.status)
+			if tc.status == http.StatusOK {
+				claims := DecodeJSON(t, resp, map[string]any{})
+				assert.Equal(t, strconv.FormatInt(user.ID, 10), claims["sub"])
+			}
 		})
 	}
 }
