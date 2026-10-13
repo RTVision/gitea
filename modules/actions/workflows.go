@@ -683,11 +683,35 @@ func matchIssueCommentEvent(issueCommentPayload *api.IssueCommentPayload, evt *j
 					break
 				}
 			}
+		case "body":
+			// RTVision extension, not supported by GitHub: comment commands should not create a skipped run for every other comment
+			if issueCommentPayload.Comment != nil && matchCommentBody(vals, issueCommentPayload.Comment.Body) {
+				matchTimes++
+			}
 		default:
 			log.Warn("issue comment event unsupported condition %q", cond)
 		}
 	}
 	return matchTimes == len(evt.Acts())
+}
+
+// matchCommentBody case-sensitively matches the glob patterns against the whole trimmed first non-empty line of the body,
+// where commands are written, so a command quoted or mentioned later in the comment doesn't match
+func matchCommentBody(patterns []string, body string) bool {
+	var line string
+	for l := range strings.Lines(body) {
+		if line = strings.TrimSpace(l); line != "" {
+			break
+		}
+	}
+	return slices.ContainsFunc(patterns, func(pattern string) bool {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			log.Debug("invalid comment body pattern %q: %v", pattern, err)
+			return false
+		}
+		return g.Match(line)
+	})
 }
 
 func matchPullRequestReviewEvent(prPayload *api.PullRequestPayload, evt *jobparser.Event) bool {

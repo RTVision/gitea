@@ -218,6 +218,38 @@ func TestDetectMatched(t *testing.T) {
 			expected:     detectNotApplicable,
 		},
 		{
+			desc:         "HookEventIssueComment(issue_comment) matches a body pattern on the first non-empty line",
+			triggedEvent: webhook_module.HookEventIssueComment,
+			payload:      &api.IssueCommentPayload{Action: api.HookIssueCommentCreated, Comment: &api.Comment{Body: "\r\n  /create-preview --ttl 3\r\nfor the demo"}},
+			yamlOn:       "on:\n  issue_comment:\n    types: [created]\n    body: ['/create-preview*', '/destroy-preview*']",
+			expected:     detectMatched,
+		},
+		{
+			desc:         "HookEventIssueComment(issue_comment) `edited` action is matched against the new body",
+			triggedEvent: webhook_module.HookEventIssueComment,
+			payload: &api.IssueCommentPayload{
+				Action:  api.HookIssueCommentEdited,
+				Comment: &api.Comment{Body: "/apply"},
+				Changes: &api.ChangesPayload{Body: &api.ChangesFromPayload{From: "lgtm"}},
+			},
+			yamlOn:   "on:\n  issue_comment:\n    body: /apply*",
+			expected: detectMatched,
+		},
+		{
+			desc:         "HookEventIssueComment(issue_comment) doesn't match a command after the first non-empty line",
+			triggedEvent: webhook_module.HookEventIssueComment,
+			payload:      &api.IssueCommentPayload{Action: api.HookIssueCommentCreated, Comment: &api.Comment{Body: "> /apply\n\n/apply"}},
+			yamlOn:       "on:\n  issue_comment:\n    body: /apply*",
+			expected:     detectNotApplicable,
+		},
+		{
+			desc:         "HookEventPullRequestComment(pull_request_comment) doesn't match another body",
+			triggedEvent: webhook_module.HookEventPullRequestComment,
+			payload:      &api.IssueCommentPayload{Action: api.HookIssueCommentCreated, IsPull: true, Comment: &api.Comment{Body: "lgtm"}},
+			yamlOn:       "on:\n  issue_comment:\n    types: [created]\n    body: [/apply*]",
+			expected:     detectNotApplicable,
+		},
+		{
 			desc:         "HookEventPackage(package) `created` action doesn't match GithubEventRegistryPackage(registry_package) with `updated` activity type",
 			triggedEvent: webhook_module.HookEventPackage,
 			payload:      &api.PackagePayload{Action: api.HookPackageCreated},
