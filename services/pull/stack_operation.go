@@ -169,7 +169,11 @@ func StartStackOperation(ctx context.Context, actor *user_model.User, opts Stack
 		return nil, err
 	}
 	op.JournalJSON = string(data)
-	if err := issues_model.CreateStackOperation(ctx, op); err != nil {
+	boundaries := make(map[int64]string, len(journal.Layers))
+	for _, layer := range journal.Layers {
+		boundaries[layer.EntryID] = layer.OldParent
+	}
+	if err := issues_model.CreateStackOperationFromBoundaries(ctx, op, boundaries); err != nil {
 		return nil, err
 	}
 	enqueueStackOperation(op.ID)

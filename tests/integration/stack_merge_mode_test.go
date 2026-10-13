@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
@@ -19,6 +20,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
+	"gitea.dev/modules/queue"
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/test"
@@ -107,6 +109,10 @@ func TestNativeStackMergeMode(t *testing.T) {
 		advanceTrunk("trunk-2.txt")
 		MakeRequest(t, NewRequest(t, http.MethodPost, fmt.Sprintf("%s/pulls/%d/update?style=rebase", base, pulls[0])).AddTokenAuth(token), http.StatusForbidden) // force-push is disabled on the layers
 		updateLayers()
+		require.NoError(t, queue.GetManager().FlushAll(ctx, 10*time.Second))
+		merged := DecodeJSON(t, MakeRequest(t, NewRequest(t, http.MethodGet, path).AddTokenAuth(token), http.StatusOK), &api.PullRequestStack{})
+		assert.Equal(t, head("release"), merged.Entries[0].ParentSHA, "a layer that merged the trunk diffs from it")
+		assert.Equal(t, stack.Revision, merged.Revision)
 
 		insert := &api.InsertPullRequestStackOption{Revision: stack.Revision, PullRequest: pulls[2]}
 		MakeRequest(t, NewRequestWithJSON(t, http.MethodPost, path+"/insert", insert).AddTokenAuth(token), http.StatusUnprocessableEntity)

@@ -21,28 +21,34 @@
 				{{end}}
 			</div>
 		{{else}}
-			<div class="ui message">
-				<div class="ui active small inline loader"></div>
-				{{if eq $op.State "cancelling"}}
-					{{ctx.Locale.Tr "repo.pulls.stack_cancelling"}}
-				{{else if eq $op.Kind "update"}}
-					{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_update_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_updating"}}{{end}}
-				{{else if eq $op.Kind "rebase"}}
-					{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebasing"}}{{end}}
-				{{else if eq $op.State "waiting"}}
-					{{ctx.Locale.Tr "repo.pulls.stack_land_waiting" $op.Completed}}
-				{{else if eq $op.State "queued"}}
-					{{ctx.Locale.Tr "repo.pulls.stack_land_queued"}}
-				{{else}}
-					{{ctx.Locale.Tr "repo.pulls.stack_landing" $op.Completed}}
-				{{end}}
-				{{if $op.LastError}}<p>{{$op.LastError}}</p>{{end}}
+			<div class="ui info message flex-left-right tw-items-start">
+				<div class="flex-text-block tw-items-start">
+					{{svg "gitea-running" 18 "rotate-clockwise tw-shrink-0"}}
+					<div>
+						<strong>
+						{{if eq $op.State "cancelling"}}
+							{{ctx.Locale.Tr "repo.pulls.stack_cancelling"}}
+						{{else if eq $op.Kind "update"}}
+							{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_update_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_updating"}}{{end}}
+						{{else if eq $op.Kind "rebase"}}
+							{{if eq $op.State "queued"}}{{ctx.Locale.Tr "repo.pulls.stack_rebase_queued"}}{{else}}{{ctx.Locale.Tr "repo.pulls.stack_rebasing"}}{{end}}
+						{{else if eq $op.State "waiting"}}
+							{{ctx.Locale.Tr "repo.pulls.stack_land_waiting" $op.Completed}}
+						{{else if eq $op.State "queued"}}
+							{{ctx.Locale.Tr "repo.pulls.stack_land_queued"}}
+						{{else}}
+							{{ctx.Locale.Tr "repo.pulls.stack_landing" $op.Completed}}
+						{{end}}
+						</strong>
+						{{if $op.LastError}}<p>{{$op.LastError}}</p>{{end}}
+					</div>
+				</div>
 				{{if and $.CanOperateStack (ne $op.State "cancelling")}}
-					<form class="tw-float-right" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
+					<form method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_stop"}}</button>
 					</form>
 				{{else if and $.CanOperateStack (eq $op.State "cancelling") $op.LastError}}
-					<form class="tw-float-right" method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
+					<form method="post" action="{{$data.Repo.Link}}/pulls/stacks/{{$data.Stack.ID}}/cancel">
 						<input type="hidden" name="operation" value="{{$op.ID}}"><button type="submit" class="ui compact button">{{ctx.Locale.Tr "repo.pulls.stack_retry_cancel"}}</button>
 					</form>
 				{{end}}

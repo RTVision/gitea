@@ -30,6 +30,11 @@ type StackOperation struct {
 func init() { db.RegisterModel(new(StackOperation)) }
 
 func CreateStackOperation(ctx context.Context, op *StackOperation) error {
+	return CreateStackOperationFromBoundaries(ctx, op, nil)
+}
+
+// CreateStackOperationFromBoundaries also requires each entry to keep the boundary the operation's journal was built from.
+func CreateStackOperationFromBoundaries(ctx context.Context, op *StackOperation, boundaries map[int64]string) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		op.Version = 1
 		if _, err := db.GetEngine(ctx).Insert(op); err != nil {
@@ -41,6 +46,15 @@ func CreateStackOperation(ctx context.Context, op *StackOperation) error {
 		}
 		if n != 1 {
 			return ErrStackRevision
+		}
+		for id, boundary := range boundaries {
+			has, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", id, boundary).Exist(new(StackEntry))
+			if err != nil {
+				return err
+			}
+			if !has {
+				return ErrStackRevision
+			}
 		}
 		return nil
 	})

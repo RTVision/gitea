@@ -543,6 +543,9 @@ func checkPullRequestMergeable(prID int64) {
 			return nil
 		}
 
+		if err := advanceStackBoundary(ctx, pr); err != nil {
+			log.Error("advanceStackBoundary[%-v]: %v", pr, err)
+		}
 		if err := checkPullRequestBranchMergeable(ctx, pr); err != nil {
 			log.Error("checkPullRequestBranchMergeable[%-v]: %v", pr, err)
 			pr.Status = issues_model.PullRequestStatusError

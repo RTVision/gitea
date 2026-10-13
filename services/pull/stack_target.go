@@ -5,6 +5,7 @@ package pull
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"gitea.dev/models/db"
@@ -90,6 +91,66 @@ func pinStackEntry(ctx context.Context, stack *issues_model.PullRequestStack, en
 		return err
 	}
 	_, err = db.GetEngine(ctx).ID(pr.ID).And("has_merged = ?", false).NoAutoTime().Cols("merge_base").Update(&issues_model.PullRequest{MergeBase: entry.OldParentSHA})
+	return err
+}
+
+// advanceStackBoundary moves a layer's saved boundary up to newer parent commits its head has merged,
+// so parent changes taken in by an ordinary push stop showing in the layer's diff.
+func advanceStackBoundary(ctx context.Context, pr *issues_model.PullRequest) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || stack == nil || stack.State != issues_model.StackStateOpen || stack.ActiveOperationID != 0 {
+		return err
+	}
+	entry := new(issues_model.StackEntry)
+	if has, err := db.GetEngine(ctx).Where("stack_id = ? AND pull_request_id = ?", stack.ID, pr.ID).Get(entry); err != nil || !has || entry.OldParentSHA == "" {
+		return err
+	}
+	parentRef := git.BranchPrefix + stack.TrunkBranch
+	if entry.ParentPullRequestID != 0 {
+		parent, err := issues_model.GetPullRequestByID(ctx, entry.ParentPullRequestID)
+		if err != nil || parent.HasMerged {
+			return err // a landed parent is re-pinned by the next stack update
+		}
+		parentRef = issues_model.StackHeadRefName(parent.ID)
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
+	if err != nil {
+		return err
+	}
+	boundary, err := git.MergeBase(ctx, repo, parentRef, issues_model.StackHeadRefName(pr.ID))
+	if err != nil || boundary == entry.OldParentSHA {
+		return err
+	}
+	// a rewritten parent leaves the saved boundary off the new history, so it waits for a stack sync
+	if newer, err := stackAncestor(ctx, repo, entry.OldParentSHA, boundary); err != nil || !newer {
+		return err
+	}
+	err = db.WithTx(ctx, func(ctx context.Context) error {
+		// locks the stack against a concurrently starting operation, which then rejects its outdated journal;
+		// MySQL counts this no-op UPDATE as zero affected rows, so the state is read back instead
+		if _, err := db.GetEngine(ctx).ID(stack.ID).NoAutoTime().SetExpr("revision", "revision").Update(new(issues_model.PullRequestStack)); err != nil {
+			return err
+		}
+		locked, err := issues_model.GetStackByID(ctx, stack.ID)
+		if err != nil {
+			return err
+		}
+		if locked.ActiveOperationID != 0 || locked.State != issues_model.StackStateOpen {
+			return issues_model.ErrStackRevision
+		}
+		updated, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", entry.ID, entry.OldParentSHA).Cols("old_parent_sha").Update(&issues_model.StackEntry{OldParentSHA: boundary})
+		if err != nil {
+			return err
+		}
+		if updated == 0 {
+			return issues_model.ErrStackRevision
+		}
+		entry.OldParentSHA = boundary
+		return pinStackEntry(ctx, stack, entry)
+	})
+	if errors.Is(err, issues_model.ErrStackRevision) {
+		return nil // the stack changed meanwhile; the next push or check retries
+	}
 	return err
 }
 
