@@ -47,11 +47,3 @@ func Normalize(url string) (id string, err error) {
 func RedirectURL(id, callbackURL, realm string) (string, error) {
 	return openIDInstance().RedirectURL(id, callbackURL, realm)
 }
-
-func Discover(id string) (endpoint, localID, claimedID string, err error) {
-	return openIDInstance().Discover(id)
-}
-
-func BuildRedirectURL(endpoint, localID, claimedID, callbackURL, realm string) (string, error) {
-	return openid.BuildRedirectURL(endpoint, localID, claimedID, callbackURL, realm)
-}

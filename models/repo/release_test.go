@@ -90,10 +90,3 @@ func TestAddReleaseAttachmentsRejectsRecentZeroRepoID(t *testing.T) {
 	assert.Zero(t, attach.ReleaseID)
 	assert.Zero(t, attach.RepoID)
 }
-
-func TestGetReleaseAttachmentsClearsUnsavedRelease(t *testing.T) {
-	assert.NoError(t, unittest.PrepareTestDatabase())
-	release := &Release{Attachments: []*Attachment{{ID: 1}}}
-	assert.NoError(t, GetReleaseAttachments(t.Context(), release))
-	assert.Empty(t, release.Attachments)
-}

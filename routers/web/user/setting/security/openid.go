@@ -5,12 +5,14 @@ package security
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	audit_model "gitea.dev/models/audit"
-	auth_model "gitea.dev/models/auth"
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/auth/openid"
+	"gitea.dev/modules/base"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
@@ -19,6 +21,8 @@ import (
 	"gitea.dev/services/context"
 	"gitea.dev/services/forms"
 )
+
+const openIDAssociationCodeMinutes = 10
 
 // OpenIDPost response for change user's openid
 func OpenIDPost(ctx *context.Context) {
@@ -71,19 +75,9 @@ func OpenIDPost(ctx *context.Context) {
 		}
 	}
 
-	endpoint, localID, claimedID, err := openid.Discover(id)
-	if err != nil {
-		loadSecurityData(ctx)
-		ctx.RenderWithErrDeprecated(err.Error(), tplSettingsSecurity, &form)
-		return
-	}
-	state, err := auth_model.CreateOpenIDAssociation(ctx, ctx.Doer.ID, claimedID, endpoint)
-	if err != nil {
-		ctx.ServerError("CreateOpenIDAssociation", err)
-		return
-	}
+	state := base.CreateTimeLimitCode(fmt.Sprintf("openid_association:%d", ctx.Doer.ID), openIDAssociationCodeMinutes, time.Now(), nil)
 	redirectTo := setting.AppURL + "user/settings/security?state=" + state
-	url, err := openid.BuildRedirectURL(endpoint, localID, claimedID, redirectTo, setting.AppURL)
+	url, err := openid.RedirectURL(id, redirectTo, setting.AppURL)
 	if err != nil {
 		loadSecurityData(ctx)
 
@@ -94,12 +88,7 @@ func OpenIDPost(ctx *context.Context) {
 }
 
 func settingsOpenIDVerify(ctx *context.Context) {
-	_, has, err := auth_model.GetOpenIDAssociation(ctx, ctx.FormString("state"), ctx.Doer.ID)
-	if err != nil {
-		ctx.ServerError("GetOpenIDAssociation", err)
-		return
-	}
-	if !has {
+	if !base.VerifyTimeLimitCode(time.Now(), fmt.Sprintf("openid_association:%d", ctx.Doer.ID), openIDAssociationCodeMinutes, ctx.FormString("state")) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
@@ -114,16 +103,6 @@ func settingsOpenIDVerify(ctx *context.Context) {
 		ctx.RenderWithErrDeprecated(err.Error(), tplSettingsSecurity, &forms.AddOpenIDForm{
 			Openid: id,
 		})
-		return
-	}
-
-	consumed, err := auth_model.ConsumeOpenIDAssociation(ctx, ctx.FormString("state"), ctx.Doer.ID, id, ctx.FormString("openid.op_endpoint"))
-	if err != nil {
-		ctx.ServerError("ConsumeOpenIDAssociation", err)
-		return
-	}
-	if !consumed {
-		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
 

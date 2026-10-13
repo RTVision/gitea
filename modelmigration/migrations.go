@@ -443,7 +443,6 @@ func prepareMigrationTasks() []*migration {
 		newMigration(365, "Move fork stack layers into the stack repository", v29.AddStackMirrorBranchAndIssueRedirect),
 		newMigration(366, "Add stage and number columns to action_task_step", v29.AddStageAndNumberToActionTaskStep),
 		newMigration(367, "Move branch protection settings to JSON", v29.MoveBranchProtectionConfigToJSON),
-		newMigration(368, "Add single-use OpenID association state", v29.AddOpenIDAssociation),
 	}
 	return preparedMigrations
 }

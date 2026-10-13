@@ -399,11 +399,11 @@ func GetReleaseAttachments(ctx context.Context, rels ...*Release) (err error) {
 	sortedRels := releaseMetaSearch{IDs: make([]int64, 0, len(rels)), Releases: make([]*Release, 0, len(rels))}
 	var attachments []*Attachment
 	for _, rel := range rels {
-		rel.Attachments = []*Attachment{}
 		// if a provided "Release" has no ID, don't query it, otherwise, the "IN" query will return all other attachments for the repo
 		if rel.ID == 0 {
 			continue
 		}
+		rel.Attachments = []*Attachment{}
 		sortedRels.IDs = append(sortedRels.IDs, rel.ID)
 		sortedRels.Releases = append(sortedRels.Releases, rel)
 	}

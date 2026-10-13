@@ -390,7 +390,6 @@ async function loadJob() {
       clearInterval(intervalID);
       intervalID = null;
     }
-    if (stepsChanged && !intervalID) intervalID = setInterval(() => loadJob(), 1000);
   } catch (e) {
     // avoid network error while unloading page, and ignore "abort" error
     if (e instanceof TypeError || abortController.signal.aborted) return;
