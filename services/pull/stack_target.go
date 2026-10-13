@@ -126,12 +126,16 @@ func advanceStackBoundary(ctx context.Context, pr *issues_model.PullRequest) err
 		return err
 	}
 	err = db.WithTx(ctx, func(ctx context.Context) error {
-		// locks the stack against a concurrently starting operation, which then rejects its outdated journal
-		locked, err := db.GetEngine(ctx).Where("id = ? AND active_operation_id = 0 AND state = ?", stack.ID, issues_model.StackStateOpen).NoAutoTime().SetExpr("revision", "revision").Update(new(issues_model.PullRequestStack))
+		// locks the stack against a concurrently starting operation, which then rejects its outdated journal;
+		// MySQL counts this no-op UPDATE as zero affected rows, so the state is read back instead
+		if _, err := db.GetEngine(ctx).ID(stack.ID).NoAutoTime().SetExpr("revision", "revision").Update(new(issues_model.PullRequestStack)); err != nil {
+			return err
+		}
+		locked, err := issues_model.GetStackByID(ctx, stack.ID)
 		if err != nil {
 			return err
 		}
-		if locked == 0 {
+		if locked.ActiveOperationID != 0 || locked.State != issues_model.StackStateOpen {
 			return issues_model.ErrStackRevision
 		}
 		updated, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", entry.ID, entry.OldParentSHA).Cols("old_parent_sha").Update(&issues_model.StackEntry{OldParentSHA: boundary})
