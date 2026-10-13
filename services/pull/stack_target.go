@@ -5,6 +5,7 @@ package pull
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"gitea.dev/models/db"
@@ -124,12 +125,29 @@ func advanceStackBoundary(ctx context.Context, pr *issues_model.PullRequest) err
 	if newer, err := stackAncestor(ctx, repo, entry.OldParentSHA, boundary); err != nil || !newer {
 		return err
 	}
-	updated, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", entry.ID, entry.OldParentSHA).Cols("old_parent_sha").Update(&issues_model.StackEntry{OldParentSHA: boundary})
-	if err != nil || updated == 0 {
-		return err
+	err = db.WithTx(ctx, func(ctx context.Context) error {
+		// locks the stack against a concurrently starting operation, which then rejects its outdated journal
+		locked, err := db.GetEngine(ctx).Where("id = ? AND active_operation_id = 0 AND state = ?", stack.ID, issues_model.StackStateOpen).NoAutoTime().SetExpr("revision", "revision").Update(new(issues_model.PullRequestStack))
+		if err != nil {
+			return err
+		}
+		if locked == 0 {
+			return issues_model.ErrStackRevision
+		}
+		updated, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", entry.ID, entry.OldParentSHA).Cols("old_parent_sha").Update(&issues_model.StackEntry{OldParentSHA: boundary})
+		if err != nil {
+			return err
+		}
+		if updated == 0 {
+			return issues_model.ErrStackRevision
+		}
+		entry.OldParentSHA = boundary
+		return pinStackEntry(ctx, stack, entry)
+	})
+	if errors.Is(err, issues_model.ErrStackRevision) {
+		return nil // the stack changed meanwhile; the next push or check retries
 	}
-	entry.OldParentSHA = boundary
-	return pinStackEntry(ctx, stack, entry)
+	return err
 }
 
 func prepareStackObjects(ctx context.Context, tmp *mergeContext, layers []*stackLayerJournal) error {

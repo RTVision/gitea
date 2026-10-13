@@ -622,23 +622,22 @@ func PushToBaseRepo(ctx context.Context, pr *issues_model.PullRequest) error {
 	if err := git.UpdateRef(ctx, pr.BaseRepo, pr.GetGitHeadRefName(), headCommitID); err != nil {
 		return err
 	}
-	if err := syncStackMirror(ctx, pr); err != nil {
-		log.Error("sync stack mirror of %-v: %v", pr, err)
-	}
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil {
 		return err
 	}
+	// the stack head ref goes first because the mirror sync queues the checks of layers above, which read it
 	if stack != nil && stack.State == issues_model.StackStateOpen {
 		repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
 		if err != nil {
 			return err
 		}
-		head, err := git.GetFullCommitID(ctx, pr.BaseRepo, pr.GetGitHeadRefName())
-		if err != nil {
+		if err := fetchStackObject(ctx, repo, pr.BaseRepo, headCommitID, issues_model.StackHeadRefName(pr.ID)); err != nil {
 			return err
 		}
-		return fetchStackObject(ctx, repo, pr.BaseRepo, head, issues_model.StackHeadRefName(pr.ID))
+	}
+	if err := syncStackMirror(ctx, pr); err != nil {
+		log.Error("sync stack mirror of %-v: %v", pr, err)
 	}
 	return nil
 }

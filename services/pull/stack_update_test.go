@@ -264,7 +264,7 @@ func TestStackBoundaryFollowsMergedParent(t *testing.T) {
 		require.NoError(t, err)
 		return entries[0].OldParentSHA, entries[1].OldParentSHA
 	}
-	oldLower := run("rev-parse", "branch2")
+	oldLower, oldTrunk := run("rev-parse", "branch2"), run("rev-parse", "release")
 
 	run("checkout", "release")
 	commit("trunk")
@@ -276,8 +276,21 @@ func TestStackBoundaryFollowsMergedParent(t *testing.T) {
 	assert.Equal(t, oldLower, upper, "the upper layer has not merged its parent yet")
 	assert.Equal(t, lower, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).MergeBase)
 
+	assert.Equal(t, stack.Revision, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequestStack{ID: stack.ID}).Revision, "pushes keep clients' revisions valid")
+	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+	require.NoError(t, err)
+	stale := &issues_model.StackOperation{StackID: stack.ID, ExpectedRevision: stack.Revision, Kind: "update", State: "queued"}
+	require.ErrorIs(t, issues_model.CreateStackOperationFromBoundaries(ctx, stale, map[int64]string{entries[0].ID: oldTrunk}), issues_model.ErrStackRevision, "an operation built from the old boundary must not start")
+
 	run("checkout", "pr-to-update")
 	run("merge", "--no-ff", "-m", "parent merge", "branch2")
+	op := &issues_model.StackOperation{StackID: stack.ID, ActorID: owner.ID, ExpectedRevision: stack.Revision, Kind: "update", State: "queued"}
+	require.NoError(t, issues_model.CreateStackOperation(ctx, op))
+	push(5, "pr-to-update")
+	_, upper = boundaries()
+	assert.Equal(t, oldLower, upper, "a running operation owns the boundaries")
+	op.State = "cancelled"
+	require.NoError(t, issues_model.FinishStackOperation(ctx, op))
 	push(5, "pr-to-update")
 	_, upper = boundaries()
 	assert.Equal(t, run("rev-parse", "branch2"), upper)
