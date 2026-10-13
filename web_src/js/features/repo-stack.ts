@@ -45,9 +45,7 @@ export function initRepoStackActions() {
     container.addEventListener('submit', (e) => {
       // the post redirects back here, so lock every action until that page shows the queued operation
       e.submitter?.classList.add('is-loading', 'tw-text-transparent');
-      for (const button of container.querySelectorAll<HTMLButtonElement>('button[type="submit"]')) {
-        if (button !== e.submitter) button.disabled = true;
-      }
+      for (const button of container.querySelectorAll<HTMLButtonElement>('button[type="submit"]')) button.disabled = true;
     });
   });
 }
