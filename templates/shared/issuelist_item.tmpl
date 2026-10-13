@@ -95,7 +95,7 @@
 					<span class="gt-ellipsis">{{$project.Title}}</span>
 				</a>
 			{{end}}
-			{{if .Ref}}{{/* TODO: RemoveIssueRef: see "repo/issue/branch_selector_field.tmpl" */}}
+			{{if .Ref}}{{/* TODO: ISSUE-SIDEBAR-REF-SELECTOR: see "repo/issue/branch_selector_field.tmpl" */}}
 				<a class="ref flex-text-inline tw-max-w-[300px]" {{if $root.RepoLink}}href="{{index $root.IssueRefURLs .ID}}"{{else}}href="{{.Repo.Link}}{{index $root.IssueRefURLs .ID}}"{{end}}>
 					{{svg "octicon-git-branch" 14}}
 					<span class="gt-ellipsis">{{index $root.IssueRefEndNames .ID}}</span>

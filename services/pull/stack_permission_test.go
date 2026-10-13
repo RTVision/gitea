@@ -61,7 +61,10 @@ func TestForkContributorStackAuthority(t *testing.T) {
 	assert.False(t, allowed, "writable branches do not grant management of another author's layer")
 	_, err = db.GetEngine(ctx).ID(upper.IssueID).Cols("poster_id").Update(&issues_model.Issue{PosterID: contributor.ID})
 	require.NoError(t, err)
-	require.NoError(t, db.Insert(ctx, &git_model.ProtectedBranch{RepoID: fork.ID, RuleName: upper.HeadBranch, CanPush: false}))
+	require.NoError(t, db.Insert(ctx, &git_model.ProtectedBranch{
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{CanPush: false},
+		RepoID:                fork.ID, RuleName: upper.HeadBranch,
+	}))
 	allowed, err = CanManageStack(ctx, contributor, stack)
 	require.NoError(t, err)
 	assert.False(t, allowed, "layer ownership does not bypass source branch protection")

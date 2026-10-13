@@ -441,6 +441,8 @@ func prepareMigrationTasks() []*migration {
 		newMigration(363, "Normalize legacy team authorize values", v29.NormalizeLegacyTeamAuthorize),
 		newMigration(364, "Track previous remember-me token hashes", v29.AddPreviousAuthTokenHash),
 		newMigration(365, "Move fork stack layers into the stack repository", v29.AddStackMirrorBranchAndIssueRedirect),
+		newMigration(366, "Add stage and number columns to action_task_step", v29.AddStageAndNumberToActionTaskStep),
+		newMigration(367, "Move branch protection settings to JSON", v29.MoveBranchProtectionConfigToJSON),
 	}
 	return preparedMigrations
 }

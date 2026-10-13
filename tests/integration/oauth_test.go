@@ -789,7 +789,7 @@ func testOAuthIntrospectionCrossClientIsolation(t *testing.T) {
 		allowed := new(introspectResponse)
 		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), allowed))
 		assert.True(t, allowed.Active)
-		assert.Equal(t, "openid profile", allowed.Scope)
+		assert.Equal(t, "openid profile all", allowed.Scope)
 		assert.Equal(t, resourceOwner.Name, allowed.Username)
 		assert.Equal(t, strconv.FormatInt(resourceOwner.ID, 10), allowed.Subject)
 		assert.Equal(t, jwt.ClaimStrings{clientA.ClientID}, allowed.Audience)
@@ -803,7 +803,7 @@ func testOAuthIntrospectionCrossClientIsolation(t *testing.T) {
 
 func testOAuthGrantScopesReadUserFailRepos(t *testing.T) {
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	accessToken := issueOAuthAccessTokenForScope(t, user, "openid read:user")
+	accessToken := issueOAuthAccessTokenResponseForScope(t, user, "openid read:user").AccessToken
 	userReq := NewRequest(t, "GET", "/api/v1/user")
 	userReq.SetHeader("Authorization", "Bearer "+accessToken)
 	userResp := MakeRequest(t, userReq, http.StatusOK)
@@ -832,7 +832,7 @@ func testOAuthGrantScopesReadUserFailRepos(t *testing.T) {
 
 func testOAuthGrantScopesBasicRespectsWriteUser(t *testing.T) {
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	accessToken := issueOAuthAccessTokenForScope(t, user, "openid read:user")
+	accessToken := issueOAuthAccessTokenResponseForScope(t, user, "openid read:user").AccessToken
 	fullName := "oauth2-basic-scope-test"
 
 	updateBody := &api.UserSettingsOptions{
@@ -861,7 +861,7 @@ func testOAuthGrantScopesBasicRespectsWriteUser(t *testing.T) {
 	assert.Contains(t, basicError.Message, "required=[write:user]")
 }
 
-func issueOAuthAccessTokenForScope(t *testing.T, user *user_model.User, scope string) string {
+func issueOAuthAccessTokenResponseForScope(t *testing.T, user *user_model.User, scope string) *oauth2_provider.AccessTokenResponse {
 	t.Helper()
 
 	appBody := api.CreateOAuth2ApplicationOptions{
@@ -899,15 +899,9 @@ func issueOAuthAccessTokenForScope(t *testing.T, user *user_model.User, scope st
 		"code":          authcode,
 	})
 	accessTokenResp := ctx.MakeRequest(t, accessTokenReq, http.StatusOK)
-	type response struct {
-		AccessToken  string `json:"access_token"`
-		TokenType    string `json:"token_type"`
-		ExpiresIn    int64  `json:"expires_in"`
-		RefreshToken string `json:"refresh_token"`
-	}
-	parsed := new(response)
+	parsed := new(oauth2_provider.AccessTokenResponse)
 	require.NoError(t, json.Unmarshal(accessTokenResp.Body.Bytes(), parsed))
-	return parsed.AccessToken
+	return parsed
 }
 
 func testOAuthGrantScopesReadRepositoryFailOrganization(t *testing.T) {
@@ -1445,4 +1439,28 @@ func TestOAuthUserInfoTokenScope(t *testing.T) {
 	req.SetHeader("Authorization", "Bearer "+userToken)
 	resp := MakeRequest(t, req, http.StatusOK)
 	assert.Contains(t, resp.Body.String(), "user2@example.com")
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	for _, tc := range []struct {
+		scope, wantScope string
+		status           int
+	}{
+		{"openid", "openid all", http.StatusOK},
+		{"invalid:scope", "no-token-scope", http.StatusForbidden},
+		{"openid invalid:scope", "openid no-token-scope", http.StatusForbidden},
+		{"no-token-scope", "no-token-scope", http.StatusForbidden},
+		{"openid read:user invalid:scope", "openid read:user", http.StatusOK},
+	} {
+		t.Run(tc.scope, func(t *testing.T) {
+			response := issueOAuthAccessTokenResponseForScope(t, user, tc.scope)
+			assert.Equal(t, tc.wantScope, response.Scope)
+			req := NewRequest(t, "GET", "/login/oauth/userinfo")
+			req.SetHeader("Authorization", "Bearer "+response.AccessToken)
+			resp := MakeRequest(t, req, tc.status)
+			if tc.status == http.StatusOK {
+				claims := DecodeJSON(t, resp, map[string]any{})
+				assert.Equal(t, strconv.FormatInt(user.ID, 10), claims["sub"])
+			}
+		})
+	}
 }

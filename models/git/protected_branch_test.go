@@ -4,6 +4,7 @@
 package git
 
 import (
+	"context"
 	"testing"
 
 	"gitea.dev/models/db"
@@ -12,6 +13,7 @@ import (
 	user_model "gitea.dev/models/user"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBranchRuleMatch(t *testing.T) {
@@ -162,8 +164,10 @@ func TestCanBypassBranchProtection(t *testing.T) {
 	teamMember := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
 	pb := &ProtectedBranch{
-		EnableBypassAllowlist:  true,
-		BypassAllowlistUserIDs: []int64{user.ID},
+		ProtectedBranchConfig: ProtectedBranchConfig{
+			EnableBypassAllowlist:  true,
+			BypassAllowlistUserIDs: []int64{user.ID},
+		},
 	}
 
 	testBypass := func(t *testing.T, expected bool, pb *ProtectedBranch, doer *user_model.User, isAdmin bool) {
@@ -201,4 +205,64 @@ func TestCanBypassBranchProtection(t *testing.T) {
 
 	// User does not bypass when not in allowlisted teams.
 	testBypass(t, false, pb, user, false)
+}
+
+func TestProtectedBranchConfig(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	pb := &ProtectedBranch{
+		RepoID: 1, RuleName: "config-test",
+		ProtectedBranchConfig: ProtectedBranchConfig{
+			CanPush: true, WhitelistUserIDs: []int64{2, 4}, WhitelistTeamIDs: []int64{1, 2}, StatusCheckContexts: []string{},
+		},
+	}
+	require.NoError(t, db.Insert(ctx, pb))
+	loaded := unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
+	assert.Equal(t, pb.ProtectedBranchConfig, loaded.ProtectedBranchConfig)
+	edited := ProtectedBranchConfig{
+		CanPush: true, CanDelete: true, RequireSignedCommits: true, RequiredApprovals: 2,
+		WhitelistUserIDs: []int64{2, 4, 5}, WhitelistTeamIDs: []int64{1, 2, 3}, StatusCheckContexts: []string{"ci"},
+	}
+	require.NoError(t, db.WithTx(ctx, func(ctx context.Context) error {
+		_, err := db.GetEngine(ctx).ID(pb.ID).Cols("config").Update(&ProtectedBranch{ProtectedBranchConfig: edited})
+		return err
+	}))
+	require.NoError(t, RemoveUserIDFromProtectedBranch(ctx, loaded, 2))
+	require.NoError(t, RemoveTeamIDFromProtectedBranch(ctx, loaded, 1))
+	loaded = unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
+	assert.Equal(t, []int64{4, 5}, loaded.WhitelistUserIDs)
+	assert.Equal(t, []int64{2, 3}, loaded.WhitelistTeamIDs)
+	edited.WhitelistUserIDs = []int64{4, 5}
+	edited.WhitelistTeamIDs = []int64{2, 3}
+	assert.Equal(t, edited, loaded.ProtectedBranchConfig)
+	loaded.ProtectedBranchConfig = ProtectedBranchConfig{}
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	require.NoError(t, UpdateProtectBranch(ctx, repo, loaded, WhitelistOptions{}))
+	loaded = unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
+	assert.Equal(t, ProtectedBranchConfig{}, loaded.ProtectedBranchConfig)
+}
+
+func TestUpdateProtectBranchSystemUsers(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	users := []int64{2, user_model.ActionsUserID, user_model.DeployKeyUserID}
+	pb := &ProtectedBranch{
+		RepoID: repo.ID, RuleName: "system-users",
+		ProtectedBranchConfig: ProtectedBranchConfig{
+			EnableBypassAllowlist:  true,
+			BypassAllowlistUserIDs: users,
+		},
+	}
+	require.NoError(t, db.Insert(ctx, pb))
+	require.NoError(t, UpdateProtectBranch(ctx, repo, pb, WhitelistOptions{
+		UserIDs: users, ForcePushUserIDs: users, MergeUserIDs: users, BypassUserIDs: users,
+	}))
+	loaded := unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
+	assert.Equal(t, []int64{2}, loaded.BypassAllowlistUserIDs)
+	assert.Equal(t, users, loaded.WhitelistUserIDs)
+	assert.Equal(t, users, loaded.ForcePushAllowlistUserIDs)
+	assert.Equal(t, users, loaded.MergeWhitelistUserIDs)
+	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewActionsUser(), false))
+	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewDeployKeyUser(), false))
 }

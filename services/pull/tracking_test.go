@@ -27,8 +27,10 @@ func TestPullRequestReviewDecision(t *testing.T) {
 	assert.Nil(t, pullRequestReviewDecision(t.Context(), &git_model.ProtectedBranch{}, pr, nil))
 
 	protectBranch := &git_model.ProtectedBranch{
-		RequiredApprovals:      1,
-		BlockOnRejectedReviews: true,
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{
+			RequiredApprovals:      1,
+			BlockOnRejectedReviews: true,
+		},
 	}
 	decision := pullRequestReviewDecision(t.Context(), protectBranch, pr, issues_model.ReviewList{
 		{Type: issues_model.ReviewTypeApprove, Official: true},
@@ -72,7 +74,13 @@ func TestTrackingStackPolicyAndSupersededReviews(t *testing.T) {
 	ctx := t.Context()
 	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
 	other := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1})
-	pb := &git_model.ProtectedBranch{RepoID: pr.BaseRepoID + 1, RuleName: "release", RequiredApprovals: 1, BlockOnRejectedReviews: true}
+	pb := &git_model.ProtectedBranch{
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{
+			RequiredApprovals:      1,
+			BlockOnRejectedReviews: true,
+		},
+		RepoID: pr.BaseRepoID + 1, RuleName: "release",
+	}
 	require.NoError(t, db.Insert(ctx, pb))
 	stack := &issues_model.PullRequestStack{RepoID: pb.RepoID, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
 	require.NoError(t, db.Insert(ctx, stack))
