@@ -695,8 +695,8 @@ func matchIssueCommentEvent(issueCommentPayload *api.IssueCommentPayload, evt *j
 	return matchTimes == len(evt.Acts())
 }
 
-// matchCommentBody matches the glob patterns against the first non-empty line of the body, where commands are written,
-// so a command quoted or mentioned later in the comment doesn't match
+// matchCommentBody case-sensitively matches the glob patterns against the whole trimmed first non-empty line of the body,
+// where commands are written, so a command quoted or mentioned later in the comment doesn't match
 func matchCommentBody(patterns []string, body string) bool {
 	var line string
 	for l := range strings.Lines(body) {
