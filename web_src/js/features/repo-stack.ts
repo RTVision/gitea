@@ -35,7 +35,19 @@ export function initRepoStackInsert() {
     if (!submit) return; // no candidates to pick
     fomanticQuery(form.querySelector('.ui.dropdown')!).dropdown('setting', {
       fullTextSearch: true, // match titles and branches, not just number prefixes
-      onChange: () => { submit.disabled = false },
+      onChange: () => { submit.disabled = Boolean(form.closest('[data-stack-busy]')) },
+    });
+  });
+}
+
+export function initRepoStackActions() {
+  registerGlobalInitFunc('initRepoStackActions', (container: HTMLElement) => {
+    container.addEventListener('submit', (e) => {
+      // the post redirects back here, so lock every action until that page shows the queued operation
+      e.submitter?.classList.add('is-loading', 'tw-text-transparent');
+      for (const button of container.querySelectorAll<HTMLButtonElement>('button[type="submit"]')) {
+        if (button !== e.submitter) button.disabled = true;
+      }
     });
   });
 }
@@ -48,7 +60,9 @@ export function initRepoStackStatus() {
       const response = await GET(status.getAttribute('data-stack-status-url')!);
       if (!response.ok) return true;
       status.innerHTML = await response.text();
-      return !status.querySelector('[data-status-final="true"]');
+      if (!status.querySelector('[data-status-final="true"]')) return true;
+      if (status.closest('[data-stack-reload-on-final]')) window.location.reload(); // layers, revision and actions all changed
+      return false;
     };
     const poll = async () => {
       if (!status.isConnected) return;
