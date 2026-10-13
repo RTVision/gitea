@@ -789,7 +789,7 @@ func testOAuthIntrospectionCrossClientIsolation(t *testing.T) {
 		allowed := new(introspectResponse)
 		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), allowed))
 		assert.True(t, allowed.Active)
-		assert.Equal(t, "openid profile", allowed.Scope)
+		assert.Equal(t, "openid profile all", allowed.Scope)
 		assert.Equal(t, resourceOwner.Name, allowed.Username)
 		assert.Equal(t, strconv.FormatInt(resourceOwner.ID, 10), allowed.Subject)
 		assert.Equal(t, jwt.ClaimStrings{clientA.ClientID}, allowed.Audience)
@@ -1445,6 +1445,7 @@ func TestOAuthUserInfoTokenScope(t *testing.T) {
 		scope, wantScope string
 		status           int
 	}{
+		{"openid", "openid all", http.StatusOK},
 		{"invalid:scope", "no-token-scope", http.StatusForbidden},
 		{"openid invalid:scope", "openid no-token-scope", http.StatusForbidden},
 		{"no-token-scope", "no-token-scope", http.StatusForbidden},

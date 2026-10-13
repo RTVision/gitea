@@ -124,6 +124,14 @@ func NormalizeGrantScope(grantScopes string) string {
 	return strings.Join(append(generalScopes, accessScope.StringSlice()...), " ")
 }
 
+func EffectiveGrantScope(grantScopes string) string {
+	generalScopes, accessScope := splitGrantScopes(grantScopes)
+	if accessScope == "" {
+		accessScope = auth.AccessTokenScopeAll
+	}
+	return strings.Join(append(generalScopes, accessScope.StringSlice()...), " ")
+}
+
 // GrantAdditionalScopes returns valid scopes coming from grant.
 func GrantAdditionalScopes(grantScopes string) auth.AccessTokenScope {
 	_, accessScope := splitGrantScopes(grantScopes)
@@ -266,7 +274,7 @@ func NewAccessTokenResponse(ctx context.Context, grant *auth.OAuth2Grant, server
 
 	return &AccessTokenResponse{
 		AccessToken:  signedAccessToken,
-		Scope:        NormalizeGrantScope(grant.Scope),
+		Scope:        EffectiveGrantScope(grant.Scope),
 		TokenType:    TokenTypeBearer,
 		ExpiresIn:    setting.OAuth2.AccessTokenExpirationTime,
 		RefreshToken: signedRefreshToken,

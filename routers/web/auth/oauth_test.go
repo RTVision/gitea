@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createAndParseToken(t *testing.T, grant *auth.OAuth2Grant) *oauth2_provider.OIDCToken {
+func createAndParseToken(t *testing.T, grant *auth.OAuth2Grant, expectedScope string) *oauth2_provider.OIDCToken {
 	signingKey, err := oauth2_provider.CreateJWTSigningKey("HS256", make([]byte, 32))
 	assert.NoError(t, err)
 	assert.NotNil(t, signingKey)
@@ -33,7 +33,7 @@ func createAndParseToken(t *testing.T, grant *auth.OAuth2Grant) *oauth2_provider
 	response, terr := oauth2_provider.NewAccessTokenResponse(t.Context(), grant, signingKey, signingKey)
 	assert.Nil(t, terr)
 	assert.NotNil(t, response)
-	assert.Equal(t, grant.Scope, response.Scope)
+	assert.Equal(t, expectedScope, response.Scope)
 
 	parsedToken, err := jwt.ParseWithClaims(response.IDToken, &oauth2_provider.OIDCToken{}, func(token *jwt.Token) (any, error) {
 		assert.NotNil(t, token.Method)
@@ -58,7 +58,7 @@ func TestNewAccessTokenResponse_OIDCToken(t *testing.T) {
 	assert.Len(t, grants, 1)
 
 	// Scopes: openid
-	oidcToken := createAndParseToken(t, grants[0])
+	oidcToken := createAndParseToken(t, grants[0], "openid all")
 	assert.Empty(t, oidcToken.Name)
 	assert.Empty(t, oidcToken.PreferredUsername)
 	assert.Empty(t, oidcToken.Profile)
@@ -74,7 +74,7 @@ func TestNewAccessTokenResponse_OIDCToken(t *testing.T) {
 	assert.Len(t, grants, 1)
 
 	// Scopes: openid profile email
-	oidcToken = createAndParseToken(t, grants[0])
+	oidcToken = createAndParseToken(t, grants[0], "openid profile email all")
 	assert.Equal(t, user.DisplayName(), oidcToken.Name)
 	assert.Equal(t, user.Name, oidcToken.PreferredUsername)
 	assert.Equal(t, user.HTMLURL(t.Context()), oidcToken.Profile)

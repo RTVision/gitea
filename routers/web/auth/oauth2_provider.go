@@ -197,7 +197,7 @@ func IntrospectOAuth(ctx *context.Context) {
 	}
 
 	response.Active = true
-	response.Scope = oauth2_provider.NormalizeGrantScope(grant.Scope)
+	response.Scope = oauth2_provider.EffectiveGrantScope(grant.Scope)
 	response.RegisteredClaims = oauth2_provider.NewJwtRegisteredClaimsFromUser(introspectingApp.ClientID, grant.UserID, nil /*exp*/)
 	user, err := user_model.GetUserByID(ctx, grant.UserID)
 	if err != nil {
