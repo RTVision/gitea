@@ -389,19 +389,19 @@ func UpdateProtectBranch(ctx context.Context, repo *repo_model.Repository, prote
 		return fmt.Errorf("LoadOwner: %v", err)
 	}
 
-	whitelist, err := updateUserWhitelist(ctx, repo, protectBranch.WhitelistUserIDs, opts.UserIDs)
+	whitelist, err := updateUserWhitelist(ctx, repo, protectBranch.WhitelistUserIDs, opts.UserIDs, true)
 	if err != nil {
 		return err
 	}
 	protectBranch.WhitelistUserIDs = whitelist
 
-	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.ForcePushAllowlistUserIDs, opts.ForcePushUserIDs)
+	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.ForcePushAllowlistUserIDs, opts.ForcePushUserIDs, true)
 	if err != nil {
 		return err
 	}
 	protectBranch.ForcePushAllowlistUserIDs = whitelist
 
-	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.MergeWhitelistUserIDs, opts.MergeUserIDs)
+	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.MergeWhitelistUserIDs, opts.MergeUserIDs, true)
 	if err != nil {
 		return err
 	}
@@ -413,7 +413,7 @@ func UpdateProtectBranch(ctx context.Context, repo *repo_model.Repository, prote
 	}
 	protectBranch.ApprovalsWhitelistUserIDs = whitelist
 
-	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.BypassAllowlistUserIDs, opts.BypassUserIDs)
+	whitelist, err = updateUserWhitelist(ctx, repo, protectBranch.BypassAllowlistUserIDs, opts.BypassUserIDs, false)
 	if err != nil {
 		return err
 	}
@@ -521,7 +521,12 @@ func updateApprovalWhitelist(ctx context.Context, repo *repo_model.Repository, c
 
 // updateUserWhitelist checks whether the user whitelist changed and returns a whitelist with
 // the users from newWhitelist which have write access to the repo.
-func updateUserWhitelist(ctx context.Context, repo *repo_model.Repository, currentWhitelist, newWhitelist []int64) (whitelist []int64, err error) {
+func updateUserWhitelist(ctx context.Context, repo *repo_model.Repository, currentWhitelist, newWhitelist []int64, allowSystemUsers bool) (whitelist []int64, err error) {
+	if !allowSystemUsers {
+		newWhitelist = slices.DeleteFunc(slices.Clone(newWhitelist), func(userID int64) bool {
+			return userID == user_model.ActionsUserID || userID == user_model.DeployKeyUserID
+		})
+	}
 	hasUsersChanged := !util.SliceSortedEqual(currentWhitelist, newWhitelist)
 	if !hasUsersChanged {
 		return currentWhitelist, nil
@@ -529,7 +534,7 @@ func updateUserWhitelist(ctx context.Context, repo *repo_model.Repository, curre
 
 	whitelist = make([]int64, 0, len(newWhitelist))
 	for _, userID := range newWhitelist {
-		if userID == user_model.ActionsUserID || userID == user_model.DeployKeyUserID {
+		if allowSystemUsers && (userID == user_model.ActionsUserID || userID == user_model.DeployKeyUserID) {
 			whitelist = append(whitelist, userID)
 			continue
 		}

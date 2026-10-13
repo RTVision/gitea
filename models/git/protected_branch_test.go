@@ -230,3 +230,28 @@ func TestProtectedBranchConfig(t *testing.T) {
 	loaded = unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
 	assert.Equal(t, ProtectedBranchConfig{}, loaded.ProtectedBranchConfig)
 }
+
+func TestUpdateProtectBranchSystemUsers(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	users := []int64{2, user_model.ActionsUserID, user_model.DeployKeyUserID}
+	pb := &ProtectedBranch{
+		RepoID: repo.ID, RuleName: "system-users",
+		ProtectedBranchConfig: ProtectedBranchConfig{
+			EnableBypassAllowlist:  true,
+			BypassAllowlistUserIDs: users,
+		},
+	}
+	require.NoError(t, db.Insert(ctx, pb))
+	require.NoError(t, UpdateProtectBranch(ctx, repo, pb, WhitelistOptions{
+		UserIDs: users, ForcePushUserIDs: users, MergeUserIDs: users, BypassUserIDs: users,
+	}))
+	loaded := unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
+	assert.Equal(t, []int64{2}, loaded.BypassAllowlistUserIDs)
+	assert.Equal(t, users, loaded.WhitelistUserIDs)
+	assert.Equal(t, users, loaded.ForcePushAllowlistUserIDs)
+	assert.Equal(t, users, loaded.MergeWhitelistUserIDs)
+	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewActionsUser(), false))
+	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewDeployKeyUser(), false))
+}
