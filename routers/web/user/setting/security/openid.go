@@ -71,13 +71,19 @@ func OpenIDPost(ctx *context.Context) {
 		}
 	}
 
-	state, err := auth_model.CreateOpenIDAssociation(ctx, ctx.Doer.ID, id)
+	endpoint, localID, claimedID, err := openid.Discover(id)
+	if err != nil {
+		loadSecurityData(ctx)
+		ctx.RenderWithErrDeprecated(err.Error(), tplSettingsSecurity, &form)
+		return
+	}
+	state, err := auth_model.CreateOpenIDAssociation(ctx, ctx.Doer.ID, claimedID, endpoint)
 	if err != nil {
 		ctx.ServerError("CreateOpenIDAssociation", err)
 		return
 	}
 	redirectTo := setting.AppURL + "user/settings/security?state=" + state
-	url, err := openid.RedirectURL(id, redirectTo, setting.AppURL)
+	url, err := openid.BuildRedirectURL(endpoint, localID, claimedID, redirectTo, setting.AppURL)
 	if err != nil {
 		loadSecurityData(ctx)
 
@@ -111,7 +117,7 @@ func settingsOpenIDVerify(ctx *context.Context) {
 		return
 	}
 
-	consumed, err := auth_model.ConsumeOpenIDAssociation(ctx, ctx.FormString("state"), ctx.Doer.ID, id)
+	consumed, err := auth_model.ConsumeOpenIDAssociation(ctx, ctx.FormString("state"), ctx.Doer.ID, id, ctx.FormString("openid.op_endpoint"))
 	if err != nil {
 		ctx.ServerError("ConsumeOpenIDAssociation", err)
 		return

@@ -17,6 +17,7 @@ import (
 type OpenIDAssociation struct {
 	State       string `xorm:"pk varchar(64)"`
 	UserID      int64
+	Provider    string             `xorm:"TEXT"`
 	Identity    string             `xorm:"TEXT"`
 	ExpiresUnix timeutil.TimeStamp `xorm:"INDEX"`
 }
@@ -25,13 +26,13 @@ func init() {
 	db.RegisterModel(new(OpenIDAssociation))
 }
 
-func CreateOpenIDAssociation(ctx context.Context, userID int64, identity string) (string, error) {
+func CreateOpenIDAssociation(ctx context.Context, userID int64, identity, provider string) (string, error) {
 	now := timeutil.TimeStampNow()
 	if _, err := db.GetEngine(ctx).Where("expires_unix <= ?", now).Delete(new(OpenIDAssociation)); err != nil {
 		return "", err
 	}
 	association := &OpenIDAssociation{
-		State: util.CryptoRandomString(64), UserID: userID, Identity: identity,
+		State: util.CryptoRandomString(64), UserID: userID, Identity: identity, Provider: provider,
 		ExpiresUnix: now.AddDuration(10 * time.Minute),
 	}
 	_, err := db.GetEngine(ctx).Insert(association)
@@ -42,9 +43,9 @@ func GetOpenIDAssociation(ctx context.Context, state string, userID int64) (*Ope
 	return db.Get[OpenIDAssociation](ctx, builder.Eq{"state": state, "user_id": userID}.And(builder.Gt{"expires_unix": timeutil.TimeStampNow()}))
 }
 
-func ConsumeOpenIDAssociation(ctx context.Context, state string, userID int64, identity string) (bool, error) {
+func ConsumeOpenIDAssociation(ctx context.Context, state string, userID int64, identity, provider string) (bool, error) {
 	association, has, err := GetOpenIDAssociation(ctx, state, userID)
-	if err != nil || !has || association.Identity != identity {
+	if err != nil || !has || identity == "" || association.Provider != provider || (association.Identity != "" && association.Identity != identity) {
 		return false, err
 	}
 	affected, err := db.GetEngine(ctx).Where("state = ? AND user_id = ? AND expires_unix > ?", state, userID, timeutil.TimeStampNow()).Delete(new(OpenIDAssociation))

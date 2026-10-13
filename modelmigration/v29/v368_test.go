@@ -15,6 +15,7 @@ import (
 type openIDAssociationAfterV368 struct {
 	State       string `xorm:"pk varchar(64)"`
 	UserID      int64
+	Provider    string             `xorm:"TEXT"`
 	Identity    string             `xorm:"TEXT"`
 	ExpiresUnix timeutil.TimeStamp `xorm:"INDEX"`
 }
@@ -28,7 +29,7 @@ func TestAddOpenIDAssociation(t *testing.T) {
 		return
 	}
 	require.NoError(t, AddOpenIDAssociation(t.Context(), x))
-	state := &openIDAssociationAfterV368{State: "test", UserID: 2, Identity: "https://example.com/identity", ExpiresUnix: 1234}
+	state := &openIDAssociationAfterV368{State: "test", UserID: 2, Provider: "https://example.com/provider", Identity: "https://example.com/identity", ExpiresUnix: 1234}
 	_, err := x.Insert(state)
 	require.NoError(t, err)
 	loaded := new(openIDAssociationAfterV368)
