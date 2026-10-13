@@ -93,6 +93,45 @@ func pinStackEntry(ctx context.Context, stack *issues_model.PullRequestStack, en
 	return err
 }
 
+// advanceStackBoundary moves a layer's saved boundary up to newer parent commits its head has merged,
+// so parent changes taken in by an ordinary push stop showing in the layer's diff.
+func advanceStackBoundary(ctx context.Context, pr *issues_model.PullRequest) error {
+	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
+	if err != nil || stack == nil || stack.State != issues_model.StackStateOpen || stack.ActiveOperationID != 0 {
+		return err
+	}
+	entry := new(issues_model.StackEntry)
+	if has, err := db.GetEngine(ctx).Where("stack_id = ? AND pull_request_id = ?", stack.ID, pr.ID).Get(entry); err != nil || !has || entry.OldParentSHA == "" {
+		return err
+	}
+	parentRef := git.BranchPrefix + stack.TrunkBranch
+	if entry.ParentPullRequestID != 0 {
+		parent, err := issues_model.GetPullRequestByID(ctx, entry.ParentPullRequestID)
+		if err != nil || parent.HasMerged {
+			return err // a landed parent is re-pinned by the next stack update
+		}
+		parentRef = issues_model.StackHeadRefName(parent.ID)
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, stack.RepoID)
+	if err != nil {
+		return err
+	}
+	boundary, err := git.MergeBase(ctx, repo, parentRef, issues_model.StackHeadRefName(pr.ID))
+	if err != nil || boundary == entry.OldParentSHA {
+		return err
+	}
+	// a rewritten parent leaves the saved boundary off the new history, so it waits for a stack sync
+	if newer, err := stackAncestor(ctx, repo, entry.OldParentSHA, boundary); err != nil || !newer {
+		return err
+	}
+	updated, err := db.GetEngine(ctx).Where("id = ? AND old_parent_sha = ?", entry.ID, entry.OldParentSHA).Cols("old_parent_sha").Update(&issues_model.StackEntry{OldParentSHA: boundary})
+	if err != nil || updated == 0 {
+		return err
+	}
+	entry.OldParentSHA = boundary
+	return pinStackEntry(ctx, stack, entry)
+}
+
 func prepareStackObjects(ctx context.Context, tmp *mergeContext, layers []*stackLayerJournal) error {
 	for _, layer := range layers {
 		source, err := stackLayerSource(ctx, layer)

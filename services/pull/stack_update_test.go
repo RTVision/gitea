@@ -224,3 +224,68 @@ func TestStackMergeModeUpdate(t *testing.T) {
 	assert.Equal(t, "completed", op.State, op.LastError)
 	assert.Equal(t, run("rev-parse", "pr-to-update"), bareRun("rev-parse", "pr-to-update"), "retry adopts the locally resolved heads")
 }
+
+func TestStackBoundaryFollowsMergedParent(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	defer test.MockVariableValue(&setting.Repository.PullRequest.EnableStacks, true)()
+	defer test.MockVariableValue(&setting.RepoRootPath, t.TempDir())()
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	work := t.TempDir()
+	run := stackTestGit(t, work)
+	commit := func(name string) {
+		require.NoError(t, os.WriteFile(filepath.Join(work, name), []byte(name+"\n"), 0o600))
+		run("add", name)
+		run("commit", "-m", name)
+	}
+	run("init", "--initial-branch=release")
+	commit("base")
+	run("checkout", "-b", "branch2")
+	commit("lower")
+	run("checkout", "-b", "pr-to-update")
+	commit("upper")
+	bare := gitrepo.RepoLocalPath(repo)
+	require.NoError(t, os.MkdirAll(filepath.Dir(bare), 0o755))
+	run("clone", "--bare", work, bare)
+	_, err := db.GetEngine(ctx).ID(2).Cols("base_branch").Update(&issues_model.PullRequest{BaseBranch: "release"})
+	require.NoError(t, err)
+	stack, err := CreateStack(ctx, owner, repo, CreateStackOptions{TrunkBranch: "release", Mode: issues_model.StackModeMerge, PullRequestIDs: []int64{2, 5}})
+	require.NoError(t, err)
+
+	push := func(id int64, branches ...string) {
+		run(append([]string{"push", "--force", bare}, branches...)...)
+		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: id})
+		require.NoError(t, PushToBaseRepo(ctx, pr))
+		require.NoError(t, advanceStackBoundary(ctx, pr))
+	}
+	boundaries := func() (string, string) {
+		entries, err := issues_model.GetStackEntries(ctx, stack.ID)
+		require.NoError(t, err)
+		return entries[0].OldParentSHA, entries[1].OldParentSHA
+	}
+	oldLower := run("rev-parse", "branch2")
+
+	run("checkout", "release")
+	commit("trunk")
+	run("checkout", "branch2")
+	run("merge", "--no-ff", "-m", "trunk merge", "release")
+	push(2, "release", "branch2")
+	lower, upper := boundaries()
+	assert.Equal(t, run("rev-parse", "release"), lower, "merging the trunk moves the bottom boundary to it")
+	assert.Equal(t, oldLower, upper, "the upper layer has not merged its parent yet")
+	assert.Equal(t, lower, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2}).MergeBase)
+
+	run("checkout", "pr-to-update")
+	run("merge", "--no-ff", "-m", "parent merge", "branch2")
+	push(5, "pr-to-update")
+	_, upper = boundaries()
+	assert.Equal(t, run("rev-parse", "branch2"), upper)
+
+	run("checkout", "-B", "branch2", "release")
+	commit("rewritten")
+	push(2, "branch2")
+	push(5, "pr-to-update")
+	_, rewritten := boundaries()
+	assert.Equal(t, upper, rewritten, "a rewritten parent keeps the saved boundary")
+}

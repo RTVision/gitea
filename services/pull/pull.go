@@ -444,6 +444,9 @@ func AddTestPullRequestTask(opts TestPullRequestOptions) {
 					log.Error("PushToBaseRepo: %v", err)
 					continue
 				}
+				if err := advanceStackBoundary(ctx, pr); err != nil {
+					log.Error("advanceStackBoundary[%-v]: %v", pr, err)
+				}
 			} else {
 				continue
 			}
