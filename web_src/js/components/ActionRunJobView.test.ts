@@ -8,6 +8,7 @@ vi.mock('../modules/fetch.ts', () => ({POST: vi.fn()}));
 for (const done of [true, false]) {
   test(`reloads changed step logs with polling ${done ? 'stopped' : 'active'}`, async () => {
     vi.useFakeTimers();
+    const startPolling = vi.spyOn(globalThis, 'setInterval');
     const stopPolling = vi.spyOn(globalThis, 'clearInterval');
     const run = {...createEmptyActionsRun(), done, status: 'success' as const};
     const build = {summary: 'Build', duration: '1s', status: 'success' as const};
@@ -32,7 +33,7 @@ for (const done of [true, false]) {
     })});
     try {
       app.mount(root);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.waitFor(() => expect(startPolling).toHaveBeenCalledTimes(1));
       await vi.advanceTimersByTimeAsync(1000);
       expect(POST).toHaveBeenCalledTimes(2);
       if (done) await vi.waitFor(() => expect(stopPolling).toHaveBeenCalledTimes(1));
@@ -47,6 +48,7 @@ for (const done of [true, false]) {
     } finally {
       app.unmount();
       root.remove();
+      startPolling.mockRestore();
       stopPolling.mockRestore();
       vi.useRealTimers();
     }
