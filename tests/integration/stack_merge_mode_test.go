@@ -39,7 +39,10 @@ func TestNativeStackMergeMode(t *testing.T) {
 		repoUnit := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoUnit{RepoID: repo.ID, Type: unit.TypePullRequests})
 		repoUnit.PullRequestsConfig().AllowFastForwardOnly = true
 		require.NoError(t, repo_model.UpdateRepoUnitConfig(ctx, repoUnit))
-		_, err := db.GetEngine(ctx).Insert(&git_model.ProtectedBranch{RepoID: repo.ID, RuleName: "stack-*", CanPush: true})
+		_, err := db.GetEngine(ctx).Insert(&git_model.ProtectedBranch{
+			ProtectedBranchConfig: git_model.ProtectedBranchConfig{CanPush: true},
+			RepoID:                repo.ID, RuleName: "stack-*",
+		})
 		require.NoError(t, err)
 		head := func(ref string) string {
 			sha, err := git.GetFullCommitID(ctx, repo, git.BranchPrefix+ref)

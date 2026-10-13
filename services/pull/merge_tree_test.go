@@ -210,7 +210,10 @@ layer
 	require.NoError(t, db.Insert(ctx, stack))
 	require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pr.ID, Position: 1, OldParentSHA: boundary, HeadSHA: head}))
 	require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(pr.HeadRepoID, pr.HeadBranch)}))
-	require.NoError(t, db.Insert(ctx, &git_model.ProtectedBranch{RepoID: pr.BaseRepoID, RuleName: "master", ProtectedFilePatterns: "parent.txt;layer.txt"}))
+	require.NoError(t, db.Insert(ctx, &git_model.ProtectedBranch{
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{ProtectedFilePatterns: "parent.txt;layer.txt"},
+		RepoID:                pr.BaseRepoID, RuleName: "master",
+	}))
 	for name, check := range map[string]func(context.Context, *issues_model.PullRequest) error{"merge-tree": checkPullRequestMergeableByMergeTree, "temporary-repo": checkPullRequestMergeableByTmpRepo} {
 		t.Run(name, func(t *testing.T) {
 			pr.MergeBase, pr.Status = "", issues_model.PullRequestStatusChecking

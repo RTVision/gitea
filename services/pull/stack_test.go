@@ -85,7 +85,9 @@ func TestStackLifecycle(t *testing.T) {
 	t.Run("trunk ancestry policy", func(t *testing.T) {
 		lower := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
 		lower.CommitsBehind = 10
-		policy := &git_model.ProtectedBranch{BlockOnOutdatedBranch: true}
+		policy := &git_model.ProtectedBranch{
+			ProtectedBranchConfig: git_model.ProtectedBranchConfig{BlockOnOutdatedBranch: true},
+		}
 		outdated, err := isPullBranchOutdated(ctx, policy, lower)
 		require.NoError(t, err)
 		assert.False(t, outdated, "parent divergence does not determine trunk ancestry")

@@ -27,3 +27,16 @@ func AddStackMirrorBranchAndIssueRedirect(_ context.Context, x base.EngineMigrat
 	_, err := x.SyncWithOptions(xorm.SyncOptions{IgnoreConstrains: true, IgnoreDropIndices: true}, new(StackEntry), new(IssueRedirect))
 	return err
 }
+
+func AddStageAndNumberToActionTaskStep(_ context.Context, x base.EngineMigration) error {
+	type ActionTaskStep struct {
+		Stage  int64 `xorm:"NOT NULL DEFAULT 0"`
+		Number int64 `xorm:"NOT NULL DEFAULT 0"`
+	}
+
+	_, err := x.SyncWithOptions(xorm.SyncOptions{
+		IgnoreConstrains:  true,
+		IgnoreDropIndices: true,
+	}, new(ActionTaskStep))
+	return err
+}
