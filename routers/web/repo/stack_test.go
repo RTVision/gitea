@@ -232,6 +232,24 @@ func TestForkPullMergedTargetDeleted(t *testing.T) {
 	assert.Equal(t, int64(10), pull.MergedRepoID)
 }
 
+func TestPullMergeTargetNamesMirrorSource(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx, _ := contexttest.MockContext(t, "/user12/repo10/pulls/2")
+	contexttest.LoadRepo(t, ctx, 10)
+	stack := &issues_model.PullRequestStack{RepoID: 10, TrunkBranch: "master", State: issues_model.StackStateOpen}
+	require.NoError(t, db.Insert(ctx, stack))
+	require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: 3, Position: 1, MirrorBranch: "stack/pr-1"}))
+	pull := &issues_model.PullRequest{
+		BaseRepoID: 10, BaseRepo: ctx.Repo.Repository, BaseBranch: "stack/pr-1",
+		HeadRepoID: 10, HeadRepo: ctx.Repo.Repository, HeadBranch: "layer",
+	}
+	info := &pullRequestViewInfo{issue: &issues_model.Issue{PullRequest: pull}}
+	info.setTemplateDataMergeTarget(ctx)
+	assert.False(t, ctx.Written())
+	assert.Equal(t, "user13/repo11:branch2", ctx.Data["BaseTarget"])
+	assert.Equal(t, "/user13/repo11/src/branch/branch2", ctx.Data["BaseBranchLink"])
+}
+
 func TestPullStackNotFound(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx, _ := contexttest.MockContext(t, "/user2/repo1/pulls/stacks/0")

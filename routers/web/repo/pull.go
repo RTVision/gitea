@@ -181,6 +181,23 @@ func (prInfo *pullRequestViewInfo) setTemplateDataMergeTarget(ctx *context.Conte
 	}
 	ctx.Data["HeadBranchLink"] = headBranchLink
 	ctx.Data["BaseBranchLink"] = pull.GetBaseBranchLink(ctx)
+	if !pull.HasMerged {
+		source, err := issues_model.GetStackMirrorSource(ctx, pull.BaseRepoID, pull.BaseBranch)
+		if err != nil {
+			ctx.ServerError("GetStackMirrorSource", err)
+			return
+		}
+		if source != nil {
+			if err := source.LoadHeadRepo(ctx); err != nil {
+				ctx.ServerError("LoadHeadRepo", err)
+				return
+			}
+			if source.HeadRepo != nil { // the mirror is internal, so name the fork layer branch it copies
+				ctx.Data["BaseTarget"] = source.HeadRepo.FullName() + ":" + source.HeadBranch
+				ctx.Data["BaseBranchLink"] = source.GetHeadBranchLink(ctx)
+			}
+		}
+	}
 	if pull.HasMerged {
 		target, branch, err := pull.GetMergedTarget(ctx)
 		if err != nil {

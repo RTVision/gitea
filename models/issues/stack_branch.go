@@ -64,6 +64,19 @@ func IsStackMirrorBranch(ctx context.Context, repoID int64, branch string) (bool
 		Exist(new(StackEntry))
 }
 
+// GetStackMirrorSource returns the fork layer an open stack mirrors to the branch, or nil if it mirrors none.
+func GetStackMirrorSource(ctx context.Context, repoID int64, branch string) (*PullRequest, error) {
+	var entry StackEntry
+	has, err := db.GetEngine(ctx).Table("stack_entry").
+		Join("INNER", "pull_request_stack", "pull_request_stack.id = stack_entry.stack_id").
+		Where("pull_request_stack.repo_id = ? AND pull_request_stack.state = ? AND stack_entry.mirror_branch = ?", repoID, StackStateOpen, branch).
+		Cols("stack_entry.pull_request_id").Get(&entry)
+	if err != nil || !has {
+		return nil, err
+	}
+	return GetPullRequestByID(ctx, entry.PullRequestID)
+}
+
 // OpenStackLayer locates a layer of an open stack.
 type OpenStackLayer struct {
 	StackID  int64
