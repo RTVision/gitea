@@ -507,6 +507,15 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 		t.Run("SetPRTargetBranch", setPRTargetBranch("release/target"))
 		t.Run("FailToDeletePRTargetBranch", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "release/target"))
 		t.Run("ResetPRTargetBranch", setPRTargetBranch(""))
+		t.Run("CreateBranchForProtectedDeletion", doGitCreateBranch(dstPath, "protected-delete"))
+		t.Run("PushBranchForProtectedDeletion", doGitPushTestRepository(dstPath, "origin", "protected-delete"))
+		t.Run("ProtectBranchWithoutDeletion", doProtectBranch(ctx, "protected-delete", baseCtx.Username, "", "", ""))
+		t.Run("DeleteProtectedBranchDenied", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "protected-delete"))
+		t.Run("ProtectBranchWithDeletionAllowlist", doProtectBranchExt(ctx, "protected-delete", doProtectBranchOptions{
+			UserToWhitelistPush:   baseCtx.Username,
+			UserToWhitelistDelete: baseCtx.Username,
+		}))
+		t.Run("DeleteProtectedBranchAllowed", doGitPushTestRepository(dstPath, "origin", "--delete", "protected-delete"))
 	}
 }
 
@@ -520,7 +529,7 @@ func doProtectBranch(ctx APITestContext, branch, userToWhitelistPush, userToWhit
 }
 
 type doProtectBranchOptions struct {
-	UserToWhitelistPush, UserToWhitelistForcePush, UnprotectedFilePatterns, ProtectedFilePatterns string
+	UserToWhitelistPush, UserToWhitelistForcePush, UserToWhitelistDelete, UnprotectedFilePatterns, ProtectedFilePatterns string
 
 	StatusCheckPatterns []string
 	EnableDeletion      bool
@@ -552,7 +561,13 @@ func doProtectBranchExt(ctx APITestContext, ruleName string, opts doProtectBranc
 		}
 
 		if opts.EnableDeletion {
-			formData["enable_deletion"] = "on"
+			formData["enable_deletion"] = "all"
+		}
+		if opts.UserToWhitelistDelete != "" {
+			user, err := user_model.GetUserByName(t.Context(), opts.UserToWhitelistDelete)
+			assert.NoError(t, err)
+			formData["deletion_allowlist_users"] = strconv.FormatInt(user.ID, 10)
+			formData["enable_deletion"] = "whitelist"
 		}
 
 		if len(opts.StatusCheckPatterns) > 0 {

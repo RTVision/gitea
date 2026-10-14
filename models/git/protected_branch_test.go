@@ -8,7 +8,10 @@ import (
 	"testing"
 
 	"gitea.dev/models/db"
+	"gitea.dev/models/perm"
+	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
 
@@ -213,6 +216,8 @@ func TestProtectedBranchConfig(t *testing.T) {
 	pb := &ProtectedBranch{
 		RepoID: 1, RuleName: "config-test",
 		ProtectedBranchConfig: ProtectedBranchConfig{
+			CanDelete: true, EnableDeletionAllowlist: true,
+			DeletionAllowlistUserIDs: []int64{2, 4, user_model.ActionsUserID, user_model.DeployKeyUserID}, DeletionAllowlistTeamIDs: []int64{1, 2},
 			CanPush: true, WhitelistUserIDs: []int64{2, 4}, WhitelistTeamIDs: []int64{1, 2}, StatusCheckContexts: []string{},
 		},
 	}
@@ -221,6 +226,7 @@ func TestProtectedBranchConfig(t *testing.T) {
 	assert.Equal(t, pb.ProtectedBranchConfig, loaded.ProtectedBranchConfig)
 	edited := ProtectedBranchConfig{
 		CanPush: true, CanDelete: true, RequireSignedCommits: true, RequiredApprovals: 2,
+		EnableDeletionAllowlist: true, DeletionAllowlistUserIDs: []int64{2, 4, 5, user_model.ActionsUserID, user_model.DeployKeyUserID}, DeletionAllowlistTeamIDs: []int64{1, 2, 3},
 		WhitelistUserIDs: []int64{2, 4, 5}, WhitelistTeamIDs: []int64{1, 2, 3}, StatusCheckContexts: []string{"ci"},
 	}
 	require.NoError(t, db.WithTx(ctx, func(ctx context.Context) error {
@@ -234,6 +240,8 @@ func TestProtectedBranchConfig(t *testing.T) {
 	assert.Equal(t, []int64{2, 3}, loaded.WhitelistTeamIDs)
 	edited.WhitelistUserIDs = []int64{4, 5}
 	edited.WhitelistTeamIDs = []int64{2, 3}
+	edited.DeletionAllowlistUserIDs = []int64{4, 5, user_model.ActionsUserID, user_model.DeployKeyUserID}
+	edited.DeletionAllowlistTeamIDs = []int64{2, 3}
 	assert.Equal(t, edited, loaded.ProtectedBranchConfig)
 	loaded.ProtectedBranchConfig = ProtectedBranchConfig{}
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
@@ -256,13 +264,53 @@ func TestUpdateProtectBranchSystemUsers(t *testing.T) {
 	}
 	require.NoError(t, db.Insert(ctx, pb))
 	require.NoError(t, UpdateProtectBranch(ctx, repo, pb, WhitelistOptions{
-		UserIDs: users, ForcePushUserIDs: users, MergeUserIDs: users, BypassUserIDs: users,
+		UserIDs: users, ForcePushUserIDs: users, MergeUserIDs: users, DeletionUserIDs: users, BypassUserIDs: users,
 	}))
 	loaded := unittest.AssertExistsAndLoadBean(t, &ProtectedBranch{ID: pb.ID})
 	assert.Equal(t, []int64{2}, loaded.BypassAllowlistUserIDs)
 	assert.Equal(t, users, loaded.WhitelistUserIDs)
 	assert.Equal(t, users, loaded.ForcePushAllowlistUserIDs)
 	assert.Equal(t, users, loaded.MergeWhitelistUserIDs)
+	assert.Equal(t, users, loaded.DeletionAllowlistUserIDs)
 	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewActionsUser(), false))
 	assert.False(t, CanBypassBranchProtection(ctx, loaded, user_model.NewDeployKeyUser(), false))
+}
+
+func TestProtectedBranchCanUserDelete(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	writePermission := access_model.Permission{}
+	writePermission.SetUnitsWithDefaultAccessMode([]*repo_model.RepoUnit{{Type: unit.TypeCode}}, perm.AccessModeWrite)
+	readPermission := access_model.Permission{}
+	readPermission.SetUnitsWithDefaultAccessMode([]*repo_model.RepoUnit{{Type: unit.TypeCode}}, perm.AccessModeRead)
+
+	for _, user := range []*user_model.User{{ID: 2, Name: "user2"}, user_model.NewActionsUser(), user_model.NewDeployKeyUser()} {
+		t.Run(user.GetDisplayName(), func(t *testing.T) {
+			for _, tt := range []struct {
+				name   string
+				config ProtectedBranchConfig
+				want   bool
+			}{
+				{name: "disabled by default", config: ProtectedBranchConfig{CanPush: true}},
+				{name: "push disabled", config: ProtectedBranchConfig{CanDelete: true}},
+				{name: "unrestricted", config: ProtectedBranchConfig{CanPush: true, CanDelete: true}, want: true},
+				{name: "empty push allowlist", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableWhitelist: true}},
+				{name: "not in push allowlist", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableWhitelist: true, WhitelistUserIDs: []int64{1}}},
+				{name: "empty deletion allowlist", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableDeletionAllowlist: true}},
+				{name: "not in deletion allowlist", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableDeletionAllowlist: true, DeletionAllowlistUserIDs: []int64{1}}},
+				{name: "in both allowlists", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableWhitelist: true, WhitelistUserIDs: []int64{user.ID}, EnableDeletionAllowlist: true, DeletionAllowlistUserIDs: []int64{user.ID}}, want: true},
+				{name: "deletion allowlist does not grant push", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableWhitelist: true, EnableDeletionAllowlist: true, DeletionAllowlistUserIDs: []int64{user.ID}}},
+				{name: "team member", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableDeletionAllowlist: true, DeletionAllowlistTeamIDs: []int64{1}}, want: user.ID == 2},
+				{name: "push team member", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableWhitelist: true, WhitelistTeamIDs: []int64{1}}, want: user.ID == 2},
+				{name: "not in team", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableDeletionAllowlist: true, DeletionAllowlistTeamIDs: []int64{3}}},
+				{name: "user or team", config: ProtectedBranchConfig{CanPush: true, CanDelete: true, EnableDeletionAllowlist: true, DeletionAllowlistUserIDs: []int64{user.ID}, DeletionAllowlistTeamIDs: []int64{3}}, want: true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					pb := &ProtectedBranch{ProtectedBranchConfig: tt.config}
+					assert.Equal(t, tt.want, pb.CanUserDelete(t.Context(), user, writePermission))
+					assert.False(t, pb.CanUserDelete(t.Context(), user, readPermission))
+					assert.False(t, pb.CanUserDelete(t.Context(), nil, writePermission))
+				})
+			}
+		})
+	}
 }
