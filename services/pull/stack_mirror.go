@@ -23,7 +23,7 @@ import (
 
 // stackMirrorBranch names the stack repository branch tracking the fork head of layer index.
 func stackMirrorBranch(index int64) string {
-	return fmt.Sprintf("stack/pr-%d", index)
+	return fmt.Sprintf("%s%d", issues_model.StackMirrorBranchPrefix, index)
 }
 
 // stackChildBase returns the stack repository branch that the layer above parent targets.

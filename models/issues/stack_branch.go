@@ -64,6 +64,9 @@ func IsStackMirrorBranch(ctx context.Context, repoID int64, branch string) (bool
 		Exist(new(StackEntry))
 }
 
+// StackMirrorBranchPrefix starts the name of every stack repository branch mirroring a fork layer.
+const StackMirrorBranchPrefix = "stack/pr-"
+
 // GetStackMirrorSource returns the fork layer an open stack mirrors to the branch, or nil if it mirrors none.
 func GetStackMirrorSource(ctx context.Context, repoID int64, branch string) (*PullRequest, error) {
 	var entry StackEntry

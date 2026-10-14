@@ -181,7 +181,7 @@ func (prInfo *pullRequestViewInfo) setTemplateDataMergeTarget(ctx *context.Conte
 	}
 	ctx.Data["HeadBranchLink"] = headBranchLink
 	ctx.Data["BaseBranchLink"] = pull.GetBaseBranchLink(ctx)
-	if !pull.HasMerged {
+	if !pull.HasMerged && strings.HasPrefix(pull.BaseBranch, issues_model.StackMirrorBranchPrefix) {
 		source, err := issues_model.GetStackMirrorSource(ctx, pull.BaseRepoID, pull.BaseBranch)
 		if err != nil {
 			ctx.ServerError("GetStackMirrorSource", err)
@@ -193,8 +193,15 @@ func (prInfo *pullRequestViewInfo) setTemplateDataMergeTarget(ctx *context.Conte
 				return
 			}
 			if source.HeadRepo != nil { // the mirror is internal, so name the fork layer branch it copies
-				ctx.Data["BaseTarget"] = source.HeadRepo.FullName() + ":" + source.HeadBranch
-				ctx.Data["BaseBranchLink"] = source.GetHeadBranchLink(ctx)
+				perm, err := access_model.GetDoerRepoPermission(ctx, source.HeadRepo, ctx.Doer)
+				if err != nil {
+					ctx.ServerError("GetDoerRepoPermission", err)
+					return
+				}
+				if perm.CanRead(unit.TypeCode) {
+					ctx.Data["BaseTarget"] = source.HeadRepo.FullName() + ":" + source.HeadBranch
+					ctx.Data["BaseBranchLink"] = source.GetHeadBranchLink(ctx)
+				}
 			}
 		}
 	}

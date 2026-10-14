@@ -248,6 +248,11 @@ func TestPullMergeTargetNamesMirrorSource(t *testing.T) {
 	assert.False(t, ctx.Written())
 	assert.Equal(t, "user13/repo11:branch2", ctx.Data["BaseTarget"])
 	assert.Equal(t, "/user13/repo11/src/branch/branch2", ctx.Data["BaseBranchLink"])
+
+	_, err := db.GetEngine(ctx).ID(11).Cols("is_private").Update(&repo_model.Repository{IsPrivate: true})
+	require.NoError(t, err)
+	info.setTemplateDataMergeTarget(ctx)
+	assert.Equal(t, "stack/pr-1", ctx.Data["BaseTarget"], "a viewer who cannot read the fork keeps the mirror")
 }
 
 func TestPullStackNotFound(t *testing.T) {
