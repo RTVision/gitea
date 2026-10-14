@@ -492,7 +492,7 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 		t.Run("PushReleaseBranches", doGitPushTestRepository(dstPath, "origin", "master:release/temp", "master:release/target"))
 		t.Run("ProtectReleaseBranches", doProtectBranch(ctx, "release/*", "", "", "", ""))
 		t.Run("FailToDeleteProtectedBranch", doGitPushTestRepositoryFail(dstPath, "origin", "--delete", "release/temp"))
-		t.Run("AllowReleaseBranchDeletion", doProtectBranchExt(ctx, "release/*", doProtectBranchOptions{EnableDeletion: true}))
+		t.Run("AllowReleaseBranchDeletion", doProtectBranchExt(ctx, "release/*", doProtectBranchOptions{UserToWhitelistPush: baseCtx.Username, EnableDeletion: true}))
 		t.Run("DeleteProtectedBranch", doGitPushTestRepository(dstPath, "origin", "--delete", "release/temp"))
 		setPRTargetBranch := func(branch string) func(t *testing.T) {
 			return func(t *testing.T) {
