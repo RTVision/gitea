@@ -314,10 +314,6 @@ func hasPullRequestCommitBeenMerged(ctx context.Context, pr *issues_model.PullRe
 // Merge merges pull request to base repository.
 // Caller should check PR is ready to be merged (review and status checks)
 func Merge(outerCtx context.Context, prID int64, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, wasAutoMerged bool) error {
-	return mergeWithStackOperation(outerCtx, prID, doer, mergeStyle, expectedHeadCommitID, message, wasAutoMerged, 0)
-}
-
-func mergeWithStackOperation(outerCtx context.Context, prID int64, doer *user_model.User, mergeStyle repo_model.MergeStyle, expectedHeadCommitID, message string, wasAutoMerged bool, operationID int64, publication ...*stackMergePublication) error {
 	outerCtxId := uuid.NewV4().String()
 
 	_, outerSpan := gtprof.GetTracer().Start(outerCtx, gtprof.TraceSpanContext)
@@ -333,10 +329,6 @@ func mergeWithStackOperation(outerCtx context.Context, prID int64, doer *user_mo
 	span.SetAttributeString("context.trace-id-outer", outerCtxId) // this attribute is only used internally for debugging purpose
 	defer span.End()
 
-	if len(publication) > 0 {
-		ctx = context.WithValue(ctx, stackMergeContextKey{}, publication[0])
-	}
-
 	err := globallock.LockAndDo(ctx, getPullWorkingLockKey(prID), func(ctx context.Context) error {
 		pr, err := issues_model.GetPullRequestByID(ctx, prID)
 		if err != nil {
@@ -350,47 +342,15 @@ func mergeWithStackOperation(outerCtx context.Context, prID int64, doer *user_mo
 			return fmt.Errorf("unable to load issue: %w", err)
 		}
 
-		target := &Target{Repo: pr.BaseRepo, Branch: pr.BaseBranch}
-		if operationID != 0 {
-			op, err := issues_model.GetStackOperation(ctx, operationID)
-			if err != nil {
-				return err
-			}
-			target, err = stackOperationTarget(ctx, op)
-			if err != nil {
-				return err
-			}
-		}
-		if operationID == 0 {
-			if err := checkOrdinaryStackMutation(ctx, pr); err != nil {
-				return err
-			}
-		} else {
-			freshActor, err := user_model.GetUserByID(ctx, doer.ID)
-			if err != nil {
-				return err
-			}
-			doer = freshActor
-			if err := validateStackOperation(ctx, pr, operationID, doer.ID); err != nil {
-				return err
-			}
-			if err := checkStackMergeOrder(ctx, pr); err != nil {
-				return err
-			}
-			perm, err := access_model.GetDoerRepoPermission(ctx, target.Repo, doer)
-			if err != nil {
-				return err
-			}
-			if err := CheckPullMergeable(ctx, doer, &perm, pr, MergeCheckTypeGeneral, mergeStyle, false, target); err != nil {
-				return err
-			}
+		if err := checkOrdinaryStackMutation(ctx, pr); err != nil {
+			return err
 		}
 
-		prConfig := target.Repo.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
+		prConfig := pr.BaseRepo.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
 
 		// Check if merge style is correct and allowed
 		if !prConfig.IsMergeStyleAllowed(mergeStyle) {
-			return ErrInvalidMergeStyle{ID: target.Repo.ID, Style: mergeStyle}
+			return ErrInvalidMergeStyle{ID: pr.BaseRepo.ID, Style: mergeStyle}
 		}
 
 		hasCommitBeenMerged, err := hasPullRequestCommitBeenMerged(ctx, pr)
@@ -404,7 +364,7 @@ func mergeWithStackOperation(outerCtx context.Context, prID int64, doer *user_mo
 				onMergedIntoTempBase: func(commitID string) error {
 					return recordMergeIntent(ctx, pr, doer, commitID, wasAutoMerged)
 				},
-			}, target)
+			})
 			if err != nil {
 				return err
 			}
@@ -498,88 +458,86 @@ type mergeAndPushOptions struct {
 }
 
 // doMergeAndPush performs the merge operation without changing any pull information in database and pushes it up to the base repository
-func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, message string, opts mergeAndPushOptions, targets ...*Target) (string, error) { //nolint:unparam // non-error result is never used
-	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, opts.expectedHeadCommitID, targets...)
+func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, message string, opts mergeAndPushOptions) (string, error) { //nolint:unparam // non-error result is never used
+	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, opts.expectedHeadCommitID)
 	if err != nil {
 		return "", err
 	}
 	defer cancel()
 
-	// Merge commits.
+	if err := doMergeStyle(mergeCtx, mergeStyle, message); err != nil {
+		return "", err
+	}
+	mergeBaseSHA, mergeCommitID, err := publishMergeObjects(mergeCtx)
+	if err != nil {
+		return "", err
+	}
+
+	pr.MergedBaseCommitID = mergeBaseSHA
+	if opts.onMergedIntoTempBase != nil {
+		if err := opts.onMergedIntoTempBase(mergeCommitID); err != nil {
+			return "", err
+		}
+	}
+
+	if err := pushMergeToTarget(mergeCtx, doer, ""); err != nil {
+		return "", err
+	}
+	return mergeCommitID, nil
+}
+
+func doMergeStyle(mergeCtx *mergeContext, mergeStyle repo_model.MergeStyle, message string) error {
 	switch mergeStyle {
 	case repo_model.MergeStyleMerge:
-		if err := doMergeStyleMerge(mergeCtx, message); err != nil {
-			return "", err
-		}
+		return doMergeStyleMerge(mergeCtx, message)
 	case repo_model.MergeStyleRebase, repo_model.MergeStyleRebaseMerge:
-		if err := doMergeStyleRebase(mergeCtx, mergeStyle, message); err != nil {
-			return "", err
-		}
+		return doMergeStyleRebase(mergeCtx, mergeStyle, message)
 	case repo_model.MergeStyleSquash:
-		if err := doMergeStyleSquash(mergeCtx, message); err != nil {
-			return "", err
-		}
+		return doMergeStyleSquash(mergeCtx, message)
 	case repo_model.MergeStyleFastForwardOnly:
-		if err := doMergeStyleFastForwardOnly(mergeCtx); err != nil {
-			return "", err
-		}
+		return doMergeStyleFastForwardOnly(mergeCtx)
 	default:
-		return "", ErrInvalidMergeStyle{ID: mergeCtx.target.Repo.ID, Style: mergeStyle}
+		return ErrInvalidMergeStyle{ID: mergeCtx.target.Repo.ID, Style: mergeStyle}
 	}
+}
 
-	// OK we should cache our current head and origin/headbranch
-	mergeHeadSHA, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, "HEAD")
+// publishMergeObjects returns the base the merge started from and its result, after uploading the LFS objects the result needs.
+func publishMergeObjects(mergeCtx *mergeContext) (mergeBaseSHA, mergeCommitID string, err error) {
+	mergeBaseSHA, err = git.GetFullCommitID(mergeCtx, mergeCtx.tmpRepo, "original_"+tmpRepoBaseBranch)
 	if err != nil {
-		return "", fmt.Errorf("failed to get full commit id for HEAD: %w", err)
+		return "", "", fmt.Errorf("failed to get full commit id for origin/%s: %w", mergeCtx.target.Branch, err)
 	}
-	mergeBaseSHA, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, "original_"+tmpRepoBaseBranch)
+	mergeCommitID, err = git.GetFullCommitID(mergeCtx, mergeCtx.tmpRepo, tmpRepoBaseBranch)
 	if err != nil {
-		return "", fmt.Errorf("failed to get full commit id for origin/%s: %w", mergeCtx.target.Branch, err)
-	}
-	mergeCommitID, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, tmpRepoBaseBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get full commit id for the new merge: %w", err)
-	}
-
-	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
-		if err := publication.prepare(ctx, mergeCtx, mergeBaseSHA, mergeHeadSHA); err != nil {
-			return "", err
-		}
+		return "", "", fmt.Errorf("failed to get full commit id for the new merge: %w", err)
 	}
 
 	// Now it's questionable about where this should go - either after or before the push
 	// I think in the interests of data safety - failures to push to the lfs should prevent
 	// the merge as you can always remerge.
 	if setting.LFS.StartServer {
-		if err := LFSPush(ctx, mergeCtx.tmpBasePath, mergeCtx.tmpRepo, mergeHeadSHA, mergeBaseSHA, pr, mergeCtx.target); err != nil {
-			return "", err
+		if err := LFSPush(mergeCtx, mergeCtx.tmpBasePath, mergeCtx.tmpRepo, mergeCommitID, mergeBaseSHA, mergeCtx.pr, mergeCtx.target); err != nil {
+			return "", "", err
 		}
 	}
+	return mergeBaseSHA, mergeCommitID, nil
+}
 
+// pushMergeToTarget pushes the temporary base branch to the target branch, with the push attributed to the context's pull request.
+// A stack landing passes the trunk commit it built on, so the push fails if the trunk moved and the pre-receive hook fences it.
+func pushMergeToTarget(mergeCtx *mergeContext, doer *user_model.User, stackBaseSHA string) error {
+	pr := mergeCtx.pr
 	var headUser *user_model.User
-	err = pr.HeadRepo.LoadOwner(ctx)
+	err := pr.HeadRepo.LoadOwner(mergeCtx)
 	if err != nil {
 		if !user_model.IsErrUserNotExist(err) {
 			log.Error("Can't find user: %d for head repository in %-v: %v", pr.HeadRepo.OwnerID, pr, err)
-			return "", err
+			return err
 		}
 		log.Warn("Can't find user: %d for head repository in %-v - defaulting to doer: %s - %v", pr.HeadRepo.OwnerID, pr, doer.Name, err)
 		headUser = doer
 	} else {
 		headUser = pr.HeadRepo.Owner
-	}
-
-	pr.MergedBaseCommitID = mergeBaseSHA
-	if _, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
-		if err := PrepareStackMergedReceipt(ctx, pr, mergeCtx.target.Repo.ID, mergeCtx.target.Branch, mergeBaseSHA, mergeCommitID); err != nil {
-			return "", err
-		}
-	}
-
-	if opts.onMergedIntoTempBase != nil {
-		if err := opts.onMergedIntoTempBase(mergeCommitID); err != nil {
-			return "", err
-		}
 	}
 
 	mergeCtx.env = repo_module.FullPushingEnvironment(
@@ -590,20 +548,17 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 		pr.ID,
 		pr.Index,
 	)
-
-	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok && publication != nil {
-		mergeCtx.env = append(mergeCtx.env, repo_module.EnvPushTrigger+"="+string(repo_module.PushTriggerPRMergeToBase))
-	}
 	pushCmd := gitcmd.NewCommand("push", "origin").AddDynamicArguments(tmpRepoBaseBranch + ":" + git.BranchPrefix + mergeCtx.target.Branch)
-	if publication, ok := ctx.Value(stackMergeContextKey{}).(*stackMergePublication); ok {
-		pushCmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+mergeCtx.target.Branch+":"+publication.layer.LandingBaseSHA)
+	if stackBaseSHA != "" {
+		mergeCtx.env = append(mergeCtx.env, repo_module.EnvPushTrigger+"="+string(repo_module.PushTriggerPRMergeToBase))
+		pushCmd.AddOptionFormat("--force-with-lease=%s", git.BranchPrefix+mergeCtx.target.Branch+":"+stackBaseSHA)
 	}
 
 	// Push back to upstream.
 	// This cause an api call to "/api/internal/hook/post-receive/...",
-	if err := mergeCtx.PrepareGitCmd(pushCmd).RunWithStderr(ctx); err != nil {
-		if strings.Contains(err.Stderr(), "non-fast-forward") {
-			return "", &git.ErrPushOutOfDate{
+	if err := mergeCtx.PrepareGitCmd(pushCmd).RunWithStderr(mergeCtx); err != nil {
+		if strings.Contains(err.Stderr(), "non-fast-forward") || strings.Contains(err.Stderr(), "stale info") {
+			return &git.ErrPushOutOfDate{
 				StdOut: mergeCtx.outbuf.String(),
 				StdErr: err.Stderr(),
 				Err:    err,
@@ -615,12 +570,12 @@ func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *use
 				Err:    err,
 			}
 			err.GenerateMessage()
-			return "", err
+			return err
 		}
-		return "", fmt.Errorf("git push: %s", err.Stderr())
+		return fmt.Errorf("git push: %s", err.Stderr())
 	}
 	mergeCtx.outbuf.Reset()
-	return mergeCommitID, nil
+	return nil
 }
 
 func commitAndSignNoAuthor(ctx *mergeContext, message string) error {

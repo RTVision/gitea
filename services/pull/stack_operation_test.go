@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unit"
@@ -237,4 +238,26 @@ func TestStackManualMergeSerializesReservation(t *testing.T) {
 	entries, err = issues_model.GetStackEntries(ctx, stack.ID)
 	require.NoError(t, err)
 	assert.Equal(t, upperHead, entries[1].LandedCommitSHA)
+}
+
+func TestStackPublicationRechecksLowerLayers(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	_, err := db.GetEngine(ctx).Insert(&git_model.ProtectedBranch{
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{EnableStatusCheck: true, StatusCheckContexts: []string{"stack-ci"}},
+		RepoID:                1, RuleName: "release",
+	})
+	require.NoError(t, err)
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "release", State: issues_model.StackStateOpen, Revision: 1}
+	require.NoError(t, db.Insert(ctx, stack))
+	for i, pull := range []*issues_model.PullRequest{{ID: 2, HeadBranch: "branch2"}, {ID: 5, HeadBranch: "pr-to-update"}} {
+		require.NoError(t, db.Insert(ctx, &issues_model.StackEntry{StackID: stack.ID, PullRequestID: pull.ID, Position: i + 1}))
+		require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pull.ID, BranchKey: issues_model.StackBranchKey(1, pull.HeadBranch)}))
+	}
+	op := &issues_model.StackOperation{StackID: stack.ID, ExpectedRevision: 1, Kind: "land", State: "running", JournalJSON: `{"stage":"confirm","layers":[{"pull_id":2,"phase":"merging"},{"pull_id":5,"phase":"merging"}]}`}
+	require.NoError(t, issues_model.CreateStackOperation(ctx, op))
+	require.ErrorIs(t, CheckStackPublicationProtections(ctx, 5), ErrNotReadyToMerge, "the push naming the upper layer also lands the lower one")
+	op.JournalJSON = `{"stage":"confirm","layers":[{"pull_id":2,"phase":"merging"},{"pull_id":5,"phase":"ready"}]}`
+	require.NoError(t, issues_model.SaveStackOperation(ctx, op))
+	require.NoError(t, CheckStackPublicationProtections(ctx, 2), "a single-layer push leaves its checks to the pre-receive hook")
 }

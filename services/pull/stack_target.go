@@ -19,6 +19,8 @@ import (
 type Target struct {
 	Repo   *repo_model.Repository
 	Branch string
+	// baseCommit replaces the branch head as the merge base when a stack layer lands on the unpublished merge of the layer below
+	baseCommit string
 }
 
 func stackOperationTarget(ctx context.Context, op *issues_model.StackOperation) (*Target, error) {

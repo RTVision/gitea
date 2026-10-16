@@ -156,14 +156,19 @@ and signing requirements still apply.
 The stack page defaults to landing the whole remaining stack. Choose **Through**
 a layer to land only that layer and its unmerged predecessors. When the repository
 allows only one compatible merge method, the page shows its name without a selector.
-Landing uses Gitea's merge, squash or rebase merge style. The worker merges one pull
-request at a time, records the actual result, rebases the remaining layers and rechecks eligibility
-before proceeding. It waits when required checks or reviews are outstanding.
+Landing uses Gitea's merge, squash or rebase merge style. The selected layers land
+together: once every one of them contains the trunk and the layer below and passes its
+required checks and reviews, the worker builds each layer's merge on top of the one
+below and publishes them with a single trunk push. Each result must have the same tree
+as its layer's head, so the trunk receives exactly the content the layers' checks ran
+on and no layer is rebuilt and rechecked between merges. The worker waits while any
+selected layer has outstanding checks or reviews, and restacks first when a layer is
+behind the trunk or the layer below. Layers above the selection are then updated onto
+the new trunk. To land the layers below one that cannot pass, cancel the operation and
+land **Through** the last layer that can.
 
-Landing can partially complete. If two pull requests merge and the third is
-blocked, those first two remain merged. Canceling an operation does not undo
-published commits or merged pull requests. The operation status and journal show
-which work completed and where execution stopped.
+Canceling an operation does not undo published commits or merged pull requests. The
+operation status and journal show which work completed and where execution stopped.
 
 While an operation is active, structural edits are rejected. Use the stack's
 controls to merge, update or retarget its members. Open stack trunk and layer
@@ -244,6 +249,6 @@ requiring changes to the external Gitea SDK.
 
 This implementation supports linear stacks within a repository or from one direct
 fork. It does not combine source branches from several forks, change repository
-visibility, provide a GraphQL server, speculative merge-group queues, atomic
-whole-stack publication, or GitHub CLI/API compatibility. Stack landing follows
+visibility, provide a GraphQL server, speculative merge-group queues, or GitHub CLI/API
+compatibility. Stack landing follows
 Gitea's existing per-pull-request merge semantics.

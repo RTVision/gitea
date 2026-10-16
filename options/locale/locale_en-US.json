@@ -1809,7 +1809,7 @@
   "repo.pulls.stack_land_scope": "Layers to land",
   "repo.pulls.stack_land_all": "Whole stack",
   "repo.pulls.stack_land_through": "Through %s",
-  "repo.pulls.stack_land_desc": "Layers land from the bottom up, including the selected layer. Landing stops if a layer cannot be merged.",
+  "repo.pulls.stack_land_desc": "The selected layer and every layer below it land together in one push, once all of them can be merged.",
   "repo.pulls.stack_update": "Update",
   "repo.pulls.stack_rebase": "Rebase stack",
   "repo.pulls.stack_update_rebase_desc": "Replays each layer onto its updated parent.",

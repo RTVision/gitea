@@ -416,48 +416,36 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			if err != nil {
 				return err
 			}
-			ready := trunk == layer.OldParent
-			if stack.Mode == issues_model.StackModeMerge {
-				if ready, err = stackAncestor(ctx, repo, trunk, layer.ExpectedHead); err != nil {
-					return err
+			batch := layers
+			for i, candidate := range layers {
+				if candidate.Position > op.ThroughPosition {
+					batch = layers[:i]
+					break
 				}
+			}
+			if len(batch) == 0 {
+				journal.Stage = "finish"
+				break
+			}
+			ready, err := stackLayersReady(ctx, repo, stack.Mode, trunk, batch)
+			if err != nil {
+				return err
 			}
 			if !ready {
 				journal.Stage = "restack"
 				break
 			}
-			perm, err := access_model.GetDoerRepoPermission(ctx, repo, actor)
-			if err != nil {
-				return err
-			}
-			if err := CheckPullMergeable(ctx, actor, &perm, pr, MergeCheckTypeGeneral, repo_model.MergeStyle(op.MergeStyle), false, &Target{Repo: repo, Branch: stack.TrunkBranch}); err != nil {
-				return err
-			}
-			baseRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, repo)
-			if err != nil {
-				return err
-			}
-			message, body, err := GetDefaultMergeMessage(ctx, baseRepo, pr, repo_model.MergeStyle(op.MergeStyle), &Target{Repo: repo, Branch: stack.TrunkBranch})
-			closer.Close()
-			if err != nil {
-				return err
-			}
-			if body != "" {
-				message += "\n\n" + body
-			}
-			layer.LandingBaseSHA, layer.MergeCandidateSHA = trunk, ""
-			layer.Phase, journal.Stage = "merging", "confirm"
-			if err := saveStackJournal(ctx, op, journal); err != nil {
-				return err
-			}
-			mergeErr := mergeWithStackOperation(ctx, pr.ID, actor, repo_model.MergeStyle(op.MergeStyle), layer.ExpectedHead, message, false, op.ID, &stackMergePublication{op: op, journal: journal, layer: layer})
+			mergeErr := landStackLayers(ctx, op, journal, batch, trunk, &Target{Repo: repo, Branch: stack.TrunkBranch}, actor)
 			confirmed, err := issues_model.GetPullRequestByID(ctx, layer.PullID)
 			if err != nil {
 				return err
 			}
 			if !confirmed.HasMerged || confirmed.MergedCommitID == "" {
-				if layer.MergeCandidateSHA == "" || stackMergeFailedBeforePublication(mergeErr) {
-					layer.Phase, journal.Stage = "ready", "land"
+				if journal.Stage != "confirm" || stackMergeFailedBeforePublication(mergeErr) {
+					for _, unpublished := range batch {
+						unpublished.Phase, unpublished.LandingBaseSHA, unpublished.MergeCandidateSHA = "ready", "", ""
+					}
+					journal.Stage = "land"
 					if err := saveStackJournal(ctx, op, journal); err != nil {
 						return err
 					}
@@ -483,7 +471,10 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 				if layer.LandingBaseSHA == "" {
 					return errors.New("waiting for the recorded merge result; inspect the PR and complete merge reconciliation before retrying")
 				}
-				layer.Phase, journal.Stage = "ready", "land"
+				for _, unpublished := range stackMergingLayers(journal) {
+					unpublished.Phase, unpublished.LandingBaseSHA, unpublished.MergeCandidateSHA = "ready", "", ""
+				}
+				journal.Stage = "land"
 				break
 			}
 			mergedRepo, mergedBranch, err := pr.GetMergedTarget(ctx)
@@ -499,6 +490,9 @@ func executeStackOperation(ctx context.Context, op *issues_model.StackOperation)
 			}
 			op.Completed++
 			journal.Stage = "restack"
+			if next := remainingStackLayers(journal); len(next) > 0 && next[0].Phase == "merging" {
+				journal.Stage = "confirm" // the same push published the layer above
+			}
 		case "finish":
 			op.State = "completed"
 			if err := issues_model.FinishStackOperation(ctx, op); err != nil {

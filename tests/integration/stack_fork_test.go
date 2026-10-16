@@ -131,18 +131,21 @@ func TestNativeForkStackLanding(t *testing.T) {
 					op = waitForStackOperation(t, op.ID, "completed", "blocked")
 					require.Equal(t, "completed", op.State, op.LastError)
 				}
-				land(1, repo_model.MergeStyleSquash)
-				upperModel = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID})
-				assert.False(t, upperModel.HasMerged)
-				assert.Equal(t, main.ID, upperModel.BaseRepoID)
-				assert.Equal(t, "main", upperModel.BaseBranch)
+				if mode == issues_model.StackModeMerge {
+					land(2, repo_model.MergeStyleSquash) // both fork layers land with one push
+				} else {
+					land(1, repo_model.MergeStyleSquash)
+					upperModel = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID})
+					assert.False(t, upperModel.HasMerged)
+					assert.Equal(t, main.ID, upperModel.BaseRepoID)
+					assert.Equal(t, "main", upperModel.BaseBranch)
+					list := session.MakeRequest(t, NewRequest(t, http.MethodGet, "/"+main.FullName()+"/pulls"), http.StatusOK).Body.String()
+					assert.Contains(t, list, fmt.Sprintf(`href="%s"`, newLink))
+					land(2, repo_model.MergeStyleMerge)
+				}
 				exist, err := git_model.IsBranchExist(t.Context(), main.ID, "stack/pr-1")
 				require.NoError(t, err)
 				assert.False(t, exist)
-				list := session.MakeRequest(t, NewRequest(t, http.MethodGet, "/"+main.FullName()+"/pulls"), http.StatusOK).Body.String()
-				assert.Contains(t, list, fmt.Sprintf(`href="%s"`, newLink))
-
-				land(2, repo_model.MergeStyleMerge)
 				upperModel = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID})
 				assert.True(t, upperModel.HasMerged)
 				assert.Equal(t, originalIssueID, upperModel.IssueID)
