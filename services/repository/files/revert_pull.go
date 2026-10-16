@@ -20,7 +20,14 @@ var ErrPullRevertUnavailable = errors.New("pull request cannot be reverted safel
 
 // RevertPullRequest creates a branch with the inverse of the recorded merge delta.
 func RevertPullRequest(ctx reqctx.RequestContext, repo *repo_model.Repository, doer *user_model.User, pr *issues_model.PullRequest, opts *ApplyDiffPatchOptions) (*structs.FileResponse, error) {
-	if !pr.HasMerged || pr.MergedCommitID == "" || pr.BaseRepoID != repo.ID || opts.OldBranch != pr.BaseBranch || opts.NewBranch == "" || opts.NewBranch == opts.OldBranch {
+	if !pr.HasMerged || pr.MergedCommitID == "" || opts.NewBranch == "" || opts.NewBranch == opts.OldBranch {
+		return nil, ErrPullRevertUnavailable
+	}
+	target, targetBranch, err := pr.GetMergedTarget(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if target.ID != repo.ID || opts.OldBranch != targetBranch {
 		return nil, ErrPullRevertUnavailable
 	}
 	gitRepo, err := git.RepositoryFromRequestContextOrOpen(ctx, repo)

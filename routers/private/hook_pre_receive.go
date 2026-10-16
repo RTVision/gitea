@@ -329,7 +329,11 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		}
 
 		// Check all status checks and reviews are ok
-		if err := pull_service.CheckPullBranchProtections(ctx, pr, true); err != nil {
+		err = pull_service.CheckPullBranchProtections(ctx, pr, true)
+		if err == nil && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
+			err = pull_service.CheckStackPublicationProtections(ctx, pr.ID)
+		}
+		if err != nil {
 			if errors.Is(err, pull_service.ErrNotReadyToMerge) {
 				ctx.PrivateUserErrorf(http.StatusForbidden, "Not allowed to push to protected branch %s and pr #%d is not ready to be merged: %s", branchName, ctx.opts.PullRequestID, err.Error())
 				return

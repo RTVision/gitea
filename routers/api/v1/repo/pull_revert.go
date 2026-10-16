@@ -71,10 +71,21 @@ func RevertPullRequest(ctx *context.APIContext) {
 		ctx.APIError(http.StatusForbidden, user_model.ErrBlockedUser.Error())
 		return
 	}
+	baseBranch := pr.BaseBranch
+	if pr.HasMerged {
+		target, branch, err := pr.GetMergedTarget(ctx)
+		if err != nil {
+			ctx.APIErrorInternal(err)
+			return
+		}
+		if target.ID == repo.ID {
+			baseBranch = branch // a stack layer lands on the trunk, not on the layer below it
+		}
+	}
 	branch := fmt.Sprintf("revert-%d-%s", pr.Index, util.CryptoRandomString(12))
 	title := util.TruncateRunes(fmt.Sprintf("Revert %q", pr.Issue.Title), 255)
 	body := fmt.Sprintf("Reverts #%d.", pr.Index)
-	opts := &files.ApplyDiffPatchOptions{OldBranch: pr.BaseBranch, NewBranch: branch, Message: title + "\n\n" + body}
+	opts := &files.ApplyDiffPatchOptions{OldBranch: baseBranch, NewBranch: branch, Message: title + "\n\n" + body}
 	if _, err := files.RevertPullRequest(ctx, repo, ctx.Doer, pr, opts); err != nil {
 		if errors.Is(err, util.ErrPermissionDenied) {
 			ctx.APIError(http.StatusForbidden, err.Error())
@@ -85,7 +96,7 @@ func RevertPullRequest(ctx *context.APIContext) {
 		}
 		return
 	}
-	reverted := &issues_model.PullRequest{HeadRepoID: repo.ID, BaseRepoID: repo.ID, HeadRepo: repo, BaseRepo: repo, HeadBranch: branch, BaseBranch: pr.BaseBranch, MergeBase: opts.LastCommitID, Type: issues_model.PullRequestGitea}
+	reverted := &issues_model.PullRequest{HeadRepoID: repo.ID, BaseRepoID: repo.ID, HeadRepo: repo, BaseRepo: repo, HeadBranch: branch, BaseBranch: baseBranch, MergeBase: opts.LastCommitID, Type: issues_model.PullRequestGitea}
 	issue := &issues_model.Issue{RepoID: repo.ID, Title: title, PosterID: ctx.Doer.ID, Poster: ctx.Doer, IsPull: true, Content: body}
 	if err := pull_service.NewPullRequest(ctx, &pull_service.NewPullRequestOptions{Repo: repo, Issue: issue, PullRequest: reverted}); err != nil {
 		ctx.APIError(http.StatusInternalServerError, fmt.Sprintf("Revert branch %s was created, but opening its pull request failed: %v", branch, err))

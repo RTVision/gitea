@@ -92,6 +92,8 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 					})
 					require.NoError(t, err)
 				}
+				trunkBefore, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/release")
+				require.NoError(t, err)
 				var op *issues_model.StackOperation
 				if style == repo_model.MergeStyleSquash {
 					entries, err := issues_model.GetStackEntries(t.Context(), stack.ID)
@@ -99,19 +101,23 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 					layers := make([]map[string]any, 0, len(entries))
 					for i, entry := range entries {
 						pr := lower
-						phase := "merging"
 						if i > 0 {
-							pr, phase = upper, "ready"
+							pr = upper
 						}
-						layers = append(layers, map[string]any{"entry_id": entry.ID, "pull_id": entry.PullRequestID, "position": entry.Position, "head_branch": pr.HeadBranch, "expected_head": entry.HeadSHA, "old_parent": entry.OldParentSHA, "landing_base_sha": entry.OldParentSHA, "phase": phase})
+						layers = append(layers, map[string]any{"entry_id": entry.ID, "pull_id": entry.PullRequestID, "position": entry.Position, "head_branch": pr.HeadBranch, "expected_head": entry.HeadSHA, "old_parent": entry.OldParentSHA, "landing_base_sha": entry.OldParentSHA, "phase": "merging"})
 					}
 					journal, err := json.Marshal(map[string]any{"stage": "confirm", "layers": layers})
 					require.NoError(t, err)
-					op = &issues_model.StackOperation{StackID: stack.ID, ActorID: actor.ID, ExpectedRevision: stack.Revision, Kind: "land", MergeStyle: string(style), ThroughPosition: 1, State: "blocked", JournalJSON: string(journal)}
+					// an interrupted landing of both layers that never reached the trunk
+					op = &issues_model.StackOperation{StackID: stack.ID, ActorID: actor.ID, ExpectedRevision: stack.Revision, Kind: "land", MergeStyle: string(style), ThroughPosition: 2, State: "blocked", JournalJSON: string(journal)}
 					require.NoError(t, issues_model.CreateStackOperation(t.Context(), op))
 					require.NoError(t, pull_service.ResumeStackOperation(t.Context(), actor, op.ID))
 				} else {
-					op, err = pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: 1, Kind: "land", MergeStyle: style})
+					through := 1
+					if style == repo_model.MergeStyleRebase {
+						through = 2
+					}
+					op, err = pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: through, Kind: "land", MergeStyle: style})
 					require.NoError(t, err)
 				}
 				if style == repo_model.MergeStyleMerge {
@@ -135,28 +141,33 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 				}
 				op = waitForStackOperation(t, op.ID, "completed", "blocked")
 				require.Equal(t, "completed", op.State, op.LastError)
-				assert.Equal(t, 1, op.Completed)
-				lower = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: lower.ID})
-				upper = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID})
-				assert.True(t, lower.HasMerged)
-				assert.False(t, upper.HasMerged)
-				assert.Equal(t, "release", upper.BaseBranch)
-				trunk, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/release")
-				require.NoError(t, err)
-				count, _, err := gitcmd.NewCommand("rev-list", "--count").AddDynamicArguments(trunk + "..refs/heads/stack-upper").WithRepo(repo).RunStdString(t.Context())
-				require.NoError(t, err)
-				assert.Equal(t, "1\n", count, "only the upper layer remains after landing the lower layer")
-				stack, err = issues_model.GetStackByID(t.Context(), stack.ID)
-				require.NoError(t, err)
-				if style == repo_model.MergeStyleMerge {
+				if style != repo_model.MergeStyleMerge {
+					assert.Equal(t, 2, op.Completed, "both layers land in one push")
+					count, _, err := gitcmd.NewCommand("rev-list", "--count").AddDynamicArguments(trunkBefore + "..refs/heads/release").WithRepo(repo).RunStdString(t.Context())
+					require.NoError(t, err)
+					assert.Equal(t, "2\n", count, "each layer lands as its own commit")
+					assert.True(t, unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID}).HasMerged)
+				} else {
+					lower = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: lower.ID})
+					upper = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: upper.ID})
+					assert.True(t, lower.HasMerged)
+					assert.False(t, upper.HasMerged)
+					assert.Equal(t, "release", upper.BaseBranch)
+					trunk, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/release")
+					require.NoError(t, err)
+					count, _, err := gitcmd.NewCommand("rev-list", "--count").AddDynamicArguments(trunk + "..refs/heads/stack-upper").WithRepo(repo).RunStdString(t.Context())
+					require.NoError(t, err)
+					assert.Equal(t, "1\n", count, "only the upper layer remains after landing the lower layer")
+					stack, err = issues_model.GetStackByID(t.Context(), stack.ID)
+					require.NoError(t, err)
 					head, err := git.GetFullCommitID(t.Context(), repo, "refs/heads/stack-upper")
 					require.NoError(t, err)
 					require.NoError(t, commitstatus_service.CreateCommitStatus(t.Context(), repo, actor, head, &git_model.CommitStatus{Context: "stack-ci", State: commitstatus.CommitStatusSuccess}))
+					op, err = pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: 2, Kind: "land", MergeStyle: style})
+					require.NoError(t, err)
+					op = waitForStackOperation(t, op.ID, "completed", "blocked")
+					require.Equal(t, "completed", op.State, op.LastError)
 				}
-				op, err = pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, ThroughPosition: 2, Kind: "land", MergeStyle: style})
-				require.NoError(t, err)
-				op = waitForStackOperation(t, op.ID, "completed", "blocked")
-				require.Equal(t, "completed", op.State, op.LastError)
 				stack, err = issues_model.GetStackByID(t.Context(), stack.ID)
 				require.NoError(t, err)
 				assert.Equal(t, issues_model.StackStateComplete, stack.State)

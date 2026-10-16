@@ -10,6 +10,7 @@ import (
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
+	"gitea.dev/modules/container"
 	"gitea.dev/modules/git"
 )
 
@@ -102,12 +103,24 @@ func CheckStackUpdateByMerge(ctx context.Context, pr *issues_model.PullRequest) 
 	return issues_model.ErrInvalidStack
 }
 
+type stackLandingBatchKey struct{}
+
+// withStackLandingBatch lets layers published by one trunk push count their predecessors in it as landed.
+func withStackLandingBatch(ctx context.Context, layers []*stackLayerJournal) context.Context {
+	batch := make(container.Set[int64], len(layers))
+	for _, layer := range layers {
+		batch.Add(layer.PullID)
+	}
+	return context.WithValue(ctx, stackLandingBatchKey{}, batch)
+}
+
 func checkStackMergeOrder(ctx context.Context, pr *issues_model.PullRequest) error {
 	stack, err := issues_model.GetPullRequestStack(ctx, pr.ID)
 	if err != nil || stack == nil {
 		return err
 	}
-	if pr.BaseRepoID == stack.RepoID && pr.BaseBranch != stack.TrunkBranch {
+	batch, _ := ctx.Value(stackLandingBatchKey{}).(container.Set[int64])
+	if pr.BaseRepoID == stack.RepoID && pr.BaseBranch != stack.TrunkBranch && !batch.Contains(pr.ID) {
 		return ErrPullRequestStacked
 	}
 	entries, err := issues_model.GetStackEntries(ctx, stack.ID)
@@ -122,7 +135,7 @@ func checkStackMergeOrder(ctx context.Context, pr *issues_model.PullRequest) err
 		if err != nil {
 			return err
 		}
-		if !parent.HasMerged || parent.MergedCommitID == "" {
+		if (!parent.HasMerged || parent.MergedCommitID == "") && !batch.Contains(parent.ID) {
 			return ErrPullRequestStacked
 		}
 	}

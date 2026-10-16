@@ -18,12 +18,14 @@ import (
 	"gitea.dev/models/unit"
 	"gitea.dev/models/unittest"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/commitstatus"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
 	"gitea.dev/modules/queue"
 	"gitea.dev/modules/setting"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/test"
+	commitstatus_service "gitea.dev/services/repository/commitstatus"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,20 +138,34 @@ func TestNativeStackMergeMode(t *testing.T) {
 		}
 		assert.True(t, ancestor(head("stack-middle"), head("stack-upper")), "the layer above absorbs the inserted layer")
 
+		_, err = db.GetEngine(ctx).Insert(&git_model.ProtectedBranch{
+			ProtectedBranchConfig: git_model.ProtectedBranchConfig{EnableStatusCheck: true, StatusCheckContexts: []string{"stack-ci"}},
+			RepoID:                repo.ID, RuleName: "release",
+		})
+		require.NoError(t, err)
+		passChecks := func(branches ...string) {
+			for _, branch := range branches {
+				require.NoError(t, commitstatus_service.CreateCommitStatus(ctx, repo, owner, head(branch), &git_model.CommitStatus{Context: "stack-ci", State: commitstatus.CommitStatusSuccess}))
+			}
+		}
+
 		trunk := head("release")
-		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 1, MergeStyle: string(repo_model.MergeStyleSquash)})
-		assert.Equal(t, trunk, gitOutput(gitcmd.NewCommand("rev-parse", "release^@")), "the squash is a single commit on the trunk")
-		assert.True(t, ancestor(head("release"), head("stack-middle")), "the layer above absorbs the squash")
-		assert.Equal(t, "README.md", gitOutput(gitcmd.NewCommand("diff", "--name-only", "release", "stack-middle")))
+		middle := head("stack-middle")
+		passChecks("stack-lower", "stack-middle")
+		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 2, MergeStyle: string(repo_model.MergeStyleSquash)})
+		assert.Equal(t, trunk, gitOutput(gitcmd.NewCommand("rev-parse", "release~2")), "each layer lands as one squash commit")
+		assert.Equal(t, trunk, gitOutput(gitcmd.NewCommand("rev-parse", "release~1^@")))
+		assert.Equal(t, middle, head("stack-middle"), "the layers land together without being rebuilt and rechecked")
+		assert.Equal(t, gitOutput(gitcmd.NewCommand("rev-parse").AddDynamicArguments(middle+"^{tree}")), gitOutput(gitcmd.NewCommand("rev-parse", "release^{tree}")))
+		assert.True(t, ancestor(head("release"), head("stack-upper")), "the layer above absorbs the squashes")
+		assert.Equal(t, "README.md", gitOutput(gitcmd.NewCommand("diff", "--name-only", "release", "stack-upper")))
+		revert := DecodeJSON(t, MakeRequest(t, NewRequest(t, http.MethodPost, fmt.Sprintf("%s/pulls/%d/revert", base, pulls[1])).AddTokenAuth(token), http.StatusCreated), &api.PullRequest{})
+		assert.Equal(t, "release", revert.Base.Ref, "a layer landed with the one below reverts on the trunk")
 
 		trunk = head("release")
-		middle := head("stack-middle")
-		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 2, MergeStyle: string(repo_model.MergeStyleMerge)})
-		assert.Equal(t, trunk+"\n"+middle, gitOutput(gitcmd.NewCommand("rev-parse", "release^@")))
-		assert.True(t, ancestor(head("release"), head("stack-upper")), "the layer above gets the merge")
-
-		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 3, MergeStyle: string(repo_model.MergeStyleFastForwardOnly)})
-		assert.Equal(t, head("stack-upper"), head("release"))
+		passChecks("stack-upper")
+		runOperation("land", &api.PullRequestStackOperationOption{ThroughPosition: 3, MergeStyle: string(repo_model.MergeStyleMerge)})
+		assert.Equal(t, trunk+"\n"+head("stack-upper"), gitOutput(gitcmd.NewCommand("rev-parse", "release^@")))
 		landed := DecodeJSON(t, MakeRequest(t, NewRequest(t, http.MethodGet, path).AddTokenAuth(token), http.StatusOK), &api.PullRequestStack{})
 		assert.Equal(t, "complete", landed.State)
 		assert.Equal(t, readme, gitOutput(gitcmd.NewCommand("show", "release:README.md"))+"\n")
