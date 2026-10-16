@@ -1,13 +1,15 @@
+{{$root := ctx.RootData -}}
+{{$listType := .listType -}}
 <div id="issue-list" class="flex-divided-list items-with-main">
-	{{range .IssueGroups}}
+	{{range $root.IssueGroups}}
 		{{if .Stack}}
-			{{template "shared/issuelist_stack" dict "Root" $ "Row" .}}
+			{{template "shared/issuelist_stack" dict "Root" $root "listType" $listType "Row" .}}
 		{{else}}
-			{{template "shared/issuelist_item" dict "Root" $ "Issue" .Issue}}
+			{{template "shared/issuelist_item" dict "Root" $root "listType" $listType "Issue" .Issue}}
 		{{end}}
 	{{else}}
-		{{range .Issues}}
-			{{template "shared/issuelist_item" dict "Root" $ "Issue" .}}
+		{{range $root.Issues}}
+			{{template "shared/issuelist_item" dict "Root" $root "listType" $listType "Issue" .}}
 		{{else}}
 			<div class="tw-text-center tw-p-8">
 				<h3 class="tw-my-4">{{ctx.Locale.Tr "repo.issues.filter_no_results"}}</h3>
@@ -15,10 +17,10 @@
 			</div>
 		{{end}}
 	{{end}}
-	{{if .IssueIndexerUnavailable}}
+	{{if $root.IssueIndexerUnavailable}}
 		<div class="ui error message">
 			<p>{{ctx.Locale.Tr "search.keyword_search_unavailable"}}</p>
 		</div>
 	{{end}}
 </div>
-{{template "base/paginate" .}}
+{{template "base/paginate" $root}}

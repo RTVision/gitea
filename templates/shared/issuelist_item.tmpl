@@ -1,4 +1,5 @@
 {{$root := .Root}}
+{{$listType := .listType}}
 {{$approvalCounts := $root.ApprovalCounts}}
 {{$stackLayer := .StackLayer}}
 {{with .Issue}}
@@ -27,7 +28,7 @@
 				{{end}}
 				<span class="labels-list">
 					{{- range .Labels -}}
-						<a class="item" href="?q={{$root.Keyword}}&type={{$root.ViewType}}&state={{$root.State}}&labels={{.ID}}{{if ne $root.listType "milestone"}}&milestone={{$root.MilestoneID}}{{end}}&assignee={{$root.AssigneeID}}&poster={{$root.PosterID}}{{if $root.ShowArchivedLabels}}&archived=true{{end}}">{{ctx.RenderUtils.RenderLabel .}}</a>
+						<a class="item" href="?q={{$root.Keyword}}&type={{$root.ViewType}}&state={{$root.State}}&labels={{.ID}}{{if ne $listType "milestone"}}&milestone={{$root.MilestoneID}}{{end}}&assignee={{$root.AssigneeID}}&poster={{$root.PosterID}}{{if $root.ShowArchivedLabels}}&archived=true{{end}}">{{ctx.RenderUtils.RenderLabel .}}</a>
 					{{- end -}}
 				</span>
 			</div>
@@ -40,7 +41,7 @@
 		</div>
 		<div class="item-body tw-gap-2">
 			<a class="index flex-text-inline" href="{{if .Link}}{{.Link}}{{else}}{{$root.Link}}/{{.Index}}{{end}}">
-				{{if or (eq $root.listType "dashboard") (and $root.Repository (ne .RepoID $root.Repository.ID))}}
+				{{if or (eq $listType "dashboard") (and $root.Repository (ne .RepoID $root.Repository.ID))}}
 					{{.Repo.FullName}}#{{.Index}}
 				{{else}}
 					#{{.Index}}
@@ -83,7 +84,7 @@
 					{{ctx.Locale.Tr "repo.pulls.stack_badge" .StackID .Position (len .Stack.Layers)}}
 				</a>
 			{{end}}{{end}}
-			{{if and .Milestone (ne $root.listType "milestone")}}
+			{{if and .Milestone (ne $listType "milestone")}}
 				<a class="milestone flex-text-inline tw-max-w-[300px]" {{if $root.RepoLink}}href="{{$root.RepoLink}}/milestone/{{.Milestone.ID}}"{{else}}href="{{.Repo.Link}}/milestone/{{.Milestone.ID}}"{{end}}>
 					{{svg "octicon-milestone" 14}}
 					<span class="gt-ellipsis">{{.Milestone.Name}}</span>
