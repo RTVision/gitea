@@ -73,13 +73,13 @@ func RevertPullRequest(ctx *context.APIContext) {
 	}
 	baseBranch := pr.BaseBranch
 	if pr.HasMerged {
-		target, branch, err := pr.GetMergedTarget(ctx)
+		target, targetBranch, err := pr.GetMergedTarget(ctx)
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
 		}
 		if target.ID == repo.ID {
-			baseBranch = branch // a stack layer lands on the trunk, not on the layer below it
+			baseBranch = targetBranch // a stack layer lands on the trunk, not on the layer below it
 		}
 	}
 	branch := fmt.Sprintf("revert-%d-%s", pr.Index, util.CryptoRandomString(12))
