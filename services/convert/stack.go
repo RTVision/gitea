@@ -15,7 +15,6 @@ import (
 	"gitea.dev/modules/git"
 	api "gitea.dev/modules/structs"
 	"gitea.dev/modules/util"
-	context_service "gitea.dev/services/context"
 )
 
 // ToAPIPullRequestStackRef returns the PR's current stack membership.
@@ -58,8 +57,8 @@ func stackTrunkBase(ctx context.Context, stack *issues_model.PullRequestStack, e
 	if err != nil {
 		return nil, err
 	}
-	if apiCtx, ok := ctx.(*context_service.APIContext); ok && requireReadPermission && apiCtx.PublicOnly {
-		if !apiCtx.TokenCanAccessRepo(repo) {
+	if requireReadPermission && user_model.IsPublicOnlyDoer(doer) {
+		if !repo_model.DoerTokenAllowsRepo(ctx, doer, repo) {
 			return nil, util.ErrNotExist
 		}
 		checked := map[int64]bool{repo.ID: true}
@@ -76,7 +75,7 @@ func stackTrunkBase(ctx context.Context, stack *issues_model.PullRequestStack, e
 				if err != nil {
 					return nil, err
 				}
-				if !apiCtx.TokenCanAccessRepo(memberRepo) {
+				if !repo_model.DoerTokenAllowsRepo(ctx, doer, memberRepo) {
 					return nil, util.ErrNotExist
 				}
 				checked[repoID] = true
@@ -174,7 +173,7 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 		}
 		converted.Entries = append(converted.Entries, &api.PullRequestStackEntry{
 			Position:             entry.Position,
-			PullRequest:          toAPIPullRequest(ctx, pr, doer, stackRef),
+			PullRequest:          toAPIPullRequest(ctx, pr, doer, false, stackRef),
 			ParentPullRequest:    parentIndex,
 			ParentPullRequestRef: parentRef,
 			HeadSHA:              entry.HeadSHA,

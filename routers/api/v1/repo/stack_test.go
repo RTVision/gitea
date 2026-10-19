@@ -45,7 +45,7 @@ func TestStackAPIPublicOnlyToken(t *testing.T) {
 		ctx, _ := contexttest.MockAPIContext(t, "user12/repo10/stacks")
 		contexttest.LoadUser(t, ctx, 1)
 		contexttest.LoadRepo(t, ctx, 10)
-		ctx.PublicOnly = true
+		ctx.Doer.ExtDoerData = user_model.NewTokenExtDoerData(user_model.CredentialAccessToken, 1, "public-only,read:repository")
 		ctx.SetPathParam("id", strconv.FormatInt(stack.ID, 10))
 		return ctx
 	}
@@ -59,7 +59,7 @@ func TestStackAPIPublicOnlyToken(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, ctx.Resp.WrittenStatus())
 	ctx = newContext(t)
 	require.ErrorIs(t, checkStackAPIRead(ctx, stack), util.ErrNotExist)
-	ctx.PublicOnly = false
+	ctx.Doer.ExtDoerData = user_model.NewTokenExtDoerData(user_model.CredentialAccessToken, 1, "read:repository")
 	require.NoError(t, checkStackAPIRead(ctx, stack), "the doer retains access with an unrestricted token")
 
 	for name, handler := range map[string]func(*context.APIContext){
@@ -81,7 +81,7 @@ func TestStackAPIPublicOnlyToken(t *testing.T) {
 			ctx, response := contexttest.MockAPIContext(t, "user12/repo10/stacks?page="+strconv.Itoa(page)+"&limit=1")
 			contexttest.LoadUser(t, ctx, 1)
 			contexttest.LoadRepo(t, ctx, 10)
-			ctx.PublicOnly = true
+			ctx.Doer.ExtDoerData = user_model.NewTokenExtDoerData(user_model.CredentialAccessToken, 1, "public-only,read:repository")
 			ListPullRequestStacks(ctx)
 			require.Equal(t, http.StatusOK, response.Code)
 			assert.Equal(t, "2", response.Header().Get("X-Total-Count"))

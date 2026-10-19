@@ -6,6 +6,7 @@ package convert
 import (
 	"testing"
 
+	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
 	"gitea.dev/models/perm"
@@ -145,7 +146,7 @@ func TestPullRequestStackPublicOnlyToken(t *testing.T) {
 	ctx, _ := contexttest.MockAPIContext(t, "user2/repo1/pulls/3")
 	contexttest.LoadUser(t, ctx, 1)
 	contexttest.LoadRepo(t, ctx, 1)
-	ctx.PublicOnly = true
+	ctx.Doer.ExtDoerData = user_model.NewTokenExtDoerData("", 0, auth_model.AccessTokenScopePublicOnly)
 	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
 	stack := &issues_model.PullRequestStack{RepoID: 10, TrunkBranch: "master", State: issues_model.StackStateOpen, Revision: 1}
 	require.NoError(t, db.Insert(ctx, stack))
@@ -160,12 +161,15 @@ func TestPullRequestStackPublicOnlyToken(t *testing.T) {
 		converted := ToAPIPullRequest(ctx, pr, ctx.Doer)
 		require.NotNil(t, converted)
 		assert.Nil(t, converted.Stack, "hidden member and trunk repositories must not appear through another PR")
+		payload := ToPayloadPullRequest(ctx, pr, ctx.Doer)
+		require.NotNil(t, payload)
+		assert.Nil(t, payload.Stack, "webhook conversion retains the doer stack visibility checks")
 		trusted := ToAPIPullRequestForNotification(ctx, pr)
 		require.NotNil(t, trusted.Stack)
 		_, err = db.GetEngine(ctx).ID(ownerID).Cols("visibility").Update(&user_model.User{Visibility: structs.VisibleTypePublic})
 		require.NoError(t, err)
 	}
-	ctx.PublicOnly = false
+	ctx.Doer.ExtDoerData = nil
 	converted := ToAPIPullRequest(ctx, pr, ctx.Doer)
 	require.NotNil(t, converted.Stack)
 }
