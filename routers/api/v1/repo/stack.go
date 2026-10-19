@@ -28,7 +28,7 @@ func checkStackAPIPullRead(ctx *context.APIContext, pr *issues_model.PullRequest
 		if err != nil {
 			return err
 		}
-		if !ctx.TokenCanAccessRepo(repo) {
+		if !repo_model.DoerTokenAllowsRepo(ctx, ctx.Doer, repo) {
 			return util.ErrNotExist
 		}
 		permission, err := access_model.GetDoerRepoPermission(ctx, repo, ctx.Doer)
@@ -124,7 +124,7 @@ func resolveStackPullRequestIDs(ctx *context.APIContext, indexes []int64, refere
 			ctx.APIErrorAuto(err)
 			return nil, false
 		}
-		if !ctx.TokenCanAccessRepo(repo) {
+		if !repo_model.DoerTokenAllowsRepo(ctx, ctx.Doer, repo) {
 			ctx.APIErrorNotFound()
 			return nil, false
 		}
