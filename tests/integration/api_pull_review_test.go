@@ -146,6 +146,7 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	MakeRequest(t, req, http.StatusForbidden)
 
 	// test pull review reactions
+	issueToken := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteIssue)
 	issueReactionsURL := fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/reactions", repo.OwnerName, repo.Name, pullIssue.Index)
 	reactionsURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews/%d/reactions", repo.OwnerName, repo.Name, pullIssue.Index, review.ID)
 	req = NewRequestWithJSON(t, http.MethodPost, reactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
@@ -157,12 +158,12 @@ func testAPIPullReviewGeneral(t *testing.T) {
 	assert.Equal(t, "heart", reactions[0].Reaction)
 	req = NewRequestWithJSON(t, http.MethodPost, reactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
 	MakeRequest(t, req, http.StatusOK)
-	req = NewRequest(t, http.MethodGet, issueReactionsURL).AddTokenAuth(token)
+	req = NewRequest(t, http.MethodGet, issueReactionsURL).AddTokenAuth(issueToken)
 	resp = MakeRequest(t, req, http.StatusOK)
 	assert.Empty(t, DecodeJSON(t, resp, []*api.Reaction{}))
-	req = NewRequestWithJSON(t, http.MethodPost, issueReactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
+	req = NewRequestWithJSON(t, http.MethodPost, issueReactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(issueToken)
 	MakeRequest(t, req, http.StatusCreated)
-	req = NewRequestWithJSON(t, http.MethodDelete, issueReactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(token)
+	req = NewRequestWithJSON(t, http.MethodDelete, issueReactionsURL, &api.EditReactionOption{Reaction: "heart"}).AddTokenAuth(issueToken)
 	MakeRequest(t, req, http.StatusNoContent)
 	req = NewRequest(t, http.MethodGet, reactionsURL).AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusOK)
