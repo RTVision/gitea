@@ -70,11 +70,13 @@ import {initRepoWatch} from './features/repo-watch.ts';
 import {initPackagesView} from './features/packages.ts';
 import {initRepoStackActions, initRepoStackInsert, initRepoStackNew, initRepoStackStatus} from './features/repo-stack.ts';
 import {initAsyncHashChangeListeners} from './modules/hashchange.ts';
+import {initGlobalModal} from './modules/modal.ts';
 
 const initStartTime = performance.now();
 const initPerformanceTracer = callInitFunctions([
   initGiteaFomantic,
 
+  initGlobalModal,
   initGlobalComponent,
   initGlobalDropdown,
   initGlobalFetchAction,
