@@ -95,6 +95,11 @@ func validateStackWorkflowPayload(stack *issues_model.PullRequestStack, payload 
 	if stack == nil {
 		return nil
 	}
+	// Comment events run workflows from the default branch and never match
+	// against the pull request base, so they don't depend on trunk provenance.
+	if _, ok := payload.(*api.IssueCommentPayload); ok {
+		return nil
+	}
 	pullPayload, ok := payload.(*api.PullRequestPayload)
 	if !ok || pullPayload.PullRequest == nil || pullPayload.PullRequest.Stack == nil || pullPayload.PullRequest.Stack.Base == nil || pullPayload.PullRequest.Stack.Base.Ref != stack.TrunkBranch || pullPayload.PullRequest.Stack.Base.Sha == "" || pullPayload.PullRequest.Stack.Base.Repository == nil || pullPayload.PullRequest.Stack.Base.Repository.ID != stack.RepoID {
 		return errors.New("stack trunk provenance is unavailable; refusing to select pull request workflows")

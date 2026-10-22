@@ -131,6 +131,26 @@ func TestValidateStackWorkflowPayloadFailsClosed(t *testing.T) {
 	assert.NoError(t, validateStackWorkflowPayload(stack, payload))
 	payload.PullRequest.Stack.Base.Sha = ""
 	assert.Error(t, validateStackWorkflowPayload(stack, payload))
+	payload.PullRequest.Stack.Base.Sha = "trunk-sha"
+	payload.PullRequest.Stack.Base.Ref = "feature-parent"
+	assert.Error(t, validateStackWorkflowPayload(stack, payload))
+	payload.PullRequest.Stack = nil
+	assert.Error(t, validateStackWorkflowPayload(stack, payload))
+	assert.Error(t, validateStackWorkflowPayload(stack, &api.PullRequestPayload{}))
+	assert.Error(t, validateStackWorkflowPayload(stack, nil))
+	assert.Error(t, validateStackWorkflowPayload(stack, &api.IssuePayload{}))
+}
+
+func TestValidateStackWorkflowPayloadAllowsComments(t *testing.T) {
+	stack := &issues_model.PullRequestStack{RepoID: 1, TrunkBranch: "release"}
+	payload := &api.IssueCommentPayload{
+		Action:  api.HookIssueCommentCreated,
+		Issue:   &api.Issue{Index: 1},
+		Comment: &api.Comment{Body: "/apply"},
+		IsPull:  true,
+	}
+	assert.NoError(t, validateStackWorkflowPayload(stack, payload))
+	assert.Equal(t, payload, workflowMatchPayload(payload), "comment payloads must not be rewritten to the stack trunk")
 }
 
 func TestGetApprovalUsersAddsForkPullRequestAuthorUnlessDefaultBranchWorkflow(t *testing.T) {
