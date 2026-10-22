@@ -6,6 +6,8 @@ package structs
 import (
 	"encoding/json" //nolint:depguard // RawMessage preserves the durable operation journal in the API.
 	"time"
+
+	"gitea.dev/modules/optional"
 )
 
 // PullRequestReviewDecision is the review policy result for a pull request.
@@ -364,7 +366,7 @@ type CreatePullRequestOption struct {
 	// The list of label IDs to assign to the pull request
 	Labels []int64 `json:"labels"`
 	// swagger:strfmt date-time
-	Deadline *time.Time `json:"due_date"`
+	Deadline optional.Option[*string] `json:"due_date,omitzero"`
 	// The list of reviewer usernames
 	Reviewers []string `json:"reviewers"`
 	// The list of team reviewer names
@@ -393,8 +395,9 @@ type EditPullRequestOption struct {
 	State *string `json:"state"`
 	// Whether to mark the pull request as a draft
 	Draft *bool `json:"draft"`
+	// Deadline is the updated due date for the pull request, use null or empty string to remove the deadline
 	// swagger:strfmt date-time
-	Deadline *time.Time `json:"due_date"`
+	Deadline optional.Option[*string] `json:"due_date,omitzero"`
 	// Whether to remove the current deadline
 	RemoveDeadline *bool `json:"unset_due_date"`
 	// Whether to allow maintainer edits
