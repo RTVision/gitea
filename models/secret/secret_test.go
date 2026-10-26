@@ -8,6 +8,7 @@ import (
 
 	actions_model "gitea.dev/models/actions"
 	"gitea.dev/models/db"
+	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
 
 	"github.com/stretchr/testify/assert"
@@ -115,5 +116,32 @@ func TestGetScopedSecretsForJob(t *testing.T) {
 			require.NoError(t, err)
 			testCase.check(t, got)
 		})
+	}
+}
+
+func TestGetSecretsOfTaskForkPullRequest(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	_, err := InsertEncryptedSecret(ctx, actions_model.BelongingScopeRepo(repo.ID), "REPO_SECRET", "value", "")
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		isFork       bool
+		triggerEvent string
+		hasSecret    bool
+	}{
+		{isFork: true, triggerEvent: "pull_request", hasSecret: false},
+		{isFork: true, triggerEvent: "pull_request_target", hasSecret: true},
+		{isFork: false, triggerEvent: "pull_request", hasSecret: true},
+	} {
+		run := &actions_model.ActionRun{RepoID: repo.ID, Repo: repo, IsForkPullRequest: tc.isFork, TriggerEvent: tc.triggerEvent}
+		task := &actions_model.ActionTask{Token: "tok", Job: &actions_model.ActionRunJob{RepoID: repo.ID, Run: run}}
+		got, err := GetSecretsOfTask(ctx, task)
+		require.NoError(t, err)
+		assert.Equal(t, "tok", got["GITEA_TOKEN"])
+		_, ok := got["REPO_SECRET"]
+		assert.Equal(t, tc.hasSecret, ok, "fork=%v event=%s", tc.isFork, tc.triggerEvent)
 	}
 }

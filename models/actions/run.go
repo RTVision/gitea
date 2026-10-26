@@ -267,6 +267,12 @@ func (run *ActionRun) GetWorkflowRunEventPayload() (*api.WorkflowRunPayload, err
 	return nil, fmt.Errorf("event %s is not a workflow run event", run.Event)
 }
 
+// IsUntrustedForkPullRequest reports whether the run executes fork code outside the base repository's trust.
+// pull_request_target runs execute in the base branch's context, so they are trusted like same-repo runs.
+func (run *ActionRun) IsUntrustedForkPullRequest() bool {
+	return run.IsForkPullRequest && run.TriggerEvent != "pull_request_target" // actions_module.GithubEventPullRequestTarget, which would be an import cycle
+}
+
 func (run *ActionRun) IsSchedule() bool {
 	return run.ScheduleID > 0
 }

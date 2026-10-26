@@ -262,9 +262,9 @@ func finalProcessRepoUnitPermission(user *user_model.User, perm *Permission) {
 	}
 }
 
-func checkSameOwnerCrossRepoAccess(ctx context.Context, taskRepo, targetRepo *repo_model.Repository, isForkPR bool) bool {
-	if isForkPR {
-		// Fork PRs are never allowed cross-repo access to other private repositories of the owner.
+func checkSameOwnerCrossRepoAccess(ctx context.Context, taskRepo, targetRepo *repo_model.Repository, isUntrustedForkPR bool) bool {
+	if isUntrustedForkPR {
+		// Untrusted fork PRs are never allowed cross-repo access to other private repositories of the owner.
 		return false
 	}
 	if taskRepo.OwnerID != targetRepo.OwnerID {
@@ -290,6 +290,9 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 	}
 
 	if err := task.LoadJob(ctx); err != nil {
+		return perm, err
+	}
+	if err := task.Job.LoadRun(ctx); err != nil {
 		return perm, err
 	}
 
@@ -352,7 +355,7 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 		return maxPerm, nil
 	}
 
-	if checkSameOwnerCrossRepoAccess(ctx, taskRepo, repo, task.IsForkPullRequest) {
+	if checkSameOwnerCrossRepoAccess(ctx, taskRepo, repo, task.Job.Run.IsUntrustedForkPullRequest()) {
 		// Access allowed by owner policy (grants access to private repos).
 		// Note: maxPerm has already been restricted to Read-Only in ComputeTaskTokenPermissions
 		// because isSameRepo is false.
@@ -372,9 +375,9 @@ func GetActionsUserRepoPermission(ctx context.Context, repo *repo_model.Reposito
 	// 2. The Actions Bot user has been explicitly granted access and repository is private
 	// 3. The repository is public (handled by botPerm above)
 
-	// Fork PRs are never allowed cross-repo access to other private repositories,
+	// Untrusted fork PRs are never allowed cross-repo access to other private repositories,
 	// matching the discriminator enforced by checkSameOwnerCrossRepoAccess above.
-	if taskRepo.IsPrivate && !task.IsForkPullRequest {
+	if taskRepo.IsPrivate && !task.Job.Run.IsUntrustedForkPullRequest() {
 		actionsUnit := repo.MustGetUnit(ctx, unit.TypeActions)
 		if actionsUnit.ActionsConfig().IsCollaborativeOwner(taskRepo.OwnerID) {
 			return maxPerm, nil
@@ -698,12 +701,12 @@ func CanReadWorkflowCrossRepo(ctx context.Context, targetRepo *repo_model.Reposi
 	}
 
 	// (1) Same owner: allowed by owner policy (fork-PR scrubbing handled inside).
-	if checkSameOwnerCrossRepoAccess(ctx, run.Repo, targetRepo, run.IsForkPullRequest) {
+	if checkSameOwnerCrossRepoAccess(ctx, run.Repo, targetRepo, run.IsUntrustedForkPullRequest()) {
 		return true, nil
 	}
 
 	// (2) Cross-owner access requires a private caller and the target's collaborative-owner grant.
-	if run.Repo.IsPrivate && !run.IsForkPullRequest {
+	if run.Repo.IsPrivate && !run.IsUntrustedForkPullRequest() {
 		if actionsUnit, err := targetRepo.GetUnit(ctx, unit.TypeActions); err == nil {
 			if actionsUnit.ActionsConfig().IsCollaborativeOwner(run.Repo.OwnerID) {
 				return true, nil
