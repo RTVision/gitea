@@ -344,7 +344,15 @@ func TestActionsJobTokenPermissionsWriteIssue(t *testing.T) {
 }
 
 func createActionTask(t *testing.T, repoID int64, isFork bool) *actions_model.ActionTask {
+	run := &actions_model.ActionRun{
+		RepoID:            repoID,
+		Index:             1,
+		Status:            actions_model.StatusRunning,
+		IsForkPullRequest: isFork,
+	}
+	require.NoError(t, db.Insert(t.Context(), run))
 	job := &actions_model.ActionRunJob{
+		RunID:             run.ID,
 		RepoID:            repoID,
 		Status:            actions_model.StatusRunning,
 		IsForkPullRequest: isFork,
