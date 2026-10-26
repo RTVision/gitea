@@ -93,3 +93,24 @@ func TestGrantAdditionalScopes(t *testing.T) {
 		})
 	}
 }
+
+func TestGrantScopeMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		grant, normalized, effective string
+	}{
+		{"", "", "all"},
+		{"openid", "openid", "openid all"},
+		{"openid profile email", "openid profile email", "openid profile email all"},
+		{"openid all read:user", "openid all", "openid all"},
+		{"openid read:user read:repository", "openid read:repository read:user", "openid read:repository read:user"},
+		{"openid invalid:scope", "openid no-token-scope", "openid no-token-scope"},
+		{",,", "no-token-scope", "no-token-scope"},
+		{"openid no-token-scope", "openid no-token-scope", "openid no-token-scope"},
+		{"openid read:user invalid:scope", "openid read:user", "openid read:user"},
+	} {
+		t.Run(tc.grant, func(t *testing.T) {
+			assert.Equal(t, tc.normalized, NormalizeGrantScope(tc.grant))
+			assert.Equal(t, tc.effective, EffectiveGrantScope(tc.grant))
+		})
+	}
+}
