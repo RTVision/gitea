@@ -13,7 +13,7 @@ import (
 // patchChromaLexers works around Chroma lexer bugs until they are fixed upstream
 func patchChromaLexers() {
 	// The Vue lexer is "dot_all", so the greedy `=".+` of "v-*" directives makes a multi-line value
-	// swallow everything up to the last quote of the file. TODO: remove when Chroma fixes it.
+	// swallow everything up to the last quote of the file. TODO: remove after https://github.com/alecthomas/chroma/pull/1419
 	vue, ok := lexers.GlobalLexerRegistry.Get("vue").(*chroma.RegexLexer)
 	if !ok {
 		return
