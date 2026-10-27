@@ -10,8 +10,8 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// patchChromaLexers works around Chroma lexer bugs until they are fixed upstream
-func patchChromaLexers() {
+// init works around Chroma lexer bugs before any rendering reads the global lexer registry
+func init() {
 	// The Vue lexer is "dot_all", so the greedy `=".+` of "v-*" directives makes a multi-line value
 	// swallow everything up to the last quote of the file. TODO: remove after https://github.com/alecthomas/chroma/pull/1419
 	vue, ok := lexers.GlobalLexerRegistry.Get("vue").(*chroma.RegexLexer)
