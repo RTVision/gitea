@@ -45,6 +45,12 @@
 
   .ui.dropdown.stack-dropdown {
     position: static;
+    padding-right: 1.5em;
+  }
+
+  .ui.ui.ui.dropdown.stack-dropdown > .dropdown.icon {
+    position: static; /* the static dropdown would otherwise anchor its caret to the title row */
+    transform: none;
   }
 
   .ui.dropdown.stack-dropdown > .menu {

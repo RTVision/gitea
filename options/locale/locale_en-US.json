@@ -1813,6 +1813,8 @@
   "repo.pulls.stack_operation": "Operation: %s",
   "repo.pulls.part_of_stack": "Part of Stack #%d",
   "repo.pulls.view_stack": "View stack",
+  "repo.pulls.stack_layer_below": "Layer below: %s",
+  "repo.pulls.stack_layer_above": "Layer above: %s",
   "repo.pulls.stack_land": "Land stack",
   "repo.pulls.stack_land_scope": "Layers to land",
   "repo.pulls.stack_land_all": "Whole stack",

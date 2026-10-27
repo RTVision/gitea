@@ -1,0 +1,6 @@
+{{if .Entry}}
+	{{$label := ctx.Locale.Tr .LocaleKey (printf "%s#%d %s" (Iif (ne .Entry.Pull.BaseRepoID .RepoID) .Entry.Pull.Issue.Repo.FullName "") .Entry.Pull.Index .Entry.Pull.Issue.Title)}}
+	<a class="ui small basic icon button" href="{{.Entry.Pull.Issue.Link}}" aria-label="{{$label}}" data-tooltip-content="{{$label}}">{{svg .Icon}}</a>
+{{else}}
+	<button type="button" class="ui small basic icon button" disabled aria-hidden="true">{{svg .Icon}}</button>
+{{end}}

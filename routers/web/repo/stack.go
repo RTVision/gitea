@@ -62,6 +62,8 @@ type pullStackHeaderData struct {
 	Repo    *repo_model.Repository
 	Stack   *issues_model.PullRequestStack
 	Entries []*pullStackEntryData
+	Below   *pullStackEntryData
+	Above   *pullStackEntryData
 }
 
 type pullStackData struct {
@@ -360,7 +362,16 @@ func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
 		ctx.ServerError("loadPullStackEntries", err)
 		return
 	}
-	ctx.Data["PullStackHeader"] = &pullStackHeaderData{Repo: repo, Stack: stack, Entries: entries}
+	header := &pullStackHeaderData{Repo: repo, Stack: stack, Entries: entries}
+	if i := slices.IndexFunc(entries, func(entry *pullStackEntryData) bool { return entry.Pull.ID == pr.ID }); i >= 0 {
+		if i > 0 {
+			header.Below = entries[i-1]
+		}
+		if i < len(entries)-1 {
+			header.Above = entries[i+1]
+		}
+	}
+	ctx.Data["PullStackHeader"] = header
 }
 
 func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {

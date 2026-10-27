@@ -53,23 +53,27 @@
 			<div class="ui green label issue-state-label">{{svg "octicon-issue-opened"}} {{ctx.Locale.Tr "repo.issues.open_title"}}</div>
 		{{end}}
 		{{with .PullStackHeader}}
-			<div class="ui small basic jump dropdown stack-dropdown button tw-m-0">
-				<span class="flex-text-inline">{{svg "octicon-stack"}}{{ctx.Locale.TrN (len .Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len .Entries)}}</span>
-				{{svg "octicon-triangle-down" 14 "dropdown icon"}}
-				<div class="menu stack-menu stack-layer-list flex-items-menu items-width-limit">
-					{{range $_, $entry := .TopDownEntries}}
-						<a class="item stack-layer{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>
-							<span class="tw-self-start">{{template "shared/issueicon" .Pull.Issue}}</span>
-							<div class="tw-min-w-0">
-								<span class="gt-ellipsis tw-block">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span>
-								{{template "repo/stack/entry_status" .}}
-							</div>
-						</a>
-					{{end}}
-					<div class="header flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="gt-ellipsis">{{.Stack.TrunkBranch}}</span></div>
-					<div class="divider"></div>
-					<a class="item" href="{{.Repo.Link}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
+			<div class="ui basic buttons stack-nav tw-m-0">
+				{{template "repo/stack/nav_button" dict "Entry" .Below "RepoID" $.Repository.ID "Icon" "octicon-chevron-left" "LocaleKey" "repo.pulls.stack_layer_below"}}
+				<div class="ui small basic jump dropdown stack-dropdown button">
+					<span class="flex-text-inline">{{svg "octicon-stack"}}{{ctx.Locale.TrN (len .Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len .Entries)}}</span>
+					{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+					<div class="menu stack-menu stack-layer-list flex-items-menu items-width-limit">
+						{{range $_, $entry := .TopDownEntries}}
+							<a class="item stack-layer{{if eq .Pull.ID $.Issue.PullRequest.ID}} active{{end}}" href="{{.Pull.Issue.Link}}" {{if eq .Pull.ID $.Issue.PullRequest.ID}}aria-current="page"{{end}}>
+								<span class="tw-self-start">{{template "shared/issueicon" .Pull.Issue}}</span>
+								<div class="tw-min-w-0">
+									<span class="gt-ellipsis tw-block">{{if ne .Pull.BaseRepoID $.Repository.ID}}{{.Pull.Issue.Repo.FullName}}{{end}}#{{.Pull.Index}} {{.Pull.Issue.Title}}</span>
+									{{template "repo/stack/entry_status" .}}
+								</div>
+							</a>
+						{{end}}
+						<div class="header flex-text-inline tw-text-text-light">{{svg "octicon-git-branch"}}<span class="gt-ellipsis">{{.Stack.TrunkBranch}}</span></div>
+						<div class="divider"></div>
+						<a class="item" href="{{.Repo.Link}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
+					</div>
 				</div>
+				{{template "repo/stack/nav_button" dict "Entry" .Above "RepoID" $.Repository.ID "Icon" "octicon-chevron-right" "LocaleKey" "repo.pulls.stack_layer_above"}}
 			</div>
 		{{end}}
 		<div class="flex-text-block">
