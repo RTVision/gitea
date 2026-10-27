@@ -165,6 +165,8 @@ var chromaLexers = sync.OnceValue(func() (ret struct {
 		}
 	}
 
+	patchChromaLexers()
+
 	// the main loop: build our lookup maps for lexers
 	for _, lexer := range lexers.GlobalLexerRegistry.Lexers {
 		cfg := lexer.Config()
