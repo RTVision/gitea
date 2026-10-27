@@ -53,8 +53,8 @@
 			<div class="ui green label issue-state-label">{{svg "octicon-issue-opened"}} {{ctx.Locale.Tr "repo.issues.open_title"}}</div>
 		{{end}}
 		{{with .PullStackHeader}}
-			<div class="ui basic buttons stack-nav">
-				{{template "repo/stack/nav_button" dict "Entry" .Below "Key" "ArrowLeft" "Icon" "octicon-chevron-left" "LocaleKey" "repo.pulls.stack_layer_below"}}
+			<div class="ui basic buttons stack-nav tw-m-0">
+				{{template "repo/stack/nav_button" dict "Entry" .Below "RepoID" $.Repository.ID "Icon" "octicon-chevron-left" "LocaleKey" "repo.pulls.stack_layer_below"}}
 				<div class="ui small basic jump dropdown stack-dropdown button">
 					<span class="flex-text-inline">{{svg "octicon-stack"}}{{ctx.Locale.TrN (len .Entries) "repo.pulls.stack_layers_1" "repo.pulls.stack_layers_n" (len .Entries)}}</span>
 					{{svg "octicon-triangle-down" 14 "dropdown icon"}}
@@ -73,7 +73,7 @@
 						<a class="item" href="{{.Repo.Link}}/pulls/stacks/{{.Stack.ID}}">{{ctx.Locale.Tr "repo.pulls.view_stack"}}</a>
 					</div>
 				</div>
-				{{template "repo/stack/nav_button" dict "Entry" .Above "Key" "ArrowRight" "Icon" "octicon-chevron-right" "LocaleKey" "repo.pulls.stack_layer_above"}}
+				{{template "repo/stack/nav_button" dict "Entry" .Above "RepoID" $.Repository.ID "Icon" "octicon-chevron-right" "LocaleKey" "repo.pulls.stack_layer_above"}}
 			</div>
 		{{end}}
 		<div class="flex-text-block">
