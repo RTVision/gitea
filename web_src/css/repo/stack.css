@@ -34,7 +34,7 @@
 }
 
 .stack-layer-list > [aria-current] {
-  background: var(--color-box-body-highlight);
+  background: var(--color-active);
   border-radius: var(--border-radius);
 }
 
