@@ -142,6 +142,16 @@ Content-Type: text/html
 <span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>`),
 			lexerName: "HTTP",
 		},
+		{
+			name: "multiline-directive.vue",
+			code: "<p v-if=\"\na\" class=\"b\">c</p>\n<i :d=\"e\"></i>",
+			want: []template.HTML{
+				`<span class="p">&lt;</span><span class="nt">p</span> <span class="nt">v-if</span><span class="s">=&#34;` + "\n</span>",
+				`<span class="s">a&#34;</span><span class="p"> </span><span class="na">class</span><span class="o">=</span><span class="s">&#34;b&#34;</span><span class="p">&gt;</span><span class="nx">c</span><span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>` + "\n",
+				`<span class="p">&lt;</span><span class="nt">i</span> <span class="nt">:d</span><span class="o">=</span><span class="s">&#34;e&#34;</span><span class="p">&gt;&lt;/</span><span class="nt">i</span><span class="p">&gt;</span>`,
+			},
+			lexerName: "Vue",
+		},
 	}
 
 	for _, tt := range tests {
