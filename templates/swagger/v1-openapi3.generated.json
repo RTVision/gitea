@@ -16888,17 +16888,21 @@
         "responses": {
           "200": {
             "description": "SearchResults of a successful search",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/Team"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Team"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
                   }
-                },
-                "ok": {
-                  "type": "boolean"
                 }
               }
             }
@@ -27595,8 +27599,13 @@
         "responses": {
           "200": {
             "description": "Returns raw file content.",
-            "schema": {
-              "type": "file"
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
             }
           },
           "default": {
@@ -31672,8 +31681,13 @@
         "responses": {
           "200": {
             "description": "Returns raw file content.",
-            "schema": {
-              "type": "file"
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
             }
           },
           "default": {
@@ -32452,8 +32466,12 @@
         "responses": {
           "200": {
             "description": "GPG armored public key",
-            "schema": {
-              "type": "string"
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -32489,8 +32507,12 @@
         "responses": {
           "200": {
             "description": "ssh public key",
-            "schema": {
-              "type": "string"
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -35151,8 +35173,12 @@
         "responses": {
           "200": {
             "description": "GPG armored public key",
-            "schema": {
-              "type": "string"
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -35168,8 +35194,12 @@
         "responses": {
           "200": {
             "description": "ssh public key",
-            "schema": {
-              "type": "string"
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -38488,17 +38518,21 @@
         "responses": {
           "200": {
             "description": "SearchResults of a successful search",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "data": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/User"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
                   }
-                },
-                "ok": {
-                  "type": "boolean"
                 }
               }
             }
