@@ -86,7 +86,7 @@ func GetPullRequestViewedFiles(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestViewedFiles"
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	_, head, diff, ok := pullRequestViewedDiff(ctx)
 	if !ok {
@@ -130,11 +130,7 @@ func UpdatePullRequestViewedFiles(ctx *context.APIContext) {
 	// responses:
 	//   "204":
 	//     "$ref": "#/responses/empty"
-	//   "409":
-	//     description: The pull request head changed
-	//   "422":
-	//     description: Invalid file selection
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	form := web.GetForm[*api.UpdatePullRequestViewedFilesOptions](ctx)
 	if len(form.Files) == 0 || len(form.Files) > 1000 {

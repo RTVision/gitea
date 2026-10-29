@@ -230,7 +230,7 @@ func ListPullRequestStacks(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStackList"
-	//   "500":
+	//   default:
 	//     "$ref": "#/responses/error"
 	opts := utils.GetListOptions(ctx)
 	stacks, _, err := issues_model.ListStacks(ctx, ctx.Repo.Repository.ID, db.ListOptionsAll)
@@ -300,9 +300,7 @@ func CreatePullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "201":
 	//     "$ref": "#/responses/PullRequestStack"
-	//   "403":
-	//     "$ref": "#/responses/error"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	form := web.GetForm[*api.CreatePullRequestStackOption](ctx)
 	pullIDs, ok := resolveStackPullRequestIDs(ctx, form.PullRequests, form.PullRequestRefs)
@@ -344,7 +342,7 @@ func GetPullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStack"
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack != nil {
@@ -386,11 +384,9 @@ func AppendPullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStack"
-	//   "404":
-	//     "$ref": "#/responses/error"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
@@ -444,11 +440,9 @@ func InsertPullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStack"
-	//   "404":
-	//     "$ref": "#/responses/error"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
@@ -508,7 +502,7 @@ func DeletePullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "204":
 	//     description: The pull requests were unstacked
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
@@ -575,7 +569,7 @@ func RebasePullRequestStack(ctx *context.APIContext) {
 	//     "$ref": "#/responses/PullRequestStackOperation"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	startPullRequestStackOperation(ctx, "rebase")
 }
@@ -614,7 +608,7 @@ func UpdatePullRequestStack(ctx *context.APIContext) {
 	//     "$ref": "#/responses/PullRequestStackOperation"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	startPullRequestStackOperation(ctx, "update")
 }
@@ -653,7 +647,7 @@ func LandPullRequestStack(ctx *context.APIContext) {
 	//     "$ref": "#/responses/PullRequestStackOperation"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	startPullRequestStackOperation(ctx, "land")
 }
@@ -692,11 +686,9 @@ func SynchronizePullRequestStack(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStack"
-	//   "404":
-	//     "$ref": "#/responses/error"
 	//   "409":
 	//     "$ref": "#/responses/StackRevisionConflict"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
@@ -753,7 +745,7 @@ func ListPullRequestStackOperations(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStackOperationList"
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
@@ -824,7 +816,7 @@ func GetPullRequestStackOperation(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestStackOperation"
-	//   "404":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
@@ -867,9 +859,7 @@ func CancelPullRequestStackOperation(ctx *context.APIContext) {
 	// responses:
 	//   "204":
 	//     description: The operation was cancelled
-	//   "404":
-	//     "$ref": "#/responses/error"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil || getPullRequestStackOperation(ctx, stack) == nil {
@@ -914,9 +904,7 @@ func RetryPullRequestStackOperation(ctx *context.APIContext) {
 	// responses:
 	//   "202":
 	//     "$ref": "#/responses/PullRequestStackOperation"
-	//   "404":
-	//     "$ref": "#/responses/error"
-	//   "422":
+	//   default:
 	//     "$ref": "#/responses/error"
 	stack := getRepositoryStack(ctx)
 	if stack == nil {
