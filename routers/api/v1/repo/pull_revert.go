@@ -45,14 +45,10 @@ func RevertPullRequest(ctx *context.APIContext) {
 	// responses:
 	//   "201":
 	//     "$ref": "#/responses/PullRequest"
-	//   "403":
-	//     "$ref": "#/responses/forbidden"
-	//   "404":
-	//     "$ref": "#/responses/notFound"
 	//   "409":
 	//     "$ref": "#/responses/error"
-	//   "423":
-	//     "$ref": "#/responses/repoArchivedError"
+	//   default:
+	//     "$ref": "#/responses/error"
 	repo := ctx.Repo.Repository
 	pr, err := issues_model.GetPullRequestByIndex(ctx, repo.ID, ctx.PathParamInt64("index"))
 	if err != nil {

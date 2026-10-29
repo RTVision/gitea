@@ -86,8 +86,8 @@ func GetPullRequestViewedFiles(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestViewedFiles"
-	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//   default:
+	//     "$ref": "#/responses/error"
 	_, head, diff, ok := pullRequestViewedDiff(ctx)
 	if !ok {
 		return
@@ -132,10 +132,8 @@ func UpdatePullRequestViewedFiles(ctx *context.APIContext) {
 	//     "$ref": "#/responses/empty"
 	//   "409":
 	//     description: The pull request head changed
-	//   "422":
-	//     description: Invalid file selection
-	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//   default:
+	//     "$ref": "#/responses/error"
 	form := web.GetForm[*api.UpdatePullRequestViewedFilesOptions](ctx)
 	if len(form.Files) == 0 || len(form.Files) > 1000 {
 		ctx.APIError(http.StatusUnprocessableEntity, "provide between 1 and 1000 files")
