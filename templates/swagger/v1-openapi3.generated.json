@@ -17805,6 +17805,9 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20800,6 +20803,9 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20897,6 +20903,9 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24377,6 +24386,9 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -30339,6 +30351,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/empty"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"

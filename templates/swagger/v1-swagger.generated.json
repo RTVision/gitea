@@ -15618,6 +15618,9 @@
           "204": {
             "$ref": "#/responses/empty"
           },
+          "409": {
+            "$ref": "#/responses/error"
+          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -18361,6 +18364,9 @@
           "204": {
             "$ref": "#/responses/empty"
           },
+          "409": {
+            "$ref": "#/responses/error"
+          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -18452,6 +18458,9 @@
         "responses": {
           "204": {
             "$ref": "#/responses/empty"
+          },
+          "409": {
+            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -21627,6 +21636,9 @@
         "responses": {
           "204": {
             "$ref": "#/responses/empty"
+          },
+          "409": {
+            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -27073,6 +27085,9 @@
         "responses": {
           "200": {
             "$ref": "#/responses/empty"
+          },
+          "422": {
+            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"
