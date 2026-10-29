@@ -31350,9 +31350,6 @@
           "200": {
             "$ref": "#/components/responses/PullRequestViewedFiles"
           },
-          "409": {
-            "description": "The pull request head changed"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }

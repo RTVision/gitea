@@ -17847,9 +17847,6 @@
           "200": {
             "$ref": "#/responses/PullRequestViewedFiles"
           },
-          "409": {
-            "description": "The pull request head changed"
-          },
           "default": {
             "$ref": "#/responses/error"
           }
