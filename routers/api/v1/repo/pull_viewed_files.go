@@ -132,8 +132,6 @@ func UpdatePullRequestViewedFiles(ctx *context.APIContext) {
 	//     "$ref": "#/responses/empty"
 	//   "409":
 	//     description: The pull request head changed
-	//   "409":
-	//     description: The pull request head changed
 	//   default:
 	//     "$ref": "#/responses/error"
 	form := web.GetForm[*api.UpdatePullRequestViewedFilesOptions](ctx)
