@@ -17805,9 +17805,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20803,9 +20800,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20903,9 +20897,6 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24386,9 +24377,6 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -30352,9 +30340,6 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -30517,16 +30502,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30820,10 +30796,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31079,7 +31052,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31148,7 +31121,7 @@
           "200": {
             "$ref": "#/components/responses/ReactionList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31211,10 +31184,7 @@
           "201": {
             "$ref": "#/components/responses/Reaction"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31377,7 +31347,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestViewedFiles"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31433,14 +31403,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "description": "The pull request head changed"
           },
           "422": {
             "description": "Invalid file selection"
+          },
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Mark or unmark files as viewed for the authenticated user",
@@ -32601,7 +32571,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackList"
           },
-          "500": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32647,10 +32617,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32742,11 +32709,11 @@
           "204": {
             "description": "The pull requests were unstacked"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Unstack a pull request stack",
@@ -32790,7 +32757,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32846,13 +32813,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32910,13 +32874,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32977,7 +32938,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33040,7 +33001,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackOperationList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33097,7 +33058,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33154,10 +33115,7 @@
           "204": {
             "description": "The operation was cancelled"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33214,10 +33172,7 @@
           "202": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33278,7 +33233,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33336,13 +33291,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33403,7 +33355,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
