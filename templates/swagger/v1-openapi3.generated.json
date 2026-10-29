@@ -2388,7 +2388,7 @@
             "x-go-name": "Path"
           },
           "previous_attempt_url": {
-            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is > 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
+            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is \u003e 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
             "format": "uri",
             "type": "string",
             "x-go-name": "PreviousAttemptURL"
@@ -4612,7 +4612,7 @@
             "x-go-name": "Deadline"
           },
           "head": {
-            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `<username>:<branch>` which refers to the user's fork repository's branch.",
+            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `\u003cusername\u003e:\u003cbranch\u003e` which refers to the user's fork repository's branch.",
             "type": "string",
             "x-go-name": "Head"
           },
@@ -12094,8 +12094,14 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Lists all jobs",
@@ -12121,8 +12127,11 @@
           "200": {
             "$ref": "#/components/responses/RunnerList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get all runners",
@@ -12163,8 +12172,11 @@
           "204": {
             "description": "runner has been deleted"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a global runner",
@@ -12189,8 +12201,11 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a global runner",
@@ -12225,8 +12240,14 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a global runner",
@@ -12300,8 +12321,11 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Lists all runs",
@@ -12335,8 +12359,8 @@
           "200": {
             "$ref": "#/components/responses/CronList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "List cron tasks",
@@ -12363,8 +12387,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Run cron task",
@@ -12398,8 +12422,8 @@
           "200": {
             "$ref": "#/components/responses/EmailList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "List all emails",
@@ -12441,8 +12465,8 @@
           "200": {
             "$ref": "#/components/responses/EmailList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "Search all emails",
@@ -12629,8 +12653,8 @@
           "200": {
             "$ref": "#/components/responses/OrganizationList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "List all organizations",
@@ -12704,8 +12728,8 @@
           "200": {
             "$ref": "#/components/responses/PackageList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "List all packages",
@@ -12747,8 +12771,8 @@
           "200": {
             "$ref": "#/components/responses/StringSlice"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "List unadopted repositories",
@@ -12784,8 +12808,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "Delete unadopted files",
@@ -12819,8 +12843,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Adopt unadopted files as a repository",
@@ -12943,8 +12970,11 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Search users according filter conditions",
@@ -12968,8 +12998,17 @@
           "201": {
             "$ref": "#/components/responses/User"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a user",
@@ -13004,8 +13043,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Delete a user",
@@ -13040,8 +13085,17 @@
           "200": {
             "$ref": "#/components/responses/User"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Edit an existing user",
@@ -13078,8 +13132,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Remove a badge from a user",
@@ -13104,8 +13161,8 @@
           "200": {
             "$ref": "#/components/responses/BadgeList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a user's badges",
@@ -13140,8 +13197,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           }
         },
         "summary": "Add a badge to a user",
@@ -13178,8 +13235,11 @@
           "201": {
             "$ref": "#/components/responses/PublicKey"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Add a public key on behalf of a user",
@@ -13216,8 +13276,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a user's public key",
@@ -13255,8 +13318,11 @@
           "201": {
             "$ref": "#/components/responses/Organization"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create an organization",
@@ -13294,8 +13360,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Rename a user",
@@ -13333,8 +13402,20 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a repository on behalf of a user",
@@ -13375,8 +13456,8 @@
           "200": {
             "$ref": "#/components/responses/GitignoreTemplateInfo"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Returns information about a gitignore template",
@@ -13417,8 +13498,8 @@
           "200": {
             "$ref": "#/components/responses/LabelTemplateInfo"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Returns all labels in a template",
@@ -13459,8 +13540,8 @@
           "200": {
             "$ref": "#/components/responses/LicenseTemplateInfo"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Returns information about a license template",
@@ -13486,8 +13567,8 @@
           "200": {
             "$ref": "#/components/responses/MarkdownRender"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Render a markdown document as HTML",
@@ -13515,8 +13596,8 @@
           "200": {
             "$ref": "#/components/responses/MarkdownRender"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Render raw markdown as HTML",
@@ -13542,8 +13623,8 @@
           "200": {
             "$ref": "#/components/responses/MarkupRender"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Render a markup document as HTML",
@@ -13565,7 +13646,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned.",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -13726,6 +13807,9 @@
           "200": {
             "$ref": "#/components/responses/NotificationThread"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -13761,8 +13845,11 @@
           "205": {
             "$ref": "#/components/responses/NotificationThread"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Mark notification thread as read by ID",
@@ -13800,8 +13887,14 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a repository in an organization",
@@ -13886,8 +13979,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete an organization",
@@ -13912,8 +14005,8 @@
           "200": {
             "$ref": "#/components/responses/Organization"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get an organization",
@@ -14001,8 +14094,11 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get org-level workflow jobs",
@@ -14036,6 +14132,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/RunnerList"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14099,6 +14198,9 @@
           "204": {
             "description": "runner has been deleted"
           },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -14134,8 +14236,11 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get an org-level runner",
@@ -14178,6 +14283,12 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Runner"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14263,8 +14374,11 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get org-level workflow runs",
@@ -14307,8 +14421,8 @@
           "200": {
             "$ref": "#/components/responses/SecretList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's actions secrets",
@@ -14344,8 +14458,11 @@
           "204": {
             "description": "delete one secret of the organization"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a secret in an organization",
@@ -14392,8 +14509,11 @@
           "204": {
             "description": "response when updating a secret"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Create or Update a secret value in an organization",
@@ -14436,8 +14556,11 @@
           "200": {
             "$ref": "#/components/responses/VariableList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get an org-level variables list",
@@ -14479,8 +14602,11 @@
           "204": {
             "description": "response when deleting a variable"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete an org-level variable",
@@ -14513,6 +14639,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ActionVariable"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14559,7 +14688,13 @@
           "201": {
             "description": "successfully created the org-level variable"
           },
-          "default": {
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
+          "409": {
+            "description": "variable name already exists."
+          },
+          "500": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14606,6 +14741,9 @@
           },
           "204": {
             "description": "response when updating an org-level variable"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14660,8 +14798,8 @@
           "200": {
             "$ref": "#/components/responses/ActivityFeedsList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's activity feeds",
@@ -14688,8 +14826,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete Avatar",
@@ -14724,8 +14862,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Update Avatar",
@@ -14802,8 +14940,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Unblock a user",
@@ -14837,8 +14978,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Check if a user is blocked by the organization",
@@ -14880,8 +15021,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Block a user",
@@ -14924,8 +15068,8 @@
           "200": {
             "$ref": "#/components/responses/HookList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's webhooks",
@@ -14961,8 +15105,8 @@
           "201": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Create a hook",
@@ -15035,8 +15179,8 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a hook",
@@ -15081,8 +15225,8 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Update a hook",
@@ -15125,8 +15269,8 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's labels",
@@ -15161,8 +15305,11 @@
           "201": {
             "$ref": "#/components/responses/Label"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a label for an organization",
@@ -15199,8 +15346,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a label",
@@ -15235,8 +15382,8 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a single label",
@@ -15281,8 +15428,11 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a label",
@@ -15400,8 +15550,8 @@
           "303": {
             "description": "redirection to /orgs/{org}/public_members/{username}"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "description": "user is not a member"
           }
         },
         "summary": "Check if a user is a member of an organization",
@@ -15458,8 +15608,8 @@
           "200": {
             "$ref": "#/components/responses/ProjectList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's projects",
@@ -15494,8 +15644,11 @@
           "201": {
             "$ref": "#/components/responses/Project"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a project owned by an organization",
@@ -15532,8 +15685,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a project",
@@ -15714,8 +15867,14 @@
           "201": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a column in a project",
@@ -15763,8 +15922,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Reorder a project's columns",
@@ -15812,8 +15977,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Delete a project column",
@@ -15914,6 +16085,9 @@
           "200": {
             "$ref": "#/components/responses/ProjectColumn"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -15963,8 +16137,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Set a project's default column",
@@ -16027,8 +16204,8 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List the issues in a project column",
@@ -16085,8 +16262,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Remove an issue from a project column",
@@ -16142,8 +16325,17 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Add an issue to a project column",
@@ -16200,8 +16392,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Move an issue between a project's columns",
@@ -16300,6 +16501,9 @@
           "201": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -16348,8 +16552,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a project workflow",
@@ -16450,6 +16657,9 @@
           "200": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -16531,8 +16741,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Conceal a user's membership",
@@ -16566,8 +16779,8 @@
           "204": {
             "description": "user is a public member"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "description": "user is not a public member"
           }
         },
         "summary": "Check if a user is a public member of an organization",
@@ -16601,8 +16814,11 @@
           "204": {
             "description": "membership publicized"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Publicize a user's membership",
@@ -16640,8 +16856,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Rename an organization",
@@ -16671,8 +16890,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete all repositories in an organization",
@@ -16713,8 +16935,8 @@
           "200": {
             "$ref": "#/components/responses/RepositoryList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an organization's repos",
@@ -16749,8 +16971,14 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Create a repository in an organization",
@@ -16829,8 +17057,11 @@
           "201": {
             "$ref": "#/components/responses/Team"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a team",
@@ -16907,8 +17138,8 @@
             },
             "description": "SearchResults of a successful search"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Search for teams within an organization",
@@ -17037,8 +17268,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a package",
@@ -17097,8 +17328,8 @@
           "200": {
             "$ref": "#/components/responses/PackageList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets all versions of a package",
@@ -17143,8 +17374,8 @@
           "200": {
             "$ref": "#/components/responses/Package"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets the latest version of a package",
@@ -17244,8 +17475,8 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Unlink a package from a repository",
@@ -17299,8 +17530,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a package version",
@@ -17407,8 +17638,8 @@
           "200": {
             "$ref": "#/components/responses/PackageFileList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets all files of a package",
@@ -17582,8 +17813,11 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Search for issues across the repositories that the user has access to",
@@ -17609,8 +17843,14 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "409": {
+            "description": "The repository with the same name already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Migrate a remote git repository",
@@ -17768,8 +18008,8 @@
           "200": {
             "$ref": "#/components/responses/SearchResults"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Search for repositories",
@@ -17805,8 +18045,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
           }
         },
         "summary": "Delete a repository",
@@ -17886,8 +18132,14 @@
           "200": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Edit a repository's properties. Only fields that are set will be changed.",
@@ -17930,6 +18182,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ArtifactsList"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -17977,6 +18232,9 @@
           "204": {
             "description": "No Content"
           },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -18020,6 +18278,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Artifact"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18066,6 +18327,9 @@
         "responses": {
           "302": {
             "description": "redirect to the blob download"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18144,8 +18408,14 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Lists all jobs for a repository",
@@ -18189,6 +18459,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/WorkflowJob"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18236,6 +18509,9 @@
           "200": {
             "description": "output blob content"
           },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -18280,6 +18556,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/RunnerList"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18361,8 +18640,11 @@
           "204": {
             "description": "runner has been deleted"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a repo-level runner",
@@ -18405,8 +18687,11 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a repo-level runner",
@@ -18459,8 +18744,14 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a repo-level runner",
@@ -18560,8 +18851,11 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Lists all runs for a repository run",
@@ -18606,8 +18900,11 @@
           "204": {
             "description": "No Content"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a workflow run",
@@ -18650,8 +18947,11 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets a specific workflow run",
@@ -18696,8 +18996,17 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
           }
         },
         "summary": "Approve a workflow run that requires approval",
@@ -18750,8 +19059,11 @@
           "200": {
             "$ref": "#/components/responses/ArtifactsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Lists all artifacts for a repository run",
@@ -18932,6 +19244,15 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
           }
         },
         "summary": "Cancel a workflow run and its jobs",
@@ -18979,6 +19300,15 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
           }
         },
         "summary": "Force-cancel a workflow run",
@@ -19065,6 +19395,12 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Lists all jobs for a workflow run",
@@ -19120,6 +19456,18 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Reruns a specific workflow job in a run",
@@ -19164,8 +19512,8 @@
           "200": {
             "description": "Logs archive"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Download workflow run logs as archive",
@@ -19210,8 +19558,20 @@
           "201": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Reruns an entire workflow run",
@@ -19258,6 +19618,18 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Reruns all failed jobs in a workflow run",
@@ -19309,8 +19681,8 @@
           "200": {
             "$ref": "#/components/responses/SecretList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a repo's actions secrets",
@@ -19357,6 +19729,9 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a secret in a repository",
@@ -19467,6 +19842,18 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "List a repository's action tasks",
@@ -19572,6 +19959,9 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a repo-level variable",
@@ -19670,6 +20060,12 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "409": {
+            "description": "variable name already exists."
+          },
+          "500": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Create a repo-level variable",
@@ -19725,8 +20121,11 @@
           "204": {
             "description": "response when updating a repo-level variable"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Update a repo-level variable",
@@ -19763,6 +20162,18 @@
             "$ref": "#/components/responses/ActionWorkflowList"
           },
           "default": {
+            "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "500": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19810,6 +20221,18 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get a workflow",
@@ -19856,6 +20279,15 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Disable a workflow",
@@ -19932,6 +20364,15 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a workflow dispatch event",
@@ -19976,8 +20417,20 @@
           "204": {
             "description": "No Content"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Enable a workflow",
@@ -20095,8 +20548,14 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List runs for a workflow",
@@ -20157,8 +20616,8 @@
           "200": {
             "$ref": "#/components/responses/ActivityFeedsList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a repository's activity feeds",
@@ -20253,8 +20712,8 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Return all users that have write access and can be assigned to issues",
@@ -20336,8 +20795,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete avatar",
@@ -20381,8 +20840,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Update avatar",
@@ -20460,8 +20919,17 @@
           "201": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a branch protections for a repository",
@@ -20507,8 +20975,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Update the priorities of branch protections for a repository.",
@@ -20553,8 +21027,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a specific branch protection for the repository",
@@ -20597,8 +21071,8 @@
           "200": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a specific branch protection for the repository",
@@ -20651,8 +21125,14 @@
           "200": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit a branch protections for a repository. Only fields that are set will be changed",
@@ -20754,8 +21234,17 @@
           "201": {
             "$ref": "#/components/responses/Branch"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "description": "The branch is archived or a mirror."
+          },
+          "404": {
+            "description": "The old branch does not exist."
+          },
+          "409": {
+            "description": "The branch with the same name already exists."
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a branch",
@@ -20800,8 +21289,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "403": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a specific branch from a repository",
@@ -20844,8 +21342,8 @@
           "200": {
             "$ref": "#/components/responses/Branch"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Retrieve a specific branch from a repository, including its effective branch protection",
@@ -20898,8 +21396,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Rename a branch",
@@ -20952,8 +21459,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a branch reference to a new commit",
@@ -21051,8 +21567,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Delete a collaborator from a repository",
@@ -21095,8 +21614,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Check if a user is a collaborator of a repository",
@@ -21149,8 +21671,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Add or Update a collaborator to a repository",
@@ -21195,8 +21723,11 @@
           "200": {
             "$ref": "#/components/responses/RepoCollaboratorPermission"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get repository permissions for a user",
@@ -21314,8 +21845,11 @@
           "200": {
             "$ref": "#/components/responses/CommitList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/EmptyRepository"
           }
         },
         "summary": "Get a list of all commits from a repository",
@@ -21375,6 +21909,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/CombinedStatus"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -21468,6 +22005,9 @@
           "200": {
             "$ref": "#/components/responses/CommitStatusList"
           },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -21514,8 +22054,8 @@
           "200": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get the merged pull request of the commit",
@@ -21589,8 +22129,11 @@
           "200": {
             "$ref": "#/components/responses/Compare"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get commit comparison information",
@@ -21635,8 +22178,8 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets the metadata of all the entries of the root dir.",
@@ -21681,8 +22224,17 @@
           "201": {
             "$ref": "#/components/responses/FilesResponse"
           },
-          "default": {
+          "403": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Modify multiple files in a repository",
@@ -21744,8 +22296,8 @@
           "200": {
             "$ref": "#/components/responses/ContentsExtResponse"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "The extended \"contents\" API, to get file metadata and/or content, or list a directory.",
@@ -21801,8 +22353,20 @@
           "200": {
             "$ref": "#/components/responses/FileDeleteResponse"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a file in a repository",
@@ -21909,8 +22473,17 @@
           "201": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "default": {
+          "403": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a file in a repository",
@@ -21967,8 +22540,17 @@
           "201": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "default": {
+          "403": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Update a file in a repository if SHA is set, or create the file if SHA is not set",
@@ -22015,8 +22597,11 @@
           "200": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Apply diff patch to repository",
@@ -22069,8 +22654,8 @@
           "200": {
             "description": "success"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get the EditorConfig definitions of a file in a repository",
@@ -22124,8 +22709,8 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get the metadata and contents of requested files",
@@ -22134,7 +22719,7 @@
         ]
       },
       "post": {
-        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size > 0`, they can be requested separately by using the `download_url`.",
+        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size \u003e 0`, they can be requested separately by using the `download_url`.",
         "operationId": "repoGetFileContentsPost",
         "parameters": [
           {
@@ -22179,8 +22764,8 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get the metadata and contents of requested files",
@@ -22232,8 +22817,8 @@
           "200": {
             "$ref": "#/components/responses/RepositoryList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a repository's forks",
@@ -22277,8 +22862,17 @@
           "202": {
             "$ref": "#/components/responses/Repository"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "description": "The repository with the same name already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Fork a repository",
@@ -22322,6 +22916,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/GitBlobResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -22393,8 +22990,11 @@
           "200": {
             "$ref": "#/components/responses/Commit"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Get a single commit from a repository, it has a GitHub-compatible alias \"/repos/{owner}/{repo}/commits/{ref}\"",
@@ -22514,8 +23114,11 @@
           "200": {
             "$ref": "#/components/responses/Note"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Get a note corresponding to a single commit from a repository",
@@ -22551,8 +23154,8 @@
           "200": {
             "$ref": "#/components/responses/ReferenceList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get specified ref or filtered repository's refs",
@@ -22643,8 +23246,11 @@
           "200": {
             "$ref": "#/components/responses/AnnotatedTag"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets the tag object of an annotated tag (not lightweight tags)",
@@ -22713,6 +23319,9 @@
           "200": {
             "$ref": "#/components/responses/GitTreeResponse"
           },
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -22766,8 +23375,8 @@
           "200": {
             "$ref": "#/components/responses/HookList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List the hooks in a repository",
@@ -22811,8 +23420,8 @@
           "201": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Create a hook",
@@ -22848,8 +23457,8 @@
           "200": {
             "$ref": "#/components/responses/GitHookList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List the Git hooks in a repository",
@@ -23084,8 +23693,8 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a hook",
@@ -23139,8 +23748,8 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Edit a hook in a repository",
@@ -23202,8 +23811,8 @@
           "200": {
             "$ref": "#/components/responses/HookDeliveryList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List the deliveries of a hook in a repository",
@@ -23313,8 +23922,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Test a push webhook",
@@ -23424,8 +24033,8 @@
           "200": {
             "$ref": "#/components/responses/IssueTemplates"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get available issue templates for a repository",
@@ -23613,8 +24222,20 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "412": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create an issue. If using deadline only the date will be taken into account, and time of day ignored.",
@@ -23731,8 +24352,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a comment",
@@ -23778,6 +24402,9 @@
           },
           "204": {
             "$ref": "#/components/responses/empty"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -23837,8 +24464,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit a comment",
@@ -23884,7 +24517,7 @@
           "200": {
             "$ref": "#/components/responses/AttachmentList"
           },
-          "default": {
+          "404": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23957,8 +24590,23 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/error"
+          },
+          "413": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a comment attachment",
@@ -24014,8 +24662,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "404": {
             "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a comment attachment",
@@ -24069,7 +24720,7 @@
           "200": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
+          "404": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24134,8 +24785,14 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
+          "404": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit a comment attachment",
@@ -24191,8 +24848,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Remove a reaction from a comment of an issue",
@@ -24235,6 +24895,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ReactionList"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24294,8 +24957,11 @@
           "201": {
             "$ref": "#/components/responses/Reaction"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Add a reaction to a comment of an issue",
@@ -24378,8 +25044,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete an issue",
@@ -24423,8 +25098,8 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get an issue",
@@ -24479,8 +25154,17 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "412": {
             "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit an issue. If using deadline only the date will be taken into account, and time of day ignored.",
@@ -24599,7 +25283,13 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/error"
+          },
+          "413": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24834,8 +25524,14 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Remove assignees from an issue",
@@ -24890,8 +25586,17 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Add assignees to an issue",
@@ -24946,8 +25651,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Check if a user can be assigned to an issue",
@@ -25002,8 +25710,8 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Unblock the issue given in the body by the issue in path",
@@ -25062,8 +25770,8 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List issues that are blocked by this issue",
@@ -25116,8 +25824,8 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "description": "the issue does not exist"
           }
         },
         "summary": "Block the issue given in the body by the issue in path",
@@ -25293,6 +26001,9 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -25361,8 +26072,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Edit a comment",
@@ -25418,8 +26132,11 @@
           "201": {
             "$ref": "#/components/responses/IssueDeadline"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Set an issue deadline. If set to null, the deadline is deleted. If using deadline only the date will be taken into account, and time of day ignored.",
@@ -25474,8 +26191,11 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Remove an issue dependency",
@@ -25534,8 +26254,8 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an issue's dependencies, i.e all issues that block this issue.",
@@ -25588,8 +26308,11 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "description": "the issue does not exist"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Make the issue in the url depend on the issue in the form.",
@@ -25635,8 +26358,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Remove all labels from an issue",
@@ -25680,8 +26409,8 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get an issue's labels",
@@ -25735,8 +26464,14 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Add a label to an issue",
@@ -25790,8 +26525,14 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Replace an issue's labels",
@@ -25847,8 +26588,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Remove a label from an issue",
@@ -25893,6 +26643,9 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -25949,8 +26702,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Lock an issue",
@@ -25995,6 +26751,9 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -26041,8 +26800,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Pin an Issue",
@@ -26216,8 +26978,11 @@
           "200": {
             "$ref": "#/components/responses/ReactionList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a list reactions of an issue",
@@ -26321,8 +27086,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "description": "Not repo writer, user does not have rights to toggle stopwatch"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "description": "Cannot cancel a non-existent stopwatch"
           }
         },
         "summary": "Delete an issue's existing stopwatch.",
@@ -26368,8 +27139,14 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "description": "Not repo writer, user does not have rights to toggle stopwatch"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "description": "Cannot start a stopwatch again if it already exists"
           }
         },
         "summary": "Start stopwatch on an issue.",
@@ -26415,8 +27192,14 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "description": "Not repo writer, user does not have rights to toggle stopwatch"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "description": "Cannot stop a non-existent stopwatch"
           }
         },
         "summary": "Stop an issue's existing stopwatch.",
@@ -26478,8 +27261,8 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get users who subscribed on an issue.",
@@ -26587,8 +27370,8 @@
           "304": {
             "description": "User can only subscribe itself if he is no admin"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Unsubscribe user from issue",
@@ -26647,8 +27430,8 @@
           "304": {
             "description": "User can only subscribe itself if he is no admin"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Subscribe user to issue",
@@ -26728,8 +27511,8 @@
           "200": {
             "$ref": "#/components/responses/TimelineList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List all comments and events on an issue",
@@ -26775,8 +27558,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Reset a tracked time of an issue",
@@ -26862,8 +27651,8 @@
           "200": {
             "$ref": "#/components/responses/TrackedTimeList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List an issue's tracked times",
@@ -26916,6 +27705,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/TrackedTime"
+          },
+          "400": {
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -26974,8 +27766,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete specific tracked time",
@@ -27043,8 +27841,8 @@
           "200": {
             "$ref": "#/components/responses/DeployKeyList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a repository's keys",
@@ -27088,8 +27886,11 @@
           "201": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Add a key to a repository",
@@ -27135,8 +27936,11 @@
           "201": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Add a deploy token to a repository, it authenticates git over HTTPS",
@@ -27182,8 +27986,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a key from a repository",
@@ -27227,8 +28034,8 @@
           "200": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a repository's key by id",
@@ -27280,8 +28087,8 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get all of a repository's labels",
@@ -27325,8 +28132,11 @@
           "201": {
             "$ref": "#/components/responses/Label"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a label",
@@ -27472,8 +28282,11 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a label",
@@ -27509,8 +28322,8 @@
           "200": {
             "$ref": "#/components/responses/LanguageStatistics"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get languages and number of bytes of code written",
@@ -27657,6 +28470,12 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Merge a branch from upstream",
@@ -27769,8 +28588,8 @@
           "201": {
             "$ref": "#/components/responses/Milestone"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Create a milestone",
@@ -27815,8 +28634,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a milestone",
@@ -27859,8 +28678,8 @@
           "200": {
             "$ref": "#/components/responses/Milestone"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a milestone",
@@ -27950,8 +28769,11 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Sync a mirrored repository",
@@ -27987,8 +28809,8 @@
           "200": {
             "$ref": "#/components/responses/RepoNewIssuePinsAllowed"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Returns if new Issue Pins are allowed",
@@ -28028,7 +28850,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -28277,8 +29099,14 @@
           "201": {
             "$ref": "#/components/responses/Project"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a project owned by a repository",
@@ -28324,8 +29152,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a project",
@@ -28424,8 +29255,14 @@
           "200": {
             "$ref": "#/components/responses/Project"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit a project",
@@ -28542,8 +29379,17 @@
           "201": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a column in a project",
@@ -28600,8 +29446,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Reorder a project's columns",
@@ -28658,8 +29513,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a project column",
@@ -28778,8 +29642,17 @@
           "200": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Edit a project column",
@@ -28836,8 +29709,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Set a project's default column",
@@ -28976,8 +29855,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Remove an issue from a project column",
@@ -29042,8 +29927,17 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Add an issue to a project column",
@@ -29109,8 +30003,17 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Move an issue between a project's columns",
@@ -29227,6 +30130,9 @@
           "201": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -29284,8 +30190,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Delete a project workflow",
@@ -29403,6 +30315,9 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ProjectWorkflow"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -29539,7 +30454,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestList"
           },
-          "default": {
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "500": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29584,8 +30502,20 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Create a pull request",
@@ -29631,8 +30561,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "400": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Resolve a pull request review comment",
@@ -29678,8 +30614,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "400": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Unresolve a pull request review comment",
@@ -29715,8 +30657,8 @@
           "200": {
             "$ref": "#/components/responses/PullRequestList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List a repo's pinned pull requests",
@@ -29779,8 +30721,8 @@
           "200": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a pull request by base and head",
@@ -29893,8 +30835,23 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/error"
+          },
+          "412": {
+            "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Update a pull request. If using deadline only the date will be taken into account, and time of day ignored.",
@@ -29961,8 +30918,8 @@
           "200": {
             "$ref": "#/components/responses/string"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a pull request diff or patch",
@@ -30029,8 +30986,14 @@
           "201": {
             "$ref": "#/components/responses/PullReviewComment"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "400": {
+            "$ref": "#/components/responses/validationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Reply to a pull request review comment",
@@ -30108,8 +31071,8 @@
           "200": {
             "$ref": "#/components/responses/CommitList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get commits for a pull request",
@@ -30193,8 +31156,8 @@
           "200": {
             "$ref": "#/components/responses/ChangedFileList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get changed files for a pull request",
@@ -30240,8 +31203,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Cancel the scheduled auto merge for the given pull request",
@@ -30285,8 +31254,8 @@
           "204": {
             "description": "pull request has been merged"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "description": "pull request has not been merged"
           }
         },
         "summary": "Check if a pull request has been merged",
@@ -30340,8 +31309,23 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/empty"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Merge a pull request",
@@ -30398,8 +31382,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "cancel review requests for a pull request",
@@ -30454,8 +31444,11 @@
           "201": {
             "$ref": "#/components/responses/PullReviewList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "create review requests for a pull request",
@@ -30502,8 +31495,17 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "423": {
+            "$ref": "#/components/responses/repoArchivedError"
           }
         },
         "summary": "Open a pull request reverting a merged pull request",
@@ -30565,8 +31567,8 @@
           "200": {
             "$ref": "#/components/responses/PullReviewList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List all reviews for a pull request",
@@ -30621,8 +31623,11 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a review to a pull request",
@@ -30678,8 +31683,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a specific review from a pull request",
@@ -30733,8 +31741,8 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a specific review for a pull request",
@@ -30796,8 +31804,11 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Edit a pull request review summary",
@@ -30862,8 +31873,11 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Submit a pending review to a pull request",
@@ -30987,8 +32001,14 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Dismiss a review for a pull request",
@@ -31052,8 +32072,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Remove a reaction from a pull request review summary",
@@ -31184,8 +32204,11 @@
           "201": {
             "$ref": "#/components/responses/Reaction"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Add a reaction to a pull request review summary",
@@ -31241,8 +32264,14 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Cancel to dismiss a review for a pull request",
@@ -31300,8 +32329,17 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Merge PR's baseBranch into headBranch",
@@ -31403,14 +32441,14 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
           "409": {
             "description": "The pull request head changed"
           },
           "422": {
             "description": "Invalid file selection"
-          },
-          "default": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Mark or unmark files as viewed for the authenticated user",
@@ -31462,8 +32500,14 @@
           "200": {
             "$ref": "#/components/responses/PushMirrorList"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get all push mirrors of the repository",
@@ -31507,8 +32551,14 @@
           "200": {
             "$ref": "#/components/responses/PushMirror"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "add a push mirror to the repository",
@@ -31544,8 +32594,17 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Sync all push mirrored repository",
@@ -31590,8 +32649,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "deletes a push mirror from a repository by remoteName",
@@ -31634,8 +32696,14 @@
           "200": {
             "$ref": "#/components/responses/PushMirror"
           },
-          "default": {
+          "400": {
             "$ref": "#/components/responses/error"
+          },
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get push mirror of the repository by remoteName",
@@ -31696,8 +32764,8 @@
             },
             "description": "Returns raw file content."
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a file from a repository",
@@ -31818,8 +32886,14 @@
           "201": {
             "$ref": "#/components/responses/Release"
           },
-          "default": {
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "409": {
             "$ref": "#/components/responses/error"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a release",
@@ -31855,8 +32929,8 @@
           "200": {
             "$ref": "#/components/responses/Release"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Gets the most recent non-prerelease, non-draft release of a repository, sorted by created_at",
@@ -31901,8 +32975,11 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Delete a release by tag name",
@@ -32092,8 +33169,8 @@
           "200": {
             "$ref": "#/components/responses/Release"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Update a release",
@@ -32139,8 +33216,8 @@
           "200": {
             "$ref": "#/components/responses/AttachmentList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "List release's attachments",
@@ -32222,7 +33299,13 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
+          "400": {
+            "$ref": "#/components/responses/error"
+          },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "413": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32279,8 +33362,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Delete a release attachment",
@@ -32334,8 +33417,8 @@
           "200": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a release attachment",
@@ -32399,8 +33482,11 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Edit a release attachment",
@@ -32436,8 +33522,8 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Return all users that can be requested to review in this repo",
@@ -32571,7 +33657,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackList"
           },
-          "default": {
+          "500": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32617,8 +33703,11 @@
           "201": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "403": {
+            "$ref": "#/components/responses/forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Create a pull request stack",
@@ -32709,11 +33798,11 @@
           "204": {
             "description": "The pull requests were unstacked"
           },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
-          },
-          "default": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Unstack a pull request stack",
@@ -32813,11 +33902,14 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Append pull requests to a stack",
@@ -32874,11 +33966,14 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Insert a pull request into a stack above the layer its base branch names, retargeting the layer above it",
@@ -32938,8 +34033,8 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Start ordered landing of a pull request stack prefix",
@@ -33058,8 +34153,8 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
           }
         },
         "summary": "Get a pull request stack operation",
@@ -33115,8 +34210,11 @@
           "204": {
             "description": "The operation was cancelled"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Cancel a pull request stack operation",
@@ -33172,8 +34270,11 @@
           "202": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Retry a pull request stack operation",
@@ -33233,8 +34334,8 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Start a pull request stack rebase",
@@ -33291,11 +34392,14 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
+          "404": {
+            "$ref": "#/components/responses/notFound"
+          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Synchronize locally restacked pull request heads and boundaries",
@@ -33355,8 +34459,8 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "default": {
-            "$ref": "#/components/responses/error"
+          "422": {
+            "$ref": "#/components/responses/validationError"
           }
         },
         "summary": "Start a merge-mode pull request stack update, merging each parent into its layer",
