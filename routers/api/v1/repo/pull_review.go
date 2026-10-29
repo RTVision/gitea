@@ -192,9 +192,9 @@ func EditPullReview(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/PullReview"
 	//   "403":
-	//     "$ref": "#/responses/forbidden"
+	//     "$ref": "#/responses/error"
 	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//     "$ref": "#/responses/error"
 
 	review, _, statusSet := prepareSingleReview(ctx)
 	if statusSet {
@@ -280,7 +280,7 @@ func GetPullReviewReactions(ctx *context.APIContext) {
 	//   "200":
 	//     "$ref": "#/responses/ReactionList"
 	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//     "$ref": "#/responses/error"
 
 	review, _, statusSet := prepareSingleReview(ctx)
 	if !statusSet {
@@ -367,9 +367,9 @@ func PostPullReviewReaction(ctx *context.APIContext) {
 	//   "201":
 	//     "$ref": "#/responses/Reaction"
 	//   "403":
-	//     "$ref": "#/responses/forbidden"
+	//     "$ref": "#/responses/error"
 	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//     "$ref": "#/responses/error"
 
 	changePullReviewReaction(ctx, true)
 }
@@ -412,7 +412,7 @@ func DeletePullReviewReaction(ctx *context.APIContext) {
 	//   "204":
 	//     "$ref": "#/responses/empty"
 	//   "404":
-	//     "$ref": "#/responses/notFound"
+	//     "$ref": "#/responses/error"
 
 	changePullReviewReaction(ctx, false)
 }

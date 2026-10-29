@@ -15618,9 +15618,6 @@
           "204": {
             "$ref": "#/responses/empty"
           },
-          "409": {
-            "$ref": "#/responses/conflict"
-          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -18364,9 +18361,6 @@
           "204": {
             "$ref": "#/responses/empty"
           },
-          "409": {
-            "$ref": "#/responses/error"
-          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -18458,9 +18452,6 @@
         "responses": {
           "204": {
             "$ref": "#/responses/empty"
-          },
-          "409": {
-            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -21636,9 +21627,6 @@
         "responses": {
           "204": {
             "$ref": "#/responses/empty"
-          },
-          "409": {
-            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"
@@ -27086,9 +27074,6 @@
           "200": {
             "$ref": "#/responses/empty"
           },
-          "422": {
-            "$ref": "#/responses/error"
-          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -27241,16 +27226,16 @@
             "$ref": "#/responses/PullRequest"
           },
           "403": {
-            "$ref": "#/responses/forbidden"
+            "$ref": "#/responses/error"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "$ref": "#/responses/error"
           },
           "423": {
-            "$ref": "#/responses/repoArchivedError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -27516,10 +27501,10 @@
             "$ref": "#/responses/PullReview"
           },
           "403": {
-            "$ref": "#/responses/forbidden"
+            "$ref": "#/responses/error"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       },
@@ -27751,7 +27736,7 @@
             "$ref": "#/responses/ReactionList"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       },
@@ -27809,10 +27794,10 @@
             "$ref": "#/responses/Reaction"
           },
           "403": {
-            "$ref": "#/responses/forbidden"
+            "$ref": "#/responses/error"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       },
@@ -27870,7 +27855,7 @@
             "$ref": "#/responses/empty"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -28020,7 +28005,7 @@
             "$ref": "#/responses/PullRequestViewedFiles"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       },
@@ -28070,7 +28055,7 @@
             "$ref": "#/responses/empty"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "description": "The pull request head changed"
@@ -29167,10 +29152,10 @@
             "$ref": "#/responses/PullRequestStack"
           },
           "403": {
-            "$ref": "#/responses/forbidden"
+            "$ref": "#/responses/error"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29247,7 +29232,7 @@
             "$ref": "#/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       },
@@ -29297,7 +29282,7 @@
             "description": "The pull requests were unstacked"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "$ref": "#/responses/StackRevisionConflict"
@@ -29353,13 +29338,13 @@
             "$ref": "#/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29414,13 +29399,13 @@
             "$ref": "#/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29475,7 +29460,7 @@
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29528,7 +29513,7 @@
             "$ref": "#/responses/PullRequestStackOperationList"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29577,7 +29562,7 @@
             "$ref": "#/responses/PullRequestStackOperation"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29626,10 +29611,10 @@
             "description": "The operation was cancelled"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29678,10 +29663,10 @@
             "$ref": "#/responses/PullRequestStackOperation"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29736,7 +29721,7 @@
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29791,13 +29776,13 @@
             "$ref": "#/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/responses/notFound"
+            "$ref": "#/responses/error"
           },
           "409": {
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }
@@ -29852,7 +29837,7 @@
             "$ref": "#/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/responses/validationError"
+            "$ref": "#/responses/error"
           }
         }
       }

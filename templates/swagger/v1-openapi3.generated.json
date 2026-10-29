@@ -17805,9 +17805,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "409": {
-            "$ref": "#/components/responses/conflict"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20803,9 +20800,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -20903,9 +20897,6 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24386,9 +24377,6 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -30352,9 +30340,6 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -30518,16 +30503,16 @@
             "$ref": "#/components/responses/PullRequest"
           },
           "403": {
-            "$ref": "#/components/responses/forbidden"
+            "$ref": "#/components/responses/error"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "$ref": "#/components/responses/error"
           },
           "423": {
-            "$ref": "#/components/responses/repoArchivedError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Open a pull request reverting a merged pull request",
@@ -30821,10 +30806,10 @@
             "$ref": "#/components/responses/PullReview"
           },
           "403": {
-            "$ref": "#/components/responses/forbidden"
+            "$ref": "#/components/responses/error"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Edit a pull request review summary",
@@ -31080,7 +31065,7 @@
             "$ref": "#/components/responses/empty"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Remove a reaction from a pull request review summary",
@@ -31149,7 +31134,7 @@
             "$ref": "#/components/responses/ReactionList"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get reactions on a pull request review summary",
@@ -31212,10 +31197,10 @@
             "$ref": "#/components/responses/Reaction"
           },
           "403": {
-            "$ref": "#/components/responses/forbidden"
+            "$ref": "#/components/responses/error"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Add a reaction to a pull request review summary",
@@ -31378,7 +31363,7 @@
             "$ref": "#/components/responses/PullRequestViewedFiles"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get the authenticated user's viewed files for a pull request",
@@ -31434,7 +31419,7 @@
             "$ref": "#/components/responses/empty"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "description": "The pull request head changed"
@@ -32648,10 +32633,10 @@
             "$ref": "#/components/responses/PullRequestStack"
           },
           "403": {
-            "$ref": "#/components/responses/forbidden"
+            "$ref": "#/components/responses/error"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Create a pull request stack",
@@ -32743,7 +32728,7 @@
             "description": "The pull requests were unstacked"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
@@ -32791,7 +32776,7 @@
             "$ref": "#/components/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get a pull request stack",
@@ -32847,13 +32832,13 @@
             "$ref": "#/components/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Append pull requests to a stack",
@@ -32911,13 +32896,13 @@
             "$ref": "#/components/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Insert a pull request into a stack above the layer its base branch names, retargeting the layer above it",
@@ -32978,7 +32963,7 @@
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Start ordered landing of a pull request stack prefix",
@@ -33041,7 +33026,7 @@
             "$ref": "#/components/responses/PullRequestStackOperationList"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "List pull request stack operations",
@@ -33098,7 +33083,7 @@
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get a pull request stack operation",
@@ -33155,10 +33140,10 @@
             "description": "The operation was cancelled"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Cancel a pull request stack operation",
@@ -33215,10 +33200,10 @@
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Retry a pull request stack operation",
@@ -33279,7 +33264,7 @@
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Start a pull request stack rebase",
@@ -33337,13 +33322,13 @@
             "$ref": "#/components/responses/PullRequestStack"
           },
           "404": {
-            "$ref": "#/components/responses/notFound"
+            "$ref": "#/components/responses/error"
           },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Synchronize locally restacked pull request heads and boundaries",
@@ -33404,7 +33389,7 @@
             "$ref": "#/components/responses/StackRevisionConflict"
           },
           "422": {
-            "$ref": "#/components/responses/validationError"
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Start a merge-mode pull request stack update, merging each parent into its layer",
