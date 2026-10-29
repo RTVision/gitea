@@ -17081,7 +17081,7 @@
             "$ref": "#/responses/PullRequest"
           },
           "409": {
-            "description": "The pull request head changed"
+            "$ref": "#/responses/error"
           },
           "default": {
             "$ref": "#/responses/error"

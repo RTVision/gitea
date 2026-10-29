@@ -30503,7 +30503,7 @@
             "$ref": "#/components/responses/PullRequest"
           },
           "409": {
-            "description": "The pull request head changed"
+            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
