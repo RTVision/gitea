@@ -86,6 +86,8 @@ func GetPullRequestViewedFiles(ctx *context.APIContext) {
 	// responses:
 	//   "200":
 	//     "$ref": "#/responses/PullRequestViewedFiles"
+	//   "409":
+	//     description: The pull request head changed
 	//   default:
 	//     "$ref": "#/responses/error"
 	_, head, diff, ok := pullRequestViewedDiff(ctx)

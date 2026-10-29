@@ -45,6 +45,8 @@ func RevertPullRequest(ctx *context.APIContext) {
 	// responses:
 	//   "201":
 	//     "$ref": "#/responses/PullRequest"
+	//   "409":
+	//     "$ref": "#/responses/error"
 	//   default:
 	//     "$ref": "#/responses/error"
 	repo := ctx.Repo.Repository
