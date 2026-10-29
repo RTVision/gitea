@@ -2388,7 +2388,7 @@
             "x-go-name": "Path"
           },
           "previous_attempt_url": {
-            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is \u003e 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
+            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is > 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
             "format": "uri",
             "type": "string",
             "x-go-name": "PreviousAttemptURL"
@@ -4612,7 +4612,7 @@
             "x-go-name": "Deadline"
           },
           "head": {
-            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `\u003cusername\u003e:\u003cbranch\u003e` which refers to the user's fork repository's branch.",
+            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `<username>:<branch>` which refers to the user's fork repository's branch.",
             "type": "string",
             "x-go-name": "Head"
           },
@@ -12094,13 +12094,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12127,10 +12121,7 @@
           "200": {
             "$ref": "#/components/responses/RunnerList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12172,10 +12163,7 @@
           "204": {
             "description": "runner has been deleted"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12201,10 +12189,7 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12240,13 +12225,7 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12321,10 +12300,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12359,7 +12335,7 @@
           "200": {
             "$ref": "#/components/responses/CronList"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12387,7 +12363,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12422,7 +12398,7 @@
           "200": {
             "$ref": "#/components/responses/EmailList"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12465,7 +12441,7 @@
           "200": {
             "$ref": "#/components/responses/EmailList"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12653,7 +12629,7 @@
           "200": {
             "$ref": "#/components/responses/OrganizationList"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12728,7 +12704,7 @@
           "200": {
             "$ref": "#/components/responses/PackageList"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12771,7 +12747,7 @@
           "200": {
             "$ref": "#/components/responses/StringSlice"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12808,7 +12784,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12843,10 +12819,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12970,10 +12943,7 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -12998,16 +12968,7 @@
           "201": {
             "$ref": "#/components/responses/User"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13043,13 +13004,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13085,16 +13040,7 @@
           "200": {
             "$ref": "#/components/responses/User"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13132,10 +13078,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13161,7 +13104,7 @@
           "200": {
             "$ref": "#/components/responses/BadgeList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13197,7 +13140,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13235,10 +13178,7 @@
           "201": {
             "$ref": "#/components/responses/PublicKey"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13276,10 +13216,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13318,10 +13255,7 @@
           "201": {
             "$ref": "#/components/responses/Organization"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13360,10 +13294,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13402,19 +13333,7 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13456,7 +13375,7 @@
           "200": {
             "$ref": "#/components/responses/GitignoreTemplateInfo"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13498,7 +13417,7 @@
           "200": {
             "$ref": "#/components/responses/LabelTemplateInfo"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13540,7 +13459,7 @@
           "200": {
             "$ref": "#/components/responses/LicenseTemplateInfo"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13567,7 +13486,7 @@
           "200": {
             "$ref": "#/components/responses/MarkdownRender"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13596,7 +13515,7 @@
           "200": {
             "$ref": "#/components/responses/MarkdownRender"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13623,7 +13542,7 @@
           "200": {
             "$ref": "#/components/responses/MarkupRender"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13646,7 +13565,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned.",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -13807,9 +13726,6 @@
           "200": {
             "$ref": "#/components/responses/NotificationThread"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -13845,10 +13761,7 @@
           "205": {
             "$ref": "#/components/responses/NotificationThread"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13887,13 +13800,7 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -13979,7 +13886,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14005,7 +13912,7 @@
           "200": {
             "$ref": "#/components/responses/Organization"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14094,10 +14001,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14132,9 +14036,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/RunnerList"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14198,9 +14099,6 @@
           "204": {
             "description": "runner has been deleted"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -14236,10 +14134,7 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14283,12 +14178,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Runner"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14374,10 +14263,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14421,7 +14307,7 @@
           "200": {
             "$ref": "#/components/responses/SecretList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14458,10 +14344,7 @@
           "204": {
             "description": "delete one secret of the organization"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14509,10 +14392,7 @@
           "204": {
             "description": "response when updating a secret"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14556,10 +14436,7 @@
           "200": {
             "$ref": "#/components/responses/VariableList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14602,10 +14479,7 @@
           "204": {
             "description": "response when deleting a variable"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14639,9 +14513,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ActionVariable"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14688,13 +14559,7 @@
           "201": {
             "description": "successfully created the org-level variable"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "variable name already exists."
-          },
-          "500": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14741,9 +14606,6 @@
           },
           "204": {
             "description": "response when updating an org-level variable"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -14798,7 +14660,7 @@
           "200": {
             "$ref": "#/components/responses/ActivityFeedsList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14826,7 +14688,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14862,7 +14724,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14940,10 +14802,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -14978,7 +14837,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15021,10 +14880,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15068,7 +14924,7 @@
           "200": {
             "$ref": "#/components/responses/HookList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15105,7 +14961,7 @@
           "201": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15179,7 +15035,7 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15225,7 +15081,7 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15269,7 +15125,7 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15305,10 +15161,7 @@
           "201": {
             "$ref": "#/components/responses/Label"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15346,7 +15199,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15382,7 +15235,7 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15428,10 +15281,7 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15550,8 +15400,8 @@
           "303": {
             "description": "redirection to /orgs/{org}/public_members/{username}"
           },
-          "404": {
-            "description": "user is not a member"
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Check if a user is a member of an organization",
@@ -15608,7 +15458,7 @@
           "200": {
             "$ref": "#/components/responses/ProjectList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15644,10 +15494,7 @@
           "201": {
             "$ref": "#/components/responses/Project"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15685,7 +15532,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15867,13 +15714,7 @@
           "201": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15922,13 +15763,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -15977,13 +15812,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16085,9 +15914,6 @@
           "200": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -16137,10 +15963,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16204,7 +16027,7 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16262,13 +16085,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16325,16 +16142,7 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16392,16 +16200,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16501,9 +16300,6 @@
           "201": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -16552,10 +16348,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16657,9 +16450,6 @@
           "200": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -16741,10 +16531,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16779,8 +16566,8 @@
           "204": {
             "description": "user is a public member"
           },
-          "404": {
-            "description": "user is not a public member"
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Check if a user is a public member of an organization",
@@ -16814,10 +16601,7 @@
           "204": {
             "description": "membership publicized"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16856,10 +16640,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16890,10 +16671,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16935,7 +16713,7 @@
           "200": {
             "$ref": "#/components/responses/RepositoryList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -16971,13 +16749,7 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17057,10 +16829,7 @@
           "201": {
             "$ref": "#/components/responses/Team"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17118,27 +16887,23 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/Team"
-                      },
-                      "type": "array"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "type": "object"
+            "description": "SearchResults of a successful search",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Team"
+                  }
+                },
+                "ok": {
+                  "type": "boolean"
                 }
               }
-            },
-            "description": "SearchResults of a successful search"
+            }
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17268,7 +17033,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17328,7 +17093,7 @@
           "200": {
             "$ref": "#/components/responses/PackageList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17374,7 +17139,7 @@
           "200": {
             "$ref": "#/components/responses/Package"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17475,7 +17240,7 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17530,7 +17295,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17638,7 +17403,7 @@
           "200": {
             "$ref": "#/components/responses/PackageFileList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17813,10 +17578,7 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -17843,13 +17605,7 @@
           "201": {
             "$ref": "#/components/responses/Repository"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "The repository with the same name already exists."
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18008,7 +17764,7 @@
           "200": {
             "$ref": "#/components/responses/SearchResults"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18045,13 +17801,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18132,13 +17882,7 @@
           "200": {
             "$ref": "#/components/responses/Repository"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18182,9 +17926,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ArtifactsList"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18232,9 +17973,6 @@
           "204": {
             "description": "No Content"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -18278,9 +18016,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Artifact"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18327,9 +18062,6 @@
         "responses": {
           "302": {
             "description": "redirect to the blob download"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18408,13 +18140,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowJobsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18459,9 +18185,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/WorkflowJob"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18509,9 +18232,6 @@
           "200": {
             "description": "output blob content"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -18556,9 +18276,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/RunnerList"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -18640,10 +18357,7 @@
           "204": {
             "description": "runner has been deleted"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18687,10 +18401,7 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18744,13 +18455,7 @@
           "200": {
             "$ref": "#/components/responses/Runner"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18851,10 +18556,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18900,10 +18602,7 @@
           "204": {
             "description": "No Content"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18947,10 +18646,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -18996,16 +18692,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19059,10 +18746,7 @@
           "200": {
             "$ref": "#/components/responses/ArtifactsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19244,15 +18928,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Cancel a workflow run and its jobs",
@@ -19299,15 +18974,6 @@
             "$ref": "#/components/responses/WorkflowRun"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19395,12 +19061,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Lists all jobs for a workflow run",
@@ -19456,18 +19116,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Reruns a specific workflow job in a run",
@@ -19512,7 +19160,7 @@
           "200": {
             "description": "Logs archive"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19558,19 +19206,7 @@
           "201": {
             "$ref": "#/components/responses/WorkflowRun"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19617,18 +19253,6 @@
             "$ref": "#/components/responses/empty"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19681,7 +19305,7 @@
           "200": {
             "$ref": "#/components/responses/SecretList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19728,9 +19352,6 @@
             "description": "delete one secret of the repository"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -19842,18 +19463,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "List a repository's action tasks",
@@ -19959,9 +19568,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Delete a repo-level variable",
@@ -20060,12 +19666,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "variable name already exists."
-          },
-          "500": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Create a repo-level variable",
@@ -20121,10 +19721,7 @@
           "204": {
             "description": "response when updating a repo-level variable"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20162,18 +19759,6 @@
             "$ref": "#/components/responses/ActionWorkflowList"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "500": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20221,18 +19806,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "500": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Get a workflow",
@@ -20278,15 +19851,6 @@
             "description": "No Content"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20364,15 +19928,6 @@
           },
           "default": {
             "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Create a workflow dispatch event",
@@ -20417,19 +19972,7 @@
           "204": {
             "description": "No Content"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20548,13 +20091,7 @@
           "200": {
             "$ref": "#/components/responses/WorkflowRunsList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20616,7 +20153,7 @@
           "200": {
             "$ref": "#/components/responses/ActivityFeedsList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20712,7 +20249,7 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20795,7 +20332,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20840,7 +20377,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20919,16 +20456,7 @@
           "201": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -20975,13 +20503,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21027,7 +20549,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21071,7 +20593,7 @@
           "200": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21125,13 +20647,7 @@
           "200": {
             "$ref": "#/components/responses/BranchProtection"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21234,16 +20750,7 @@
           "201": {
             "$ref": "#/components/responses/Branch"
           },
-          "403": {
-            "description": "The branch is archived or a mirror."
-          },
-          "404": {
-            "description": "The old branch does not exist."
-          },
-          "409": {
-            "description": "The branch with the same name already exists."
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21289,16 +20796,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21342,7 +20840,7 @@
           "200": {
             "$ref": "#/components/responses/Branch"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21396,16 +20894,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21459,16 +20948,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21567,10 +21047,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21614,10 +21091,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21671,13 +21145,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21723,10 +21191,7 @@
           "200": {
             "$ref": "#/components/responses/RepoCollaboratorPermission"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21845,10 +21310,7 @@
           "200": {
             "$ref": "#/components/responses/CommitList"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -21909,9 +21371,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/CombinedStatus"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -22005,9 +21464,6 @@
           "200": {
             "$ref": "#/components/responses/CommitStatusList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -22054,7 +21510,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22129,10 +21585,7 @@
           "200": {
             "$ref": "#/components/responses/Compare"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22178,7 +21631,7 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22224,16 +21677,7 @@
           "201": {
             "$ref": "#/components/responses/FilesResponse"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22296,7 +21740,7 @@
           "200": {
             "$ref": "#/components/responses/ContentsExtResponse"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22353,19 +21797,7 @@
           "200": {
             "$ref": "#/components/responses/FileDeleteResponse"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22473,16 +21905,7 @@
           "201": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22540,16 +21963,7 @@
           "201": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22597,10 +22011,7 @@
           "200": {
             "$ref": "#/components/responses/FileResponse"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22654,7 +22065,7 @@
           "200": {
             "description": "success"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22709,7 +22120,7 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22719,7 +22130,7 @@
         ]
       },
       "post": {
-        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size \u003e 0`, they can be requested separately by using the `download_url`.",
+        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size > 0`, they can be requested separately by using the `download_url`.",
         "operationId": "repoGetFileContentsPost",
         "parameters": [
           {
@@ -22764,7 +22175,7 @@
           "200": {
             "$ref": "#/components/responses/ContentsListResponse"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22817,7 +22228,7 @@
           "200": {
             "$ref": "#/components/responses/RepositoryList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22862,16 +22273,7 @@
           "202": {
             "$ref": "#/components/responses/Repository"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "The repository with the same name already exists."
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -22916,9 +22318,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/GitBlobResponse"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -22990,10 +22389,7 @@
           "200": {
             "$ref": "#/components/responses/Commit"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23114,10 +22510,7 @@
           "200": {
             "$ref": "#/components/responses/Note"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23154,7 +22547,7 @@
           "200": {
             "$ref": "#/components/responses/ReferenceList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23246,10 +22639,7 @@
           "200": {
             "$ref": "#/components/responses/AnnotatedTag"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23319,9 +22709,6 @@
           "200": {
             "$ref": "#/components/responses/GitTreeResponse"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -23375,7 +22762,7 @@
           "200": {
             "$ref": "#/components/responses/HookList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23420,7 +22807,7 @@
           "201": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23457,7 +22844,7 @@
           "200": {
             "$ref": "#/components/responses/GitHookList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23693,7 +23080,7 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23748,7 +23135,7 @@
           "200": {
             "$ref": "#/components/responses/Hook"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23811,7 +23198,7 @@
           "200": {
             "$ref": "#/components/responses/HookDeliveryList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -23922,7 +23309,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24033,7 +23420,7 @@
           "200": {
             "$ref": "#/components/responses/IssueTemplates"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24222,19 +23609,7 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "412": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24352,10 +23727,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24402,9 +23774,6 @@
           },
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24464,13 +23833,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24517,7 +23880,7 @@
           "200": {
             "$ref": "#/components/responses/AttachmentList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24590,22 +23953,7 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "413": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24662,10 +24010,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24720,7 +24065,7 @@
           "200": {
             "$ref": "#/components/responses/Attachment"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24785,13 +24130,7 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24848,10 +24187,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -24895,9 +24231,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ReactionList"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -24957,10 +24290,7 @@
           "201": {
             "$ref": "#/components/responses/Reaction"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25044,16 +24374,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25098,7 +24419,7 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25154,16 +24475,7 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "412": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25283,13 +24595,7 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "413": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25524,13 +24830,7 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25586,16 +24886,7 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25651,10 +24942,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25710,7 +24998,7 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25770,7 +25058,7 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -25824,8 +25112,8 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "404": {
-            "description": "the issue does not exist"
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Block the issue given in the body by the issue in path",
@@ -26001,9 +25289,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -26072,10 +25357,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26132,10 +25414,7 @@
           "201": {
             "$ref": "#/components/responses/IssueDeadline"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26191,10 +25470,7 @@
           "200": {
             "$ref": "#/components/responses/Issue"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26254,7 +25530,7 @@
           "200": {
             "$ref": "#/components/responses/IssueList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26308,10 +25584,7 @@
           "201": {
             "$ref": "#/components/responses/Issue"
           },
-          "404": {
-            "description": "the issue does not exist"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26358,13 +25631,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26409,7 +25676,7 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26464,13 +25731,7 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26525,13 +25786,7 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26588,16 +25843,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26643,9 +25889,6 @@
         "responses": {
           "204": {
             "$ref": "#/components/responses/empty"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -26702,10 +25945,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26752,9 +25992,6 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -26800,10 +26037,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -26978,10 +26212,7 @@
           "200": {
             "$ref": "#/components/responses/ReactionList"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27086,14 +26317,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "description": "Not repo writer, user does not have rights to toggle stopwatch"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "Cannot cancel a non-existent stopwatch"
           }
         },
         "summary": "Delete an issue's existing stopwatch.",
@@ -27139,14 +26364,8 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "description": "Not repo writer, user does not have rights to toggle stopwatch"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "Cannot start a stopwatch again if it already exists"
           }
         },
         "summary": "Start stopwatch on an issue.",
@@ -27192,14 +26411,8 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "description": "Not repo writer, user does not have rights to toggle stopwatch"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "Cannot stop a non-existent stopwatch"
           }
         },
         "summary": "Stop an issue's existing stopwatch.",
@@ -27261,7 +26474,7 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27370,7 +26583,7 @@
           "304": {
             "description": "User can only subscribe itself if he is no admin"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27430,7 +26643,7 @@
           "304": {
             "description": "User can only subscribe itself if he is no admin"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27511,7 +26724,7 @@
           "200": {
             "$ref": "#/components/responses/TimelineList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27558,13 +26771,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27651,7 +26858,7 @@
           "200": {
             "$ref": "#/components/responses/TrackedTimeList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27705,9 +26912,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/TrackedTime"
-          },
-          "400": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -27766,13 +26970,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27841,7 +27039,7 @@
           "200": {
             "$ref": "#/components/responses/DeployKeyList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27886,10 +27084,7 @@
           "201": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27936,10 +27131,7 @@
           "201": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -27986,10 +27178,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28034,7 +27223,7 @@
           "200": {
             "$ref": "#/components/responses/DeployKey"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28087,7 +27276,7 @@
           "200": {
             "$ref": "#/components/responses/LabelList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28132,10 +27321,7 @@
           "201": {
             "$ref": "#/components/responses/Label"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28282,10 +27468,7 @@
           "200": {
             "$ref": "#/components/responses/Label"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28322,7 +27505,7 @@
           "200": {
             "$ref": "#/components/responses/LanguageStatistics"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28411,15 +27594,10 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Returns raw file content."
+            "description": "Returns raw file content.",
+            "schema": {
+              "type": "file"
+            }
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -28469,12 +27647,6 @@
             "$ref": "#/components/responses/MergeUpstreamResponse"
           },
           "default": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28588,7 +27760,7 @@
           "201": {
             "$ref": "#/components/responses/Milestone"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28634,7 +27806,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28678,7 +27850,7 @@
           "200": {
             "$ref": "#/components/responses/Milestone"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28769,10 +27941,7 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28809,7 +27978,7 @@
           "200": {
             "$ref": "#/components/responses/RepoNewIssuePinsAllowed"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -28850,7 +28019,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -29099,13 +28268,7 @@
           "201": {
             "$ref": "#/components/responses/Project"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29152,10 +28315,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29255,13 +28415,7 @@
           "200": {
             "$ref": "#/components/responses/Project"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29379,16 +28533,7 @@
           "201": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29446,16 +28591,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29513,16 +28649,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29642,16 +28769,7 @@
           "200": {
             "$ref": "#/components/responses/ProjectColumn"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29709,13 +28827,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29855,13 +28967,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -29927,16 +29033,7 @@
           "201": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30003,16 +29100,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30130,9 +29218,6 @@
           "201": {
             "$ref": "#/components/responses/ProjectWorkflow"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
           "default": {
             "$ref": "#/components/responses/error"
           }
@@ -30190,13 +29275,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30315,9 +29394,6 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/ProjectWorkflow"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -30454,10 +29530,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestList"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "500": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30502,19 +29575,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30561,13 +29622,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30614,13 +29669,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30657,7 +29706,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30721,7 +29770,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30835,22 +29884,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "412": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30918,7 +29952,7 @@
           "200": {
             "$ref": "#/components/responses/string"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -30986,13 +30020,7 @@
           "201": {
             "$ref": "#/components/responses/PullReviewComment"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31071,7 +30099,7 @@
           "200": {
             "$ref": "#/components/responses/CommitList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31156,7 +30184,7 @@
           "200": {
             "$ref": "#/components/responses/ChangedFileList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31203,13 +30231,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31254,8 +30276,8 @@
           "204": {
             "description": "pull request has been merged"
           },
-          "404": {
-            "description": "pull request has not been merged"
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Check if a pull request has been merged",
@@ -31309,22 +30331,7 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "405": {
-            "$ref": "#/components/responses/empty"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31382,13 +30389,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31444,10 +30445,7 @@
           "201": {
             "$ref": "#/components/responses/PullReviewList"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31495,16 +30493,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequest"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "423": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31567,7 +30556,7 @@
           "200": {
             "$ref": "#/components/responses/PullReviewList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31623,10 +30612,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31683,10 +30669,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31741,7 +30724,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31804,10 +30787,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -31873,10 +30853,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32001,13 +30978,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32072,7 +31043,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32204,10 +31175,7 @@
           "201": {
             "$ref": "#/components/responses/Reaction"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32264,13 +31232,7 @@
           "200": {
             "$ref": "#/components/responses/PullReview"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32329,16 +31291,7 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32441,14 +31394,8 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "description": "The pull request head changed"
-          },
-          "422": {
-            "description": "Invalid file selection"
           }
         },
         "summary": "Mark or unmark files as viewed for the authenticated user",
@@ -32500,13 +31447,7 @@
           "200": {
             "$ref": "#/components/responses/PushMirrorList"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32551,13 +31492,7 @@
           "200": {
             "$ref": "#/components/responses/PushMirror"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32594,16 +31529,7 @@
           "200": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32649,10 +31575,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32696,13 +31619,7 @@
           "200": {
             "$ref": "#/components/responses/PushMirror"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32754,17 +31671,12 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Returns raw file content."
+            "description": "Returns raw file content.",
+            "schema": {
+              "type": "file"
+            }
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32886,13 +31798,7 @@
           "201": {
             "$ref": "#/components/responses/Release"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "409": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32929,7 +31835,7 @@
           "200": {
             "$ref": "#/components/responses/Release"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -32975,10 +31881,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33169,7 +32072,7 @@
           "200": {
             "$ref": "#/components/responses/Release"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33216,7 +32119,7 @@
           "200": {
             "$ref": "#/components/responses/AttachmentList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33299,13 +32202,7 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "400": {
-            "$ref": "#/components/responses/error"
-          },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "413": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33362,7 +32259,7 @@
           "204": {
             "$ref": "#/components/responses/empty"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33417,7 +32314,7 @@
           "200": {
             "$ref": "#/components/responses/Attachment"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33482,10 +32379,7 @@
           "201": {
             "$ref": "#/components/responses/Attachment"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33522,7 +32416,7 @@
           "200": {
             "$ref": "#/components/responses/UserList"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33557,14 +32451,10 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "GPG armored public key"
+            "description": "GPG armored public key",
+            "schema": {
+              "type": "string"
+            }
           }
         },
         "summary": "Get signing-key.gpg for given repository",
@@ -33598,14 +32488,10 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "ssh public key"
+            "description": "ssh public key",
+            "schema": {
+              "type": "string"
+            }
           }
         },
         "summary": "Get signing-key.pub for given repository",
@@ -33657,7 +32543,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackList"
           },
-          "500": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33703,10 +32589,7 @@
           "201": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "403": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33798,11 +32681,11 @@
           "204": {
             "description": "The pull requests were unstacked"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
+          },
+          "default": {
+            "$ref": "#/components/responses/error"
           }
         },
         "summary": "Unstack a pull request stack",
@@ -33902,13 +32785,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -33966,13 +32846,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34033,7 +32910,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34153,7 +33030,7 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "404": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34210,10 +33087,7 @@
           "204": {
             "description": "The operation was cancelled"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34270,10 +33144,7 @@
           "202": {
             "$ref": "#/components/responses/PullRequestStackOperation"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34334,7 +33205,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34392,13 +33263,10 @@
           "200": {
             "$ref": "#/components/responses/PullRequestStack"
           },
-          "404": {
-            "$ref": "#/components/responses/error"
-          },
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -34459,7 +33327,7 @@
           "409": {
             "$ref": "#/components/responses/StackRevisionConflict"
           },
-          "422": {
+          "default": {
             "$ref": "#/components/responses/error"
           }
         },
@@ -36282,14 +35150,10 @@
         "operationId": "getSigningKey",
         "responses": {
           "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "GPG armored public key"
+            "description": "GPG armored public key",
+            "schema": {
+              "type": "string"
+            }
           }
         },
         "summary": "Get default signing-key.gpg",
@@ -36303,14 +35167,10 @@
         "operationId": "getSigningKeySSH",
         "responses": {
           "200": {
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "ssh public key"
+            "description": "ssh public key",
+            "schema": {
+              "type": "string"
+            }
           }
         },
         "summary": "Get default signing-key.pub",
@@ -39627,25 +38487,21 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "data": {
-                      "items": {
-                        "$ref": "#/components/schemas/User"
-                      },
-                      "type": "array"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "type": "object"
+            "description": "SearchResults of a successful search",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/User"
+                  }
+                },
+                "ok": {
+                  "type": "boolean"
                 }
               }
-            },
-            "description": "SearchResults of a successful search"
+            }
           }
         },
         "summary": "Search for users",
