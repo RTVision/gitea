@@ -2388,7 +2388,7 @@
             "x-go-name": "Path"
           },
           "previous_attempt_url": {
-            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is > 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
+            "description": "PreviousAttemptURL is the API URL of the previous attempt of this run, e.g. \".../actions/runs/{run_id}/attempts/{attempt-1}\".\nIt is set only when the current attempt is \u003e 1 (i.e. a rerun). For the first attempt, or for legacy runs that pre-date ActionRunAttempt, it is null.",
             "format": "uri",
             "type": "string",
             "x-go-name": "PreviousAttemptURL"
@@ -4612,7 +4612,7 @@
             "x-go-name": "Deadline"
           },
           "head": {
-            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `<username>:<branch>` which refers to the user's fork repository's branch.",
+            "description": "The head branch for the pull request, it could be a branch name on the base repository or\na form like `\u003cusername\u003e:\u003cbranch\u003e` which refers to the user's fork repository's branch.",
             "type": "string",
             "x-go-name": "Head"
           },
@@ -13565,7 +13565,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned.",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -16887,25 +16887,25 @@
         ],
         "responses": {
           "200": {
-            "description": "SearchResults of a successful search",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "properties": {
                     "data": {
-                      "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Team"
-                      }
+                      },
+                      "type": "array"
                     },
                     "ok": {
                       "type": "boolean"
                     }
-                  }
+                  },
+                  "type": "object"
                 }
               }
-            }
+            },
+            "description": "SearchResults of a successful search"
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -22134,7 +22134,7 @@
         ]
       },
       "post": {
-        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size > 0`, they can be requested separately by using the `download_url`.",
+        "description": "Uses automatic pagination based on default page size and max response size and returns the maximum allowed number of files. Files which could not be retrieved are null. Files which are too large are being returned with `encoding == null`, `content == null` and `size \u003e 0`, they can be requested separately by using the `download_url`.",
         "operationId": "repoGetFileContentsPost",
         "parameters": [
           {
@@ -27598,15 +27598,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns raw file content.",
             "content": {
               "application/octet-stream": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
-            }
+            },
+            "description": "Returns raw file content."
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -28028,7 +28028,7 @@
             }
           },
           {
-            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned",
+            "description": "Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread \u0026 pinned",
             "explode": true,
             "in": "query",
             "name": "status-types",
@@ -31680,15 +31680,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns raw file content.",
             "content": {
               "application/octet-stream": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
-            }
+            },
+            "description": "Returns raw file content."
           },
           "default": {
             "$ref": "#/components/responses/error"
@@ -32465,14 +32465,14 @@
         ],
         "responses": {
           "200": {
-            "description": "GPG armored public key",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
                 }
               }
-            }
+            },
+            "description": "GPG armored public key"
           }
         },
         "summary": "Get signing-key.gpg for given repository",
@@ -32506,14 +32506,14 @@
         ],
         "responses": {
           "200": {
-            "description": "ssh public key",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
                 }
               }
-            }
+            },
+            "description": "ssh public key"
           }
         },
         "summary": "Get signing-key.pub for given repository",
@@ -35172,14 +35172,14 @@
         "operationId": "getSigningKey",
         "responses": {
           "200": {
-            "description": "GPG armored public key",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
                 }
               }
-            }
+            },
+            "description": "GPG armored public key"
           }
         },
         "summary": "Get default signing-key.gpg",
@@ -35193,14 +35193,14 @@
         "operationId": "getSigningKeySSH",
         "responses": {
           "200": {
-            "description": "ssh public key",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
                 }
               }
-            }
+            },
+            "description": "ssh public key"
           }
         },
         "summary": "Get default signing-key.pub",
@@ -38517,25 +38517,25 @@
         ],
         "responses": {
           "200": {
-            "description": "SearchResults of a successful search",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "properties": {
                     "data": {
-                      "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/User"
-                      }
+                      },
+                      "type": "array"
                     },
                     "ok": {
                       "type": "boolean"
                     }
-                  }
+                  },
+                  "type": "object"
                 }
               }
-            }
+            },
+            "description": "SearchResults of a successful search"
           }
         },
         "summary": "Search for users",
