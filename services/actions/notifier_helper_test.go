@@ -160,8 +160,9 @@ func TestFilteredWorkflowCommitStatusForForkPullRequest(t *testing.T) {
 		Flow:       issues_model.PullRequestFlowGithub,
 		BaseRepoID: 1,
 		HeadRepoID: 2,
+		Index:      1,
 	}
-	input := newPullRequestReviewNotifyInput(&repo_model.Repository{ID: 1}, &user_model.User{ID: 2}, actions_module.GithubEventPullRequest, "refs/pull/1/head", forkPR)
+	input := newNotifyInput(&repo_model.Repository{ID: 1}, &user_model.User{ID: 2}, actions_module.GithubEventPullRequest).WithPullRequest(forkPR)
 
 	assert.True(t, isForkPullRequestInput(input))
 	forkPR.BaseRepoID = forkPR.HeadRepoID
@@ -212,4 +213,13 @@ func TestScopedWorkflowFiltersUseStackTrunk(t *testing.T) {
 			assert.Equal(t, "parent-sha", payload.PullRequest.Base.Sha)
 		})
 	}
+}
+
+func TestDetectAndHandleSchedulesDropsRemovedWorkflows(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	require.NoError(t, actions_model.ReplaceScheduleTasksByRepo(t.Context(), repo.ID, []*actions_model.ActionSchedule{{RepoID: repo.ID, WorkflowID: "removed.yml"}}))
+
+	require.NoError(t, DetectAndHandleSchedules(t.Context(), repo))
+	unittest.AssertNotExistsBean(t, &actions_model.ActionSchedule{RepoID: repo.ID})
 }
