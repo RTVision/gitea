@@ -447,6 +447,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(369, "Add reusable_workflow_ref column to action_run_job", v29.AddReusableWorkflowRefToActionRunJob),
 		newMigration(370, "Add release_id to reaction table", v29.AddReleaseIDToReaction),
 		newMigration(371, "Add new table project_workflow", v29.AddProjectWorkflow),
+		newMigration(372, "Normalize legacy repository unit and login source JSON", v29.NormalizeLegacyConfigJSON),
 	}
 	return preparedMigrations
 }
