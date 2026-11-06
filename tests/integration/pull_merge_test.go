@@ -830,7 +830,7 @@ func TestPullAutoMergeAfterCommitStatusSucceed(t *testing.T) {
 			"enable_status_check":   "true",
 			"status_check_contexts": "gitea/actions",
 		})
-		session.MakeRequest(t, req, http.StatusSeeOther)
+		session.MakeRequest(t, req, http.StatusOK)
 
 		addToQueuePullChan := make(chan automergequeue.AutoMergeItem, 1)
 		resetAutoMergeQueueMock := test.MockVariableValue(&automergequeue.AddToQueue, func(item automergequeue.AutoMergeItem) { addToQueuePullChan <- item })
@@ -912,7 +912,7 @@ func TestPullAutoMergeAfterCommitStatusSucceedAndApproval(t *testing.T) {
 			"status_check_contexts": "gitea/actions",
 			"required_approvals":    "1",
 		})
-		baseSession.MakeRequest(t, req, http.StatusSeeOther)
+		baseSession.MakeRequest(t, req, http.StatusOK)
 
 		// first time insert automerge record, return true
 		scheduled, err := automerge.ScheduleAutoMerge(t.Context(), baseUser, pr, repo_model.MergeStyleMerge, "auto merge test", false)
@@ -1024,7 +1024,7 @@ func TestPullAutoMergeAfterCommitStatusSucceedAndApprovalForAgitFlow(t *testing.
 			"status_check_contexts": "gitea/actions",
 			"required_approvals":    "1",
 		})
-		session.MakeRequest(t, req, http.StatusSeeOther)
+		session.MakeRequest(t, req, http.StatusOK)
 
 		user1 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
 		// first time insert automerge record, return true
@@ -1099,7 +1099,7 @@ func TestPullNonMergeForAdminWithBranchProtection(t *testing.T) {
 			"status_check_contexts":      "gitea/actions",
 			"block_admin_merge_override": "true",
 		})
-		session.MakeRequest(t, pbCreateReq, http.StatusSeeOther)
+		session.MakeRequest(t, pbCreateReq, http.StatusOK)
 
 		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
 
@@ -1145,7 +1145,7 @@ func TestPullForceMergeForBypassAllowlistUser(t *testing.T) {
 			"enable_bypass_allowlist":    "on",
 			"bypass_allowlist_users":     strconv.FormatInt(bypassUser.ID, 10),
 		})
-		ownerSession.MakeRequest(t, pbCreateReq, http.StatusSeeOther)
+		ownerSession.MakeRequest(t, pbCreateReq, http.StatusOK)
 		defer testAPIDeleteBranchProtection(t, "master", http.StatusNoContent)
 
 		token := getTokenForLoggedInUser(t, bypassSession, auth_model.AccessTokenScopeWriteRepository)
@@ -1216,7 +1216,6 @@ func TestPullSquashMessage(t *testing.T) {
 		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 		user2Session := loginUser(t, user2.Name)
 
-		defer test.MockVariableValue(&setting.Repository.PullRequest.DefaultSquashMergeMessage, "COMMIT_MESSAGES")()
 		defer test.MockVariableValue(&setting.Repository.PullRequest.DefaultMergeMessageSize, 80)()
 
 		repo, err := repo_service.CreateRepository(t.Context(), user2, user2, repo_service.CreateRepoOptions{
@@ -1227,6 +1226,14 @@ func TestPullSquashMessage(t *testing.T) {
 			DefaultBranch: "main",
 		})
 		require.NoError(t, err)
+		prUnit, err := repo.GetUnit(t.Context(), unit_model.TypePullRequests)
+		require.NoError(t, err)
+		prUnit.PullRequestsConfig().DefaultSquashMergeMessage = repo_model.SquashMergeMessageCommitMessages
+		require.NoError(t, repo_service.UpdateRepositoryUnits(t.Context(), repo, []repo_model.RepoUnit{{
+			RepoID: repo.ID,
+			Type:   unit_model.TypePullRequests,
+			Config: prUnit.PullRequestsConfig(),
+		}}, nil))
 
 		type commitInfo struct {
 			userName      string
@@ -1353,8 +1360,6 @@ Co-authored-by: user4 <user4@example.com>
 			pullRequest.Issue.Content = "PR description"
 			pullRequest.BaseRepo = repo
 
-			prUnit, err := repo.GetUnit(t.Context(), unit_model.TypePullRequests)
-			require.NoError(t, err)
 			for style, expected := range map[repo_model.SquashMergeMessage]string{
 				repo_model.SquashMergeMessageBlank:  "",
 				repo_model.SquashMergeMessagePRBody: "PR description",
@@ -1367,7 +1372,6 @@ Co-authored-by: user4 <user4@example.com>
 		})
 
 		t.Run("API squash merge without message uses repository default", func(t *testing.T) {
-			defer test.MockVariableValue(&setting.Repository.PullRequest.DefaultSquashMergeMessage, "PR_BODY")()
 			token := getTokenForLoggedInUser(t, user2Session, auth_model.AccessTokenScopeWriteRepository)
 			req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/%s/%s/pulls/1/merge", user2.Name, repo.Name), map[string]string{"do": "squash"}).AddTokenAuth(token)
 			MakeRequest(t, req, http.StatusOK)
