@@ -97,7 +97,7 @@ func TestIsUserAllowedToUpdate(t *testing.T) {
 		defer db.DeleteByBean(t.Context(), collaboration)
 
 		require.NoError(t, pr2.LoadHeadRepo(t.Context()))
-		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr2.HeadRepo, user4.ID))
+		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr2.HeadRepo, user4))
 
 		pushAllowed, rebaseAllowed, _, err := checkUserAllowedToUpdate(t.Context(), pr2, user4)
 		assert.NoError(t, err)
@@ -188,7 +188,7 @@ func TestIsUserAllowedToUpdate(t *testing.T) {
 		defer db.DeleteByBean(t.Context(), collaboration)
 
 		require.NoError(t, pr3.LoadHeadRepo(t.Context()))
-		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr3.HeadRepo, pr3Poster.ID))
+		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr3.HeadRepo, pr3Poster))
 
 		pushAllowed, rebaseAllowed, _, err := checkUserAllowedToUpdate(t.Context(), pr3, pr3Poster)
 		assert.NoError(t, err)
@@ -221,7 +221,7 @@ func TestIsUserAllowedToUpdate(t *testing.T) {
 		defer db.DeleteByBean(t.Context(), collaboration)
 
 		require.NoError(t, pr3.LoadHeadRepo(t.Context()))
-		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr3.HeadRepo, pr3Poster.ID))
+		assert.NoError(t, access_model.RecalculateUserAccess(t.Context(), pr3.HeadRepo, pr3Poster))
 
 		setRepoAllowRebaseUpdate(t, pr3.BaseRepoID, false)
 
