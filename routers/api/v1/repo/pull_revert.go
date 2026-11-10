@@ -94,7 +94,7 @@ func RevertPullRequest(ctx *context.APIContext) {
 	}
 	reverted := &issues_model.PullRequest{HeadRepoID: repo.ID, BaseRepoID: repo.ID, HeadRepo: repo, BaseRepo: repo, HeadBranch: branch, BaseBranch: baseBranch, MergeBase: opts.LastCommitID, Type: issues_model.PullRequestGitea}
 	issue := &issues_model.Issue{RepoID: repo.ID, Title: title, PosterID: ctx.Doer.ID, Poster: ctx.Doer, IsPull: true, Content: body}
-	if err := pull_service.NewPullRequest(ctx, &pull_service.NewPullRequestOptions{Repo: repo, Issue: issue, PullRequest: reverted}); err != nil {
+	if err := pull_service.NewPullRequest(ctx, ctx.Repo.Permission, &pull_service.NewPullRequestOptions{Repo: repo, Issue: issue, PullRequest: reverted}); err != nil {
 		ctx.APIError(http.StatusInternalServerError, fmt.Sprintf("Revert branch %s was created, but opening its pull request failed: %v", branch, err))
 		return
 	}
