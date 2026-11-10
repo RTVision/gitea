@@ -450,6 +450,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(372, "Normalize legacy repository unit and login source JSON", v29.NormalizeLegacyConfigJSON),
 		newMigration(373, "Drop user_open_id table", v29.DropUserOpenIDTable),
 		newMigration(374, "Add latest_release_id to repository table", v29.AddLatestReleaseIDToRepository),
+		newMigration(375, "Add unique index for team name", v29.AddUniqueTeamNameIndex),
 	}
 	return preparedMigrations
 }
