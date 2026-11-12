@@ -53,7 +53,7 @@ func Branches(ctx *context.Context) {
 
 	defaultBranchOptional, branches, branchesCount, err := repo_service.LoadBranches(ctx, ctx.Repo.Repository, ctx.Repo.GitRepo, ctx.Doer, ctx.Repo.Permission, optional.None[bool](), kw, page, pageSize)
 	if err != nil {
-		ctx.ServerError("LoadBranches", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func Branches(ctx *context.Context) {
 
 	commitStatuses, err := git_model.GetLatestCommitStatusForRepoCommitIDs(ctx, ctx.Repo.Repository.ID, commitIDs)
 	if err != nil {
-		ctx.ServerError("LoadBranches", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 
@@ -155,7 +155,7 @@ func RestoreBranchPost(ctx *context.Context) {
 func CreateBranch(ctx *context.Context) {
 	form := web.GetForm[*forms.NewBranchForm](ctx)
 	if !ctx.Repo.CanCreateBranch() {
-		ctx.NotFound(nil)
+		ctx.NotFound()
 		return
 	}
 
@@ -210,7 +210,7 @@ func CreateBranch(ctx *context.Context) {
 					"Details": utils.EscapeFlashErrorString(e.Message),
 				})
 				if err != nil {
-					ctx.ServerError("UpdatePullRequest.HTMLString", err)
+					ctx.ServerErrorAuto(err)
 					return
 				}
 				ctx.Flash.Error(flashError)
@@ -219,7 +219,7 @@ func CreateBranch(ctx *context.Context) {
 			return
 		}
 
-		ctx.ServerError("CreateNewBranch", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 
@@ -247,7 +247,7 @@ func MergeUpstream(ctx *context.Context) {
 			ctx.JSONError(ctx.Tr("repo.pulls.unrelated_histories"))
 			return
 		}
-		ctx.ServerError("MergeUpstream", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 	ctx.JSONRedirect("")

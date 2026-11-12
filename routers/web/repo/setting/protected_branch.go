@@ -43,7 +43,7 @@ func ProtectedBranchRules(ctx *context.Context) {
 
 	rules, err := git_model.FindRepoProtectedBranchRules(ctx, ctx.Repo.Repository.ID)
 	if err != nil {
-		ctx.ServerError("GetProtectedBranches", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 	ctx.Data["ProtectedBranches"] = rules
@@ -64,7 +64,7 @@ func SettingsProtectedBranch(c *context.Context) {
 		var err error
 		rule, err = git_model.GetProtectedBranchRuleByName(c, c.Repo.Repository.ID, ruleName)
 		if err != nil {
-			c.ServerError("GetProtectBranchOfRepoByName", err)
+			c.ServerErrorAuto(err)
 			return
 		}
 	}
@@ -79,7 +79,7 @@ func SettingsProtectedBranch(c *context.Context) {
 
 	repoUsers, err := access_model.GetUsersWithAnyUnitAccess(c, c.Repo.Repository, perm.AccessModeRead, unit.TypeCode, unit.TypePullRequests)
 	if err != nil {
-		c.ServerError("GetUsersWithUnitAccess", err)
+		c.ServerErrorAuto(err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func SettingsProtectedBranch(c *context.Context) {
 	if c.Repo.Owner.IsOrganization() {
 		teams, err := organization.GetTeamsWithAccessToAnyRepoUnit(c, c.Repo.Owner.ID, c.Repo.Repository.ID, perm.AccessModeRead, unit.TypeCode, unit.TypePullRequests)
 		if err != nil {
-			c.ServerError("Repo.Owner.TeamsWithAccessToRepo", err)
+			c.ServerErrorAuto(err)
 			return
 		}
 		c.Data["Teams"] = teams
@@ -137,7 +137,7 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 		// If the RuleID isn't 0, it must be an edit operation. So we get rule by id.
 		protectBranch, err = git_model.GetProtectedBranchRuleByID(ctx, ctx.Repo.Repository.ID, f.RuleID)
 		if err != nil {
-			ctx.ServerError("GetProtectBranchOfRepoByID", err)
+			ctx.ServerErrorAuto(err)
 			return
 		}
 		if protectBranch != nil && protectBranch.RuleName != f.RuleName {
@@ -145,7 +145,7 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 			// If a rule with the same name exists, an error should be returned.
 			sameNameProtectBranch, err := git_model.GetProtectedBranchRuleByName(ctx, ctx.Repo.Repository.ID, f.RuleName)
 			if err != nil {
-				ctx.ServerError("GetProtectBranchOfRepoByName", err)
+				ctx.ServerErrorAuto(err)
 				return
 			}
 			if sameNameProtectBranch != nil {
@@ -159,7 +159,7 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 		// But we cannot modify this logic now because many unit tests rely on it.
 		protectBranch, err = git_model.GetProtectedBranchRuleByName(ctx, ctx.Repo.Repository.ID, f.RuleName)
 		if err != nil {
-			ctx.ServerError("GetProtectBranchOfRepoByName", err)
+			ctx.ServerErrorAuto(err)
 			return
 		}
 	}
@@ -315,7 +315,7 @@ func SettingsProtectedBranchPost(ctx *context.Context) {
 		BypassUserIDs:    bypassAllowlistUsers,
 		BypassTeamIDs:    bypassAllowlistTeams,
 	}); err != nil {
-		ctx.ServerError("CreateOrUpdateProtectedBranch", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 
@@ -372,7 +372,7 @@ func UpdateBranchProtectionPriories(ctx *context.Context) {
 		return
 	}
 	if err := git_model.UpdateProtectBranchPriorities(ctx, ctx.Repo.Repository, form.IDs); err != nil {
-		ctx.ServerError("UpdateProtectBranchPriorities", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 }
@@ -382,7 +382,7 @@ func RenameBranchPost(ctx *context.Context) {
 	form := web.GetForm[*forms.RenameBranchForm](ctx)
 
 	if !ctx.Repo.CanCreateBranch() {
-		ctx.NotFound(nil)
+		ctx.NotFound()
 		return
 	}
 
@@ -408,7 +408,7 @@ func RenameBranchPost(ctx *context.Context) {
 			ctx.Flash.Error(ctx.Tr("repo.pulls.stack_branch_mutation_blocked"))
 			ctx.Redirect(ctx.Repo.RepoLink + "/branches")
 		default:
-			ctx.ServerError("RenameBranch", err)
+			ctx.ServerErrorAuto(err)
 		}
 		return
 	}
