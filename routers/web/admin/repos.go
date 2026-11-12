@@ -38,7 +38,7 @@ func Repos(ctx *context.Context) {
 func DeleteRepo(ctx *context.Context) {
 	repo, err := repo_model.GetRepositoryByID(ctx, ctx.FormInt64("id"))
 	if err != nil {
-		ctx.ServerError("GetRepositoryByID", err)
+		ctx.ServerErrorAuto(err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func DeleteRepo(ctx *context.Context) {
 		if errors.Is(err, issues_model.ErrStackRevision) {
 			ctx.JSON(http.StatusConflict, map[string]any{"errorMessage": ctx.Tr("repo.settings.deletion_blocked_by_stack"), "renderFormat": "text"})
 		} else {
-			ctx.ServerError("DeleteRepository", err)
+			ctx.ServerErrorAuto(err)
 		}
 		return
 	}
