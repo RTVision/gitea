@@ -567,3 +567,10 @@ type swaggerResponsePullRequestViewedFiles struct {
 	// in:body
 	Body api.PullRequestViewedFiles `json:"body"`
 }
+
+// CodeSearchResults
+// swagger:response CodeSearchResults
+type swaggerResponseCodeSearchResults struct {
+	// in:body
+	Body api.CodeSearchResults `json:"body"`
+}

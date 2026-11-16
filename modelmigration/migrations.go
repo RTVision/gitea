@@ -451,6 +451,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(373, "Drop user_open_id table", v29.DropUserOpenIDTable),
 		newMigration(374, "Add latest_release_id to repository table", v29.AddLatestReleaseIDToRepository),
 		newMigration(375, "Add unique index for team name", v29.AddUniqueTeamNameIndex),
+		newMigration(376, "Add runner_name to action_task", v29.AddRunnerNameToActionTask),
 	}
 	return preparedMigrations
 }

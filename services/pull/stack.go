@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"gitea.dev/models/db"
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
@@ -463,16 +464,17 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 	}
 	// Lock the layer to retarget before the transaction: holders of that lock write to the database.
 	var lockedID int64
+	var releaser func()
 	if at < len(layers) {
 		lockedID = layers[at].ID
-		releaser, err := globallock.Lock(ctx, getPullWorkingLockKey(lockedID))
+		releaser, err = globallock.Lock(ctx, getPullWorkingLockKey(lockedID))
 		if err != nil {
 			return nil, err
 		}
 		defer releaser()
 	}
 	var above *issues_model.PullRequest
-	var oldBase string
+	var oldBase, oldSHA string
 	moves := new(stackMoves)
 	err = db.WithTx(ctx, func(ctx context.Context) error {
 		if err := issues_model.LockStackMembership(ctx, pullID); err != nil {
@@ -559,6 +561,11 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 				return err
 			}
 			oldBase = above.BaseBranch
+			oldSHAs, err := git_model.FindBranchesByRepoAndBranchName(ctx, map[int64]string{above.BaseRepoID: oldBase})
+			if err != nil {
+				return err
+			}
+			oldSHA = oldSHAs[above.BaseRepoID]
 			if err = changeTargetBranchLocked(ctx, above, doer, stackChildBase(repo.ID, pr)); err != nil {
 				return err
 			}
@@ -571,7 +578,8 @@ func InsertStackLayer(ctx context.Context, doer *user_model.User, stackID, expec
 		return nil, err
 	}
 	if above != nil {
-		notify_service.PullRequestChangeTargetBranch(ctx, doer, above, oldBase)
+		releaser()
+		notify_service.PullRequestChangeTargetBranch(ctx, doer, above, oldBase, oldSHA)
 		pruneStackMirrors(ctx, stack, doer.ID)
 	}
 	notifyStackChanged(ctx, doer, stack.ID, nil)

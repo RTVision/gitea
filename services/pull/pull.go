@@ -248,7 +248,19 @@ func changeTargetBranchForStack(ctx context.Context, pr *issues_model.PullReques
 		return fmt.Errorf("lock.Lock: %w", err)
 	}
 	defer releaser()
-	return changeTargetBranchLocked(ctx, pr, doer, targetBranch)
+	oldBranch := pr.BaseBranch
+	oldSHAs, err := git_model.FindBranchesByRepoAndBranchName(ctx, map[int64]string{pr.BaseRepoID: oldBranch})
+	if err != nil {
+		return err
+	}
+	if err := changeTargetBranchLocked(ctx, pr, doer, targetBranch); err != nil {
+		return err
+	}
+	releaser()
+	if pr.BaseBranch != oldBranch {
+		notify_service.PullRequestChangeTargetBranch(ctx, doer, pr, oldBranch, oldSHAs[pr.BaseRepoID])
+	}
+	return nil
 }
 
 // changeTargetBranchLocked requires the caller to hold the pull request's working lock.
