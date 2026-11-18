@@ -4,7 +4,7 @@
 	<div class="ui container">
 		{{template "base/alert" .}}
 		<div class="list-header flex-text-block">
-			<h1 class="tw-text-xl tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stacks"}}</h1>
+			<h1 class="tw-text-20 tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stacks"}}</h1>
 			{{if .CanCreateStack}}<a class="ui small primary button" href="{{.RepoLink}}/pulls/stacks/new">{{ctx.Locale.Tr "repo.pulls.new_stack"}}</a>{{end}}
 		</div>
 		{{if .Stacks}}
