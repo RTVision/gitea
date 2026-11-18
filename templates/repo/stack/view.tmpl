@@ -5,7 +5,7 @@
 	{{template "repo/header" .}}
 	<div class="ui container">
 		{{template "base/alert" .}}
-		<div class="flex-text-block tw-mb-4"><h1 class="tw-text-xl tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stack_number" $data.Stack.ID}}</h1>
+		<div class="flex-text-block tw-mb-4"><h1 class="tw-text-20 tw-mb-0">{{ctx.Locale.Tr "repo.pulls.stack_number" $data.Stack.ID}}</h1>
 			<span class="ui label">{{$data.Stack.State}}</span>{{template "repo/stack/mode_label" $data.Stack}}<span class="tw-text-text-light">{{ctx.Locale.Tr "repo.pulls.stack_base" $data.Stack.TrunkBranch}}</span></div>
 		<div {{if $data.Operation}}class="tw-mb-4"{{end}} data-stack-reload-on-final>{{template "repo/stack/status" .}}</div>
 		<div class="ui stackable grid tw-max-w-full">
