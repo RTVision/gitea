@@ -452,6 +452,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(374, "Add latest_release_id to repository table", v29.AddLatestReleaseIDToRepository),
 		newMigration(375, "Add unique index for team name", v29.AddUniqueTeamNameIndex),
 		newMigration(376, "Add runner_name to action_task", v29.AddRunnerNameToActionTask),
+		newMigration(377, "Change raw_concurrency of action_run and action_run_job to TEXT on MSSQL", v29.ChangeActionsRawConcurrencyToText),
 	}
 	return preparedMigrations
 }
