@@ -10,7 +10,9 @@ import (
 	"gitea.dev/models/db"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
+	"gitea.dev/modules/container"
 	"gitea.dev/modules/timeutil"
+	"gitea.dev/modules/util"
 )
 
 // AutoMerge represents a pull request scheduled for merging when checks succeed
@@ -42,6 +44,10 @@ type ErrAlreadyScheduledToAutoMerge struct {
 
 func (err ErrAlreadyScheduledToAutoMerge) Error() string {
 	return fmt.Sprintf("pull request is already scheduled to auto merge when checks succeed [pull_id: %d]", err.PullID)
+}
+
+func (err ErrAlreadyScheduledToAutoMerge) Unwrap() error {
+	return util.ErrAlreadyExist
 }
 
 // IsErrAlreadyScheduledToAutoMerge checks if an error is a ErrAlreadyScheduledToAutoMerge.
@@ -81,21 +87,27 @@ func GetScheduledMergeByPullID(ctx context.Context, pullID int64) (bool, *AutoMe
 	return true, scheduledPRM, err
 }
 
-// GetScheduledMergesByPullIDs gets scheduled merges keyed by pull request ID.
-func GetScheduledMergesByPullIDs(ctx context.Context, pullIDs []int64) (map[int64]*AutoMerge, error) {
-	scheduledMerges := make(map[int64]*AutoMerge, len(pullIDs))
+// GetScheduledMergeByPullIDs returns scheduled auto merges with doers loaded, keyed by pull ID
+func GetScheduledMergeByPullIDs(ctx context.Context, pullIDs []int64) (map[int64]*AutoMerge, error) {
 	if len(pullIDs) == 0 {
-		return scheduledMerges, nil
+		return map[int64]*AutoMerge{}, nil
 	}
-
-	rows := make([]*AutoMerge, 0, len(pullIDs))
-	if err := db.GetEngine(ctx).In("pull_id", pullIDs).Find(&rows); err != nil {
+	var merges []*AutoMerge
+	if err := db.GetEngine(ctx).In("pull_id", pullIDs).Find(&merges); err != nil {
 		return nil, err
 	}
-	for _, scheduledMerge := range rows {
-		scheduledMerges[scheduledMerge.PullID] = scheduledMerge
+	doers, err := user_model.GetUsersMapByIDs(ctx, container.FilterSlice(merges, func(autoMerge *AutoMerge) (int64, bool) {
+		return autoMerge.DoerID, true
+	}))
+	if err != nil {
+		return nil, err
 	}
-	return scheduledMerges, nil
+	result := make(map[int64]*AutoMerge, len(merges))
+	for _, autoMerge := range merges {
+		autoMerge.Doer = user_model.GetPossibleUserFromMap(autoMerge.DoerID, doers)
+		result[autoMerge.PullID] = autoMerge
+	}
+	return result, nil
 }
 
 func GetScheduledMergePullIDsSince(ctx context.Context, since timeutil.TimeStamp) ([]int64, error) {

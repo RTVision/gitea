@@ -453,6 +453,8 @@ func prepareMigrationTasks() []*migration {
 		newMigration(375, "Add unique index for team name", v29.AddUniqueTeamNameIndex),
 		newMigration(376, "Add runner_name to action_task", v29.AddRunnerNameToActionTask),
 		newMigration(377, "Change raw_concurrency of action_run and action_run_job to TEXT on MSSQL", v29.ChangeActionsRawConcurrencyToText),
+		newMigration(378, "Add hash_sha256 column to attachment", v29.AddHashSHA256ToAttachment),
+		newMigration(379, "Add workflow_ref to action_run", v29.AddWorkflowRefToActionRun),
 	}
 	return preparedMigrations
 }

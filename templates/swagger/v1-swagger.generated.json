@@ -16841,6 +16841,9 @@
           "200": {
             "$ref": "#/responses/empty"
           },
+          "201": {
+            "$ref": "#/responses/empty"
+          },
           "default": {
             "$ref": "#/responses/error"
           }
@@ -26326,6 +26329,11 @@
           "format": "date-time",
           "x-go-name": "Created"
         },
+        "digest": {
+          "description": "Digest is the SHA-256 of the content as \"sha256:{hex}\", omitted when not recorded at upload",
+          "type": "string",
+          "x-go-name": "Digest"
+        },
         "download_count": {
           "description": "DownloadCount is the number of times the attachment has been downloaded",
           "type": "integer",
@@ -26938,13 +26946,14 @@
           "type": "string",
           "enum": [
             "pending",
+            "running",
             "success",
             "error",
             "failure",
             "warning",
             "skipped"
           ],
-          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
+          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nrunning CommitStatusRunning is for when the CommitStatus is Running\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
           "x-go-name": "State"
         },
         "statuses": {
@@ -27192,17 +27201,18 @@
           "x-go-name": "ID"
         },
         "status": {
-          "description": "State represents the status state (pending, success, error, failure)",
+          "description": "State represents the status state (pending, running, success, error, failure, warning, skipped)",
           "type": "string",
           "enum": [
             "pending",
+            "running",
             "success",
             "error",
             "failure",
             "warning",
             "skipped"
           ],
-          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
+          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nrunning CommitStatusRunning is for when the CommitStatus is Running\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
           "x-go-name": "State"
         },
         "target_url": {
@@ -28608,17 +28618,18 @@
           "x-go-name": "Description"
         },
         "state": {
-          "description": "State represents the status state to set (pending, success, error, failure)",
+          "description": "State represents the status state to set (pending, running, success, error, failure, warning, skipped)",
           "type": "string",
           "enum": [
             "pending",
+            "running",
             "success",
             "error",
             "failure",
             "warning",
             "skipped"
           ],
-          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
+          "x-go-enum-desc": "pending CommitStatusPending is for when the CommitStatus is Pending\nrunning CommitStatusRunning is for when the CommitStatus is Running\nsuccess CommitStatusSuccess is for when the CommitStatus is Success\nerror CommitStatusError is for when the CommitStatus is Error\nfailure CommitStatusFailure is for when the CommitStatus is Failure\nwarning CommitStatusWarning is for when the CommitStatus is Warning\nskipped CommitStatusSkipped is for when CommitStatus is Skipped",
           "x-go-name": "State"
         },
         "target_url": {
@@ -32935,6 +32946,9 @@
           },
           "x-go-name": "Assignees"
         },
+        "auto_merge": {
+          "$ref": "#/definitions/PullRequestAutoMerge"
+        },
         "auto_merge_enabled": {
           "description": "Whether the pull request is scheduled to merge when checks succeed",
           "type": "boolean",
@@ -33165,6 +33179,31 @@
         },
         "user": {
           "$ref": "#/definitions/User"
+        }
+      },
+      "x-go-package": "gitea.dev/modules/structs"
+    },
+    "PullRequestAutoMerge": {
+      "description": "PullRequestAutoMerge represents a pull request scheduled to auto merge when all checks succeed",
+      "type": "object",
+      "properties": {
+        "commit_message": {
+          "description": "The message of the resulting merge commit",
+          "type": "string",
+          "x-go-name": "CommitMessage"
+        },
+        "commit_title": {
+          "description": "The title of the resulting merge commit",
+          "type": "string",
+          "x-go-name": "CommitTitle"
+        },
+        "enabled_by": {
+          "$ref": "#/definitions/User"
+        },
+        "merge_method": {
+          "description": "The merge method that will be used, eg: \"merge\", \"rebase\", \"rebase-merge\", \"squash\", \"fast-forward-only\"",
+          "type": "string",
+          "x-go-name": "MergeMethod"
         }
       },
       "x-go-package": "gitea.dev/modules/structs"

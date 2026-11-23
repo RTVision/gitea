@@ -15,6 +15,7 @@ import (
 
 	"gitea.dev/models/db"
 	issues_model "gitea.dev/models/issues"
+	access_model "gitea.dev/models/perm/access"
 	pull_model "gitea.dev/models/pull"
 	repo_model "gitea.dev/models/repo"
 	"gitea.dev/models/unittest"
@@ -23,6 +24,8 @@ import (
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
 	"gitea.dev/services/automergequeue"
+	issue_service "gitea.dev/services/issue"
+	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +35,10 @@ import (
 	"xorm.io/xorm/names"
 )
 
-func TestMain(m *testing.M) { unittest.MainTest(m) }
+func TestMain(m *testing.M) {
+	notify_service.RegisterNotifier(NewNotifier())
+	unittest.MainTest(m)
+}
 
 func TestScheduleAutoMergeRejectsStackedPreferences(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
@@ -44,9 +50,8 @@ func TestScheduleAutoMergeRejectsStackedPreferences(t *testing.T) {
 	require.NoError(t, db.Insert(ctx, &issues_model.StackBranchClaim{StackID: stack.ID, PullRequestID: pr.ID, BranchKey: issues_model.StackBranchKey(1, pr.HeadBranch)}))
 	for _, message := range []string{"", "custom merge message"} {
 		for _, deleteBranch := range []bool{false, true} {
-			scheduled, err := ScheduleAutoMerge(ctx, actor, pr, repo_model.MergeStyleSquash, message, deleteBranch)
+			err := ScheduleAutoMerge(ctx, actor, pr, repo_model.MergeStyleSquash, message, deleteBranch)
 			require.ErrorIs(t, err, ErrStackAutoMergeUnsupported)
-			assert.False(t, scheduled)
 		}
 	}
 	operations, err := issues_model.GetStackOperations(ctx, stack.ID)
@@ -161,8 +166,7 @@ func TestScheduleAutoMergeSerializesStackMembership(t *testing.T) {
 					return err
 				}
 				schedule := func(ctx context.Context) error {
-					_, err := ScheduleAutoMerge(ctx, actor, pr, repo_model.MergeStyleSquash, "custom message", true)
-					return err
+					return ScheduleAutoMerge(ctx, actor, pr, repo_model.MergeStyleSquash, "custom message", true)
 				}
 				winner, loser := schedule, createMembership
 				if stackWins {
@@ -207,4 +211,58 @@ func TestScheduleAutoMergeSerializesStackMembership(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestAutoMergeDisabledOrCanceled(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	var queuedCount int
+	defer test.MockVariableValue(&automergequeue.AddToQueue, func(_item automergequeue.AutoMergeItem) { queuedCount++ })()
+	var checkedPullID int64
+	defer test.MockVariableValue(&pull_service.AddPullRequestToCheckQueue, func(pullID int64) { checkedPullID = pullID })()
+	writer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	nonWriter := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 2})
+	pr.Status = issues_model.PullRequestStatusChecking
+	require.NoError(t, pr.UpdateCols(t.Context(), "status"))
+	require.NoError(t, ScheduleAutoMerge(t.Context(), writer, pr, repo_model.MergeStyleSquash, "title", false))
+	assert.Equal(t, pr.ID, checkedPullID)
+	assert.Equal(t, "squash", unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pr.IssueID, Type: issues_model.CommentTypePRScheduledToAutoMerge}).Content)
+
+	require.NoError(t, pr.Issue.LoadRepo(t.Context()))
+	require.NoError(t, pull_service.ChangeTargetBranch(t.Context(), pr, writer, "feature/1"))
+	assert.Equal(t, 2, queuedCount)
+	assert.Equal(t, "feature/1", unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: pr.ID}).BaseBranch)
+	unittest.AssertExistsAndLoadBean(t, &pull_model.AutoMerge{PullID: pr.ID})
+	require.NoError(t, pull_service.ChangeTargetBranch(t.Context(), pr, nonWriter, "master"))
+	unittest.AssertNotExistsBean(t, &pull_model.AutoMerge{PullID: pr.ID})
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pr.IssueID, Type: issues_model.CommentTypePRUnScheduledToAutoMerge, Content: "base_changed"})
+
+	require.NoError(t, ScheduleAutoMerge(t.Context(), writer, pr, repo_model.MergeStyleMerge, "title", false))
+	require.NoError(t, issue_service.CloseIssue(t.Context(), pr.Issue, writer, ""))
+	unittest.AssertNotExistsBean(t, &pull_model.AutoMerge{PullID: pr.ID})
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pr.IssueID, Type: issues_model.CommentTypePRUnScheduledToAutoMerge, Content: "closed"})
+
+	require.NoError(t, issue_service.ReopenIssue(t.Context(), pr.Issue, writer, ""))
+	require.NoError(t, ScheduleAutoMerge(t.Context(), writer, pr, repo_model.MergeStyleMerge, "title", false))
+	require.NoError(t, issue_service.ChangeTitle(t.Context(), pr.Issue, writer, "WIP: "+pr.Issue.Title))
+	unittest.AssertNotExistsBean(t, &pull_model.AutoMerge{PullID: pr.ID})
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pr.IssueID, Type: issues_model.CommentTypePRUnScheduledToAutoMerge, Content: "work_in_progress"})
+
+	pr = unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 3})
+	require.NoError(t, pr.LoadHeadRepo(t.Context()))
+	require.NoError(t, pr.LoadBaseRepo(t.Context()))
+	writer = unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: pr.BaseRepo.OwnerID})
+	pusher := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 13})
+	require.NoError(t, ScheduleAutoMerge(t.Context(), writer, pr, repo_model.MergeStyleMerge, "title", false))
+	pull_service.UpdatePullsRefs(t.Context(), writer, pr.HeadRepo, pr.HeadBranch, 0)
+	pull_service.UpdatePullsRefs(t.Context(), pusher, pr.HeadRepo, pr.HeadBranch, pr.ID)
+	unittest.AssertExistsAndLoadBean(t, &pull_model.AutoMerge{PullID: pr.ID})
+	pull_service.UpdatePullsRefs(t.Context(), pusher, pr.HeadRepo, pr.HeadBranch, 0)
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pr.IssueID, Type: issues_model.CommentTypePRUnScheduledToAutoMerge, PosterID: pusher.ID, Content: "pushed_by_non_writer"})
+
+	require.NoError(t, ScheduleAutoMerge(t.Context(), writer, pr, repo_model.MergeStyleMerge, "title", false))
+	poster := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: pr.Issue.PosterID})
+	require.NoError(t, CancelScheduledAutoMerge(t.Context(), poster, pr, access_model.Permission{}))
+	unittest.AssertNotExistsBean(t, &pull_model.AutoMerge{PullID: pr.ID})
 }

@@ -100,6 +100,8 @@ type PullRequest struct {
 
 	// Whether the pull request can be merged
 	Mergeable bool `json:"mergeable"`
+	// The scheduled auto merge, null if the pull request is not scheduled to auto merge
+	AutoMerge *PullRequestAutoMerge `json:"auto_merge"`
 	// Whether the pull request has been merged
 	HasMerged bool `json:"merged"`
 	// swagger:strfmt date-time
@@ -322,6 +324,18 @@ type PullRequestStackCapabilities struct {
 	MergeStyles []string `json:"merge_styles"`
 	// Supported merge styles for stack landing, by stack mode
 	ModeMergeStyles map[string][]string `json:"mode_merge_styles"`
+}
+
+// PullRequestAutoMerge represents a pull request scheduled to auto merge when all checks succeed
+type PullRequestAutoMerge struct {
+	// The user who scheduled the auto merge
+	EnabledBy *User `json:"enabled_by"`
+	// The merge method that will be used, eg: "merge", "rebase", "rebase-merge", "squash", "fast-forward-only"
+	MergeMethod string `json:"merge_method"`
+	// The title of the resulting merge commit
+	CommitTitle string `json:"commit_title"`
+	// The message of the resulting merge commit
+	CommitMessage string `json:"commit_message"`
 }
 
 // PRBranchInfo information about a branch

@@ -6,6 +6,7 @@ package convert
 import (
 	"context"
 	"errors"
+	"strings"
 
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
@@ -16,6 +17,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/cache"
 	"gitea.dev/modules/cachegroup"
+	"gitea.dev/modules/container"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
@@ -23,6 +25,16 @@ import (
 	"gitea.dev/modules/util"
 	"gitea.dev/services/gitdiff"
 )
+
+func toAPIAutoMerge(ctx context.Context, autoMerge *pull_model.AutoMerge) *api.PullRequestAutoMerge {
+	commitTitle, commitMessage, _ := strings.Cut(autoMerge.Message, "\n\n")
+	return &api.PullRequestAutoMerge{
+		EnabledBy:     ToUser(ctx, autoMerge.Doer, nil),
+		MergeMethod:   string(autoMerge.MergeStyle),
+		CommitTitle:   commitTitle,
+		CommitMessage: commitMessage,
+	}
+}
 
 // ToAPIPullRequest hides a head repository the doer cannot see
 func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User) *api.PullRequest {
@@ -133,12 +145,11 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			RepoID: -1,
 		},
 	}
-	scheduledMerges, err := pull_model.GetScheduledMergesByPullIDs(ctx, []int64{pr.ID})
-	if err != nil {
-		log.Error("GetScheduledMergesByPullIDs[%d]: %v", pr.ID, err)
-		return nil
+	if scheduled, autoMerge, err := pull_model.GetScheduledMergeByPullID(ctx, pr.ID); err != nil {
+		log.Error("GetScheduledMergeByPullID[%d]: %v", pr.ID, err)
+	} else if scheduled {
+		setAPIPullRequestAutoMerge(ctx, apiPullRequest, autoMerge, !pr.HasMerged && !pr.Issue.IsClosed)
 	}
-	setAPIPullRequestAutoMerge(apiPullRequest, scheduledMerges[pr.ID])
 
 	if err = pr.LoadRequestedReviewers(ctx); err != nil {
 		log.Error("LoadRequestedReviewers[%d]: %v", pr.ID, err)
@@ -359,14 +370,6 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	if err != nil {
 		return nil, err
 	}
-	pullIDs := make([]int64, 0, len(prs))
-	for _, pr := range prs {
-		pullIDs = append(pullIDs, pr.ID)
-	}
-	scheduledMerges, err := pull_model.GetScheduledMergesByPullIDs(ctx, pullIDs)
-	if err != nil {
-		return nil, err
-	}
 
 	gitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, baseRepo)
 	if err != nil {
@@ -381,6 +384,14 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	}
 
 	apiRepo := ToRepo(ctx, baseRepo, baseRepoPerm)
+
+	autoMerges, err := pull_model.GetScheduledMergeByPullIDs(ctx, container.FilterSlice(prs, func(pr *issues_model.PullRequest) (int64, bool) {
+		return pr.ID, true
+	}))
+	if err != nil {
+		return nil, err
+	}
+
 	baseBranchCache := make(map[string]*git_model.Branch)
 	apiPullRequests := make([]*api.PullRequest, 0, len(prs))
 	for _, pr := range prs {
@@ -428,7 +439,7 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 				RepoID: -1,
 			},
 		}
-		setAPIPullRequestAutoMerge(apiPullRequest, scheduledMerges[pr.ID])
+		setAPIPullRequestAutoMerge(ctx, apiPullRequest, autoMerges[pr.ID], !pr.HasMerged && !pr.Issue.IsClosed)
 
 		pr.RequestedReviewers = reviewersMap[pr.IssueID]
 		for _, reviewer := range pr.RequestedReviewers {
@@ -532,10 +543,13 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	return apiPullRequests, nil
 }
 
-func setAPIPullRequestAutoMerge(apiPullRequest *api.PullRequest, scheduledMerge *pull_model.AutoMerge) {
+func setAPIPullRequestAutoMerge(ctx context.Context, apiPullRequest *api.PullRequest, scheduledMerge *pull_model.AutoMerge, isOpen bool) {
 	if scheduledMerge == nil {
 		return
 	}
 	apiPullRequest.AutoMergeEnabled = true
 	apiPullRequest.AutoMergeMethod = string(scheduledMerge.MergeStyle)
+	if isOpen {
+		apiPullRequest.AutoMerge = toAPIAutoMerge(ctx, scheduledMerge)
+	}
 }
