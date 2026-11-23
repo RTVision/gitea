@@ -6,6 +6,7 @@ package repo
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"iter"
 	"net/http"
 	"net/url"
@@ -23,7 +24,6 @@ import (
 	"gitea.dev/modules/commitstatus"
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/setting"
-	"gitea.dev/modules/svg"
 	"gitea.dev/modules/templates"
 	"gitea.dev/services/context"
 	pull_service "gitea.dev/services/pull"
@@ -374,7 +374,7 @@ func attachPullStackHeader(ctx *context.Context, pr *issues_model.PullRequest) {
 	ctx.Data["PullStackHeader"] = header
 }
 
-func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
+func attachPullStackData(ctx *context.Context) {
 	header, _ := ctx.Data["PullStackHeader"].(*pullStackHeaderData)
 	if header == nil {
 		return
@@ -387,23 +387,27 @@ func attachPullStackData(ctx *context.Context, issue *issues_model.Issue) {
 	ctx.Data["PullStackData"] = data
 	if err := setPullStackCapabilities(ctx, data); err != nil {
 		ctx.ServerErrorAuto(err)
+	}
+}
+
+func (prInfo *pullRequestViewInfo) prepareStackMergeBox(ctx *context.Context) {
+	header, _ := ctx.Data["PullStackHeader"].(*pullStackHeaderData)
+	pull := prInfo.issue.PullRequest
+	if header == nil || pull.HasMerged {
 		return
 	}
-	if mergeData, ok := ctx.Data["PullMergeBoxData"].(*pullMergeBoxData); ok && !issue.PullRequest.HasMerged && !issue.IsClosed {
-		mergeData.MergeFormProps = nil
-		mergeData.ShowUpdatePullInfo = mergeData.ShowUpdatePullInfo && pull_service.CheckStackUpdateByMerge(ctx, issue.PullRequest) == nil
-		if mergeData.ShowUpdatePullInfo {
-			mergeData.UpdateStyleOptions = slices.DeleteFunc(mergeData.UpdateStyleOptions, func(action *pullUpdateAction) bool { return !strings.HasSuffix(action.URL, "style=merge") })
-			mergeData.ShowUpdatePullInfo = len(mergeData.UpdateStyleOptions) > 0
-		}
-		if mergeData.ShowUpdatePullInfo {
-			mergeData.UpdatePrimaryAction = mergeData.UpdateStyleOptions[0]
-			mergeData.UpdatePrimaryAction.Selected = true
-		}
-		mergeData.InfoSections = append([]*pullInfoSection{{InfoItems: []*pullMergeBoxInfoItem{{
-			SvgIconHTML: svg.RenderHTML("octicon-info"),
-			InfoHTML:    ctx.Locale.Tr("repo.pulls.stack_merge_disabled", header.Stack.ID),
-		}}}}, mergeData.InfoSections...)
+	data := prInfo.MergeBoxData
+	data.MergeFormProps = nil
+	data.IsMergeStateClean = false
+	data.mergeBlockers = append([]template.HTML{ctx.Locale.Tr("repo.pulls.stack_merge_disabled", header.Stack.ID)}, data.mergeBlockers...)
+	data.ShowUpdatePullInfo = data.ShowUpdatePullInfo && pull_service.CheckStackUpdateByMerge(ctx, pull) == nil
+	if data.ShowUpdatePullInfo {
+		data.UpdateStyleOptions = slices.DeleteFunc(data.UpdateStyleOptions, func(action *pullUpdateAction) bool { return !strings.HasSuffix(action.URL, "style=merge") })
+		data.ShowUpdatePullInfo = len(data.UpdateStyleOptions) > 0
+	}
+	if data.ShowUpdatePullInfo {
+		data.UpdatePrimaryAction = data.UpdateStyleOptions[0]
+		data.UpdatePrimaryAction.Selected = true
 	}
 }
 

@@ -97,7 +97,9 @@ test('stack pages create and render a pull request chain', async ({page, request
   await pullStack.locator('summary').click();
   await expect(pullStack.getByRole('link', {name: '#2 Layer two', exact: true})).toBeVisible();
   await expect(page.getByRole('link', {name: 'View stack'})).toBeVisible();
-  await expect(page.locator('#pull-request-merge-form')).toHaveCount(0);
+  const mergeBox = page.locator('.pull-merge-box');
+  await expect(mergeBox.getByText('Land the stack from the stack page.')).toBeVisible();
+  await expect(mergeBox.locator('[data-merge-form-props]')).toHaveCount(0);
   const stackHeader = page.getByRole('menu').filter({has: page.getByText(/^4 layers$/)});
   await stackHeader.click();
   await expect(stackHeader.getByRole('menuitem', {name: `#3 ${thirdTitle}`, exact: true})).toBeVisible();

@@ -25,7 +25,6 @@ import (
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
-	api "gitea.dev/modules/structs"
 )
 
 type GiteaContext map[string]any
@@ -136,22 +135,26 @@ func GenerateGiteaContext(ctx context.Context, run *actions_model.ActionRun, att
 	return gitContext
 }
 
-// runRefs returns the run's `github.base_ref`, `github.head_ref`, `github.ref` and `github.sha`.
+// runRefs returns the run's `github.base_ref`, `github.head_ref`, `github.ref` and `github.sha`, never the PR head for pull_request_target.
 func runRefs(run *actions_model.ActionRun) (baseRef, headRef, ref, sha string) {
-	ref, sha = run.Ref, run.CommitSHA
+	if run.TriggerEvent != actions_module.GithubEventPullRequestTarget {
+		ref, sha = run.Ref, run.CommitSHA
+	}
 	if pullPayload, err := run.GetPullRequestEventPayload(); err == nil && pullPayload.PullRequest != nil && pullPayload.PullRequest.Base != nil && pullPayload.PullRequest.Head != nil {
-		baseRef = pullPayload.PullRequest.Base.Ref
-		headRef = pullPayload.PullRequest.Head.Ref
-		policyBase := pullPayload.PullRequest.Base
-		if pullPayload.PullRequest.Stack != nil && pullPayload.PullRequest.Stack.Base != nil {
-			baseRef = pullPayload.PullRequest.Stack.Base.Ref
-			policyBase = &api.PRBranchInfo{Ref: pullPayload.PullRequest.Stack.Base.Ref, Sha: pullPayload.PullRequest.Stack.Base.Sha}
+		pr := pullPayload.PullRequest
+		baseRef, headRef = pr.Base.Ref, pr.Head.Ref
+		baseSHA := pr.Base.Sha
+		if pr.Stack != nil && pr.Stack.Base != nil {
+			baseRef, baseSHA = pr.Stack.Base.Ref, pr.Stack.Base.Sha
 		}
-
 		if run.TriggerEvent == actions_module.GithubEventPullRequestTarget {
-			ref, sha = git.BranchPrefix+policyBase.Ref, policyBase.Sha
-		} else if run.TriggerEvent == actions_module.GithubEventPullRequest && !pullPayload.PullRequest.HasMerged && pullPayload.PullRequest.MergedCommitID != nil {
-			ref, sha = git.MergeRefNameFromPullIndex(pullPayload.PullRequest.Index).String(), *pullPayload.PullRequest.MergedCommitID
+			if run.WorkflowRef == "" { // scoped and older runs keep the base
+				ref, sha = git.BranchPrefix+baseRef, baseSHA
+			} else {
+				ref, sha = run.WorkflowRef, run.WorkflowCommitSHA
+			}
+		} else if run.TriggerEvent == actions_module.GithubEventPullRequest && !pr.HasMerged && pr.MergedCommitID != nil {
+			ref, sha = git.MergeRefNameFromPullIndex(pr.Index).String(), *pr.MergedCommitID
 		}
 	}
 	return baseRef, headRef, ref, sha

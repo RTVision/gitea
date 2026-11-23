@@ -199,7 +199,7 @@ func remainingStackLayers(journal *stackJournal) []*stackLayerJournal {
 }
 
 func stackMergeFailedBeforePublication(err error) bool {
-	for _, known := range []error{ErrNoPermissionToMerge, ErrNotReadyToMerge, ErrIsClosed, ErrIsWorkInProgress, ErrIsChecking, ErrNotMergeableState, ErrDependenciesLeft, ErrHeadCommitsNotAllVerified, ErrPullRequestStacked} {
+	for _, known := range []error{ErrNoPermissionToMerge, ErrNotReadyToMerge, ErrIsClosed, ErrIsWorkInProgress, ErrNotMergeableState, ErrDependenciesLeft, ErrHeadCommitsNotAllVerified, ErrPullRequestStacked} {
 		if errors.Is(err, known) {
 			return true
 		}
@@ -613,7 +613,7 @@ func runStackOperation(ctx context.Context, id int64) {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			op.State = "queued"
 		}
-		if errors.Is(err, ErrNotReadyToMerge) || errors.Is(err, ErrIsChecking) || errors.Is(err, ErrNotMergeableState) {
+		if errors.Is(err, ErrNotReadyToMerge) || errors.Is(err, ErrNotMergeableState) {
 			op.State = "waiting"
 		}
 		return issues_model.SaveStackOperation(ctx, op)
