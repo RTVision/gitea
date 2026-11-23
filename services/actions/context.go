@@ -25,7 +25,6 @@ import (
 	"gitea.dev/modules/log"
 	"gitea.dev/modules/optional"
 	"gitea.dev/modules/setting"
-	api "gitea.dev/modules/structs"
 )
 
 type GiteaContext map[string]any

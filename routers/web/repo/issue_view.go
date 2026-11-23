@@ -400,11 +400,7 @@ func ViewIssue(ctx *context.Context) {
 		}
 	}
 	if issue.IsPull {
-		attachPullStackHeader(ctx, issue.PullRequest)
-		if ctx.Written() {
-			return
-		}
-		attachPullStackData(ctx, issue)
+		attachPullStackData(ctx)
 		if ctx.Written() {
 			return
 		}
@@ -850,6 +846,11 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 	data := &pullMergeBoxData{}
 	prInfo.MergeBoxData = data
 
+	attachPullStackHeader(ctx, pull)
+	if ctx.Written() {
+		return
+	}
+
 	canDelete := false
 
 	pull_service.StartPullRequestCheckOnView(ctx, pull)
@@ -976,6 +977,7 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 		data.CanCancelAutoMerge = ctx.IsSigned && (data.hasPermToMerge || ctx.Doer.ID == data.AutoMerge.DoerID || issue.IsPoster(ctx.Doer.ID))
 	}
 	prInfo.prepareMergeBoxFormProps(ctx, prConfig, ctx.Repo.GitRepo)
+	prInfo.prepareStackMergeBox(ctx)
 
 	autoMergeImminent := data.AutoMerge != nil && pull.IsStatusMergeable() && !data.hasOverridableBlockers && !data.hasOpenDependencies
 	needRefreshMergeBox := pull.IsChecking() || autoMergeImminent ||

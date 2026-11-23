@@ -67,9 +67,14 @@ func TestNativeStackUpdateBranchButton(t *testing.T) {
 		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 10*time.Second))
 		for mode, offered := range map[string]bool{issues_model.StackModeMerge: true, issues_model.StackModeRebase: false} {
 			pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: repo.ID, HeadBranch: "stack-button-" + mode})
-			body := session.MakeRequest(t, NewRequest(t, http.MethodGet, fmt.Sprintf("/user2/repo1/pulls/%d", pr.Index)), http.StatusOK).Body.String()
-			assert.Equal(t, offered, strings.Contains(body, "/update?style=merge"), mode)
-			assert.NotContains(t, body, "/update?style=rebase", mode)
+			pullURL := fmt.Sprintf("/user2/repo1/pulls/%d", pr.Index)
+			for _, path := range []string{pullURL, pullURL + "/merge_box"} {
+				body := session.MakeRequest(t, NewRequest(t, http.MethodGet, path), http.StatusOK).Body.String()
+				assert.Equal(t, offered, strings.Contains(body, "/update?style=merge"), path)
+				assert.NotContains(t, body, "/update?style=rebase", path)
+				assert.NotContains(t, body, "data-merge-form-props", path)
+				assert.Contains(t, body, "Land the stack from the stack page.", path)
+			}
 		}
 	})
 }
