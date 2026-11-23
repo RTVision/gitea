@@ -145,10 +145,15 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			RepoID: -1,
 		},
 	}
-	if scheduled, autoMerge, err := pull_model.GetScheduledMergeByPullID(ctx, pr.ID); err != nil {
+	scheduled, autoMerge, err := pull_model.GetScheduledMergeByPullID(ctx, pr.ID)
+	if err != nil {
 		log.Error("GetScheduledMergeByPullID[%d]: %v", pr.ID, err)
-	} else if scheduled {
-		setAPIPullRequestAutoMerge(ctx, apiPullRequest, autoMerge, !pr.HasMerged && !pr.Issue.IsClosed)
+		if !scheduled { // A failed schedule read cannot establish the legacy enabled state.
+			return nil
+		}
+	}
+	if scheduled {
+		setAPIPullRequestAutoMerge(ctx, apiPullRequest, autoMerge, err == nil && !pr.HasMerged && !pr.Issue.IsClosed)
 	}
 
 	if err = pr.LoadRequestedReviewers(ctx); err != nil {
@@ -543,13 +548,13 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 	return apiPullRequests, nil
 }
 
-func setAPIPullRequestAutoMerge(ctx context.Context, apiPullRequest *api.PullRequest, scheduledMerge *pull_model.AutoMerge, isOpen bool) {
+func setAPIPullRequestAutoMerge(ctx context.Context, apiPullRequest *api.PullRequest, scheduledMerge *pull_model.AutoMerge, includeDetails bool) {
 	if scheduledMerge == nil {
 		return
 	}
 	apiPullRequest.AutoMergeEnabled = true
 	apiPullRequest.AutoMergeMethod = string(scheduledMerge.MergeStyle)
-	if isOpen {
+	if includeDetails {
 		apiPullRequest.AutoMerge = toAPIAutoMerge(ctx, scheduledMerge)
 	}
 }

@@ -188,7 +188,7 @@ func TestPullStackEntryStatus(t *testing.T) {
 			return layer.Find("a").First().AttrOr("href", "")
 		})
 		assert.Equal(t, []string{"/user2/repo1/pulls/5", "/user2/repo1/pulls/3", "/user2/repo1/pulls/2"}, links)
-		for i, label := range []string{"All checks were successful", "Some checks failed"} {
+		for i, label := range []string{"All checks were successful", "Some checks were not successful"} {
 			checks := layers.Eq(i).Find(".stack-checks")
 			require.Equal(t, 1, checks.Length())
 			assert.Equal(t, "img", checks.AttrOr("role", ""))
