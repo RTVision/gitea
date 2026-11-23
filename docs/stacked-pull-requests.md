@@ -235,11 +235,13 @@ head SHA and parent SHA. The server validates the complete current chain; this
 endpoint does not push branches or guess old replay boundaries.
 
 Pull request payloads include `stack.number`, `stack.repository`, `stack.size`,
-`stack.position` and `stack.base.repository`/`stack.base.ref`/`stack.base.sha`. The ordinary `base` fields continue to describe
-the immediate parent. Actions branch filters use the trunk while path filters
-use the layer diff. Trusted `pull_request_target` workflow selection uses the
-trunk rather than an unmerged parent branch. Fork layers remain untrusted fork
-inputs when workflows run in the main repository.
+`stack.position` and `stack.base.repository`/`stack.base.ref`/`stack.base.sha`.
+The ordinary `base` fields describe the immediate parent. Actions branch filters
+use the stack trunk, and path filters use the layer diff. Actions loads
+repository-level `pull_request_target` workflows from the default branch. For a
+stack on `release` in a repository whose default branch is `main`, put the
+workflow on `main` and use `release` in its branch filter. Fork layers remain
+untrusted inputs when workflows run in the stack repository.
 
 The generated API documentation describes request and response schemas. The
 importable `modules/stackclient` package supports the stack REST workflow without
