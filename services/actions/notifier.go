@@ -23,6 +23,7 @@ import (
 	"gitea.dev/modules/util"
 	webhook_module "gitea.dev/modules/webhook"
 	"gitea.dev/services/convert"
+	"gitea.dev/services/gitdiff"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 )
@@ -531,6 +532,7 @@ func (n *actionsNotifier) PushCommits(ctx context.Context, pusher *user_model.Us
 
 	newNotifyInput(repo, pusher, webhook_module.HookEventPush).
 		WithRef(opts.RefFullName.String()).
+		WithCommitID(opts.NewCommitID).
 		WithPayload(&api.PushPayload{
 			Ref:        opts.RefFullName.String(),
 			Before:     opts.OldCommitID,
@@ -553,6 +555,7 @@ func (n *actionsNotifier) CreateRef(ctx context.Context, pusher *user_model.User
 
 	newNotifyInput(repo, pusher, webhook_module.HookEventCreate).
 		WithRef(refFullName.String()).
+		WithCommitID(refID).
 		WithPayload(&api.CreatePayload{
 			Ref:     refFullName.String(), // HINT: here is inconsistent with the Webhook's payload: webhook uses ShortName
 			Sha:     refID,
@@ -592,6 +595,7 @@ func (n *actionsNotifier) SyncPushCommits(ctx context.Context, pusher *user_mode
 
 	newNotifyInput(repo, pusher, webhook_module.HookEventPush).
 		WithRef(opts.RefFullName.String()).
+		WithCommitID(opts.NewCommitID).
 		WithPayload(&api.PushPayload{
 			Ref:          opts.RefFullName.String(),
 			Before:       opts.OldCommitID,
@@ -651,7 +655,7 @@ func (n *actionsNotifier) AutoMergePullRequest(ctx context.Context, doer *user_m
 	n.MergePullRequest(ctx, doer, pr)
 }
 
-func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, before, after string) {
+func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, event notify_service.PullRequestSyncEvent) {
 	ctx = withMethod(ctx, "PullRequestSynchronized")
 
 	if err := pr.LoadIssue(ctx); err != nil {
@@ -664,19 +668,37 @@ func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 		return
 	}
 
+	defer pull_service.WakeStackOperationForPull(ctx, pr.ID)
+	var stackDiff *gitdiff.DiffCommonOptions
+	if event.StackMergeBase != "" {
+		stackDiff = &gitdiff.DiffCommonOptions{BeforeCommitID: event.StackMergeBase, AfterCommitID: event.After}
+	}
+	apiPullRequest := convert.ToAPIPullRequestForNotificationWithDiff(ctx, pr, stackDiff)
+	if apiPullRequest == nil {
+		return
+	}
+	commitID := event.After
+	if stackDiff == nil {
+		if apiPullRequest.Stack == nil {
+			apiPullRequest.Head.Sha = event.After
+		} else {
+			commitID = "" // The layer boundary comes from live stack state for this event.
+		}
+	}
+
 	newNotifyInput(pr.Issue.Repo, doer, webhook_module.HookEventPullRequestSync).
+		WithCommitID(commitID).
 		WithPayload(&api.PullRequestPayload{
 			Action:      api.HookIssueSynchronized,
-			Before:      before,
-			After:       after,
+			Before:      event.Before,
+			After:       event.After,
 			Index:       pr.Issue.Index,
-			PullRequest: convert.ToAPIPullRequestForNotification(ctx, pr),
+			PullRequest: apiPullRequest,
 			Repository:  convert.ToRepo(ctx, pr.Issue.Repo, access_model.Permission{AccessMode: perm_model.AccessModeNone}),
 			Sender:      convert.ToUser(ctx, doer, nil),
 		}).
 		WithPullRequest(pr).
 		Notify(ctx)
-	pull_service.WakeStackOperationForPull(ctx, pr.ID)
 }
 
 func (n *actionsNotifier) PullRequestChangeTargetBranch(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, oldBranch, oldSHA string) {

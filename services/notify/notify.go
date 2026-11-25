@@ -147,11 +147,11 @@ func NewPullRequest(ctx context.Context, pr *issues_model.PullRequest, mentions 
 }
 
 // PullRequestSynchronized notifies Synchronized pull request
-func PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, before, after string) {
+func PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, event PullRequestSyncEvent) {
 	defer recoverPanic()
 
 	for _, notifier := range notifiers {
-		notifier.PullRequestSynchronized(ctx, doer, pr, before, after)
+		notifier.PullRequestSynchronized(ctx, doer, pr, event)
 	}
 }
 

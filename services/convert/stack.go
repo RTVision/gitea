@@ -173,7 +173,7 @@ func ToAPIPullRequestStack(ctx context.Context, stack *issues_model.PullRequestS
 		}
 		converted.Entries = append(converted.Entries, &api.PullRequestStackEntry{
 			Position:             entry.Position,
-			PullRequest:          toAPIPullRequest(ctx, pr, doer, false, stackRef),
+			PullRequest:          toAPIPullRequest(ctx, pr, doer, false, stackRef, nil),
 			ParentPullRequest:    parentIndex,
 			ParentPullRequestRef: parentRef,
 			HeadSHA:              entry.HeadSHA,

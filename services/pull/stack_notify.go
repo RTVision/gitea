@@ -13,7 +13,7 @@ import (
 	notify_service "gitea.dev/services/notify"
 )
 
-func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int64, changes map[int64][2]string) {
+func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int64, changes map[int64]notify_service.PullRequestSyncEvent) {
 	entries, err := issues_model.GetStackEntries(ctx, stackID)
 	if err != nil {
 		log.Error("GetStackEntries[%d]: %v", stackID, err)
@@ -50,8 +50,8 @@ func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int6
 			log.Error("LoadHeadRepo[%d]: %v", pr.ID, err)
 			continue
 		}
-		if heads, ok := changes[pr.ID]; ok {
-			notify_service.PullRequestSynchronized(ctx, doer, pr, heads[0], heads[1])
+		if event, ok := changes[pr.ID]; ok {
+			notify_service.PullRequestSynchronized(ctx, doer, pr, event)
 			continue
 		}
 		headSHA, err := git.GetFullCommitID(ctx, pr.HeadRepo, git.BranchPrefix+pr.HeadBranch)
@@ -59,6 +59,6 @@ func notifyStackChanged(ctx context.Context, doer *user_model.User, stackID int6
 			log.Error("resolve stack pull request head[%d]: %v", pr.ID, err)
 			continue
 		}
-		notify_service.PullRequestSynchronized(ctx, doer, pr, headSHA, headSHA)
+		notify_service.PullRequestSynchronized(ctx, doer, pr, notify_service.PullRequestSyncEvent{Before: headSHA, After: headSHA})
 	}
 }
