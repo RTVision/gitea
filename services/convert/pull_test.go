@@ -18,6 +18,7 @@ import (
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/structs"
 	"gitea.dev/services/contexttest"
+	"gitea.dev/services/gitdiff"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,6 +97,20 @@ func TestPullRequest_APIFormatIncludesStackTrunk(t *testing.T) {
 	assert.Equal(t, "master", converted.Stack.Base.Ref)
 	assert.NotEmpty(t, converted.Stack.Base.Sha)
 	assert.Equal(t, "master", converted.Base.Ref)
+
+	diff := &gitdiff.DiffCommonOptions{
+		BeforeCommitID: "65f1bf27bc3bf70f64657658635e66094edbcb4d",
+		AfterCommitID:  "62fb502a7172d4453f0322a2cc85bddffa57f07a",
+	}
+	require.NotEqual(t, converted.MergeBase, diff.BeforeCommitID)
+	require.NotEqual(t, converted.Head.Sha, diff.AfterCommitID)
+	notification := ToAPIPullRequestForNotificationWithDiff(t.Context(), pr, diff)
+	require.NotNil(t, notification)
+	assert.Equal(t, diff.BeforeCommitID, notification.MergeBase)
+	assert.Equal(t, diff.AfterCommitID, notification.Head.Sha)
+	assert.Equal(t, new(2), notification.ChangedFiles)
+	assert.Equal(t, new(4), notification.Additions)
+	assert.Equal(t, new(1), notification.Deletions)
 
 	upper := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1})
 	_, err = db.GetEngine(t.Context()).Insert(

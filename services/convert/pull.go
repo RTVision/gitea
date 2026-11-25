@@ -40,27 +40,32 @@ func toAPIAutoMerge(ctx context.Context, autoMerge *pull_model.AutoMerge) *api.P
 func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User) *api.PullRequest {
 	return toAPIPullRequest(ctx, pr, doer, false, func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
 		return ToAPIPullRequestStackRef(ctx, pr, doer)
-	})
+	}, nil)
 }
 
 // ToPayloadPullRequest keeps the head repository regardless of the doer, for webhook and Actions payloads
 func ToPayloadPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User) *api.PullRequest {
 	return toAPIPullRequest(ctx, pr, doer, true, func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
 		return ToAPIPullRequestStackRef(ctx, pr, doer)
-	})
+	}, nil)
 }
 
 // ToAPIPullRequestForNotification includes stack provenance for trusted internal events.
 func ToAPIPullRequestForNotification(ctx context.Context, pr *issues_model.PullRequest) *api.PullRequest {
+	return ToAPIPullRequestForNotificationWithDiff(ctx, pr, nil)
+}
+
+// ToAPIPullRequestForNotificationWithDiff uses the event's layer boundary and head when supplied.
+func ToAPIPullRequestForNotificationWithDiff(ctx context.Context, pr *issues_model.PullRequest, diff *gitdiff.DiffCommonOptions) *api.PullRequest {
 	return toAPIPullRequest(ctx, pr, nil, true, func(ctx context.Context, pr *issues_model.PullRequest) (*api.PullRequestStackRef, error) {
 		return toAPIPullRequestStackRef(ctx, pr, nil, false)
-	})
+	}, diff)
 }
 
 // toAPIPullRequest assumes following fields have been assigned with valid values:
 // Required - Issue
 // Optional - Merger
-func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, isPayload bool, stackRef func(context.Context, *issues_model.PullRequest) (*api.PullRequestStackRef, error)) *api.PullRequest {
+func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, isPayload bool, stackRef func(context.Context, *issues_model.PullRequest) (*api.PullRequestStackRef, error), diff *gitdiff.DiffCommonOptions) *api.PullRequest {
 	var (
 		baseBranch string
 		headBranch string
@@ -249,12 +254,6 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			}
 		}
 
-		// Outer scope variables to be used in diff calculation
-		var (
-			startCommitID string
-			endCommitID   string
-		)
-
 		if !exist {
 			headCommitID, err := headGitRepo.GetRefCommitID(ctx, apiPullRequest.Head.Ref)
 			if err != nil && !git.IsErrNotExist(err) {
@@ -263,7 +262,6 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			}
 			if err == nil {
 				apiPullRequest.Head.Sha = headCommitID
-				endCommitID = headCommitID
 			}
 		} else {
 			commit, err := headGitRepo.GetBranchCommit(ctx, pr.HeadBranch)
@@ -274,14 +272,18 @@ func toAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 			if err == nil {
 				apiPullRequest.Head.Ref = pr.HeadBranch
 				apiPullRequest.Head.Sha = commit.ID.String()
-				endCommitID = commit.ID.String()
 			}
 		}
+	}
 
-		// Calculate diff
-		startCommitID = pr.MergeBase
-
-		diffShortStats, err := gitdiff.GetDiffShortStat(ctx, gitRepo, &gitdiff.DiffCommonOptions{BeforeCommitID: startCommitID, AfterCommitID: endCommitID})
+	if diff != nil {
+		apiPullRequest.MergeBase = diff.BeforeCommitID
+		apiPullRequest.Head.Sha = diff.AfterCommitID
+	} else if pr.HeadRepo != nil && pr.Flow == issues_model.PullRequestFlowGithub {
+		diff = &gitdiff.DiffCommonOptions{BeforeCommitID: apiPullRequest.MergeBase, AfterCommitID: apiPullRequest.Head.Sha}
+	}
+	if diff != nil {
+		diffShortStats, err := gitdiff.GetDiffShortStat(ctx, gitRepo, diff)
 		if err != nil {
 			log.Error("GetDiffShortStat: %v", err)
 		} else {

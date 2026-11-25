@@ -4,7 +4,6 @@
 package actions
 
 import (
-	"cmp"
 	"context"
 	"errors"
 
@@ -24,6 +23,7 @@ import (
 	"gitea.dev/modules/util"
 	webhook_module "gitea.dev/modules/webhook"
 	"gitea.dev/services/convert"
+	"gitea.dev/services/gitdiff"
 	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 )
@@ -669,16 +669,21 @@ func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 	}
 
 	defer pull_service.WakeStackOperationForPull(ctx, pr.ID)
-	apiPullRequest := convert.ToAPIPullRequestForNotification(ctx, pr)
+	var stackDiff *gitdiff.DiffCommonOptions
+	if event.StackMergeBase != "" {
+		stackDiff = &gitdiff.DiffCommonOptions{BeforeCommitID: event.StackMergeBase, AfterCommitID: event.After}
+	}
+	apiPullRequest := convert.ToAPIPullRequestForNotificationWithDiff(ctx, pr, stackDiff)
 	if apiPullRequest == nil {
 		return
 	}
 	commitID := event.After
-	if apiPullRequest.Stack != nil && event.StackMergeBase == "" {
-		commitID = "" // The layer boundary comes from live stack state for this event.
-	} else {
-		apiPullRequest.Head.Sha = event.After
-		apiPullRequest.MergeBase = cmp.Or(event.StackMergeBase, apiPullRequest.MergeBase)
+	if stackDiff == nil {
+		if apiPullRequest.Stack == nil {
+			apiPullRequest.Head.Sha = event.After
+		} else {
+			commitID = "" // The layer boundary comes from live stack state for this event.
+		}
 	}
 
 	newNotifyInput(pr.Issue.Repo, doer, webhook_module.HookEventPullRequestSync).
