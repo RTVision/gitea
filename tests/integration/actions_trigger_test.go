@@ -35,6 +35,7 @@ import (
 	webhook_module "gitea.dev/modules/webhook"
 	actions_service "gitea.dev/services/actions"
 	issue_service "gitea.dev/services/issue"
+	notify_service "gitea.dev/services/notify"
 	pull_service "gitea.dev/services/pull"
 	release_service "gitea.dev/services/release"
 	repo_service "gitea.dev/services/repository"
@@ -1253,7 +1254,7 @@ jobs:
 			return commitID
 		}
 		require.Eventually(t, func() bool { return mergeRefCommitID() == mergeCommitSHA }, 10*time.Second, 50*time.Millisecond)
-		actions_service.NewNotifier().PullRequestSynchronized(t.Context(), user2, pullRequest, "", addWorkflow.Commit.SHA)
+		actions_service.NewNotifier().PullRequestSynchronized(t.Context(), user2, pullRequest, notify_service.PullRequestSyncEvent{After: addWorkflow.Commit.SHA})
 		unittest.AssertExistsAndLoadBean(t, &actions_model.ActionRun{RepoID: repo.ID, Event: webhook_module.HookEventPullRequestSync, CommitSHA: addWorkflow.Commit.SHA})
 		checkCommitStatusAndInsertFakeStatus(t, repo, addWorkflow.Commit.SHA)
 		assert.Equal(t, mergeCommitSHA, mergeRefCommitID()) // a delayed event doesn't move refs/pull/<index>/merge

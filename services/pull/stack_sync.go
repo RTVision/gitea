@@ -11,6 +11,7 @@ import (
 	issues_model "gitea.dev/models/issues"
 	repo_model "gitea.dev/models/repo"
 	user_model "gitea.dev/models/user"
+	notify_service "gitea.dev/services/notify"
 )
 
 type StackHeadExpectation struct {
@@ -22,7 +23,7 @@ type StackHeadExpectation struct {
 // SynchronizeStack records explicitly published local replay boundaries.
 func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expectedRevision int64, expected []StackHeadExpectation) (*issues_model.PullRequestStack, error) {
 	var stack *issues_model.PullRequestStack
-	changes := make(map[int64][2]string)
+	changes := make(map[int64]notify_service.PullRequestSyncEvent)
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		var err error
 		stack, err = issues_model.GetStackByID(ctx, stackID)
@@ -71,7 +72,11 @@ func SynchronizeStack(ctx context.Context, doer *user_model.User, stackID, expec
 			return err
 		}
 		for i, entry := range live {
-			changes[entry.PullRequestID] = [2]string{open[i].HeadSHA, entry.HeadSHA}
+			changes[entry.PullRequestID] = notify_service.PullRequestSyncEvent{
+				Before:         open[i].HeadSHA,
+				After:          entry.HeadSHA,
+				StackMergeBase: entry.OldParentSHA,
+			}
 			if _, err := db.GetEngine(ctx).ID(open[i].ID).Cols("head_sha", "old_parent_sha").Update(entry); err != nil {
 				return err
 			}

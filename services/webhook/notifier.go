@@ -849,7 +849,7 @@ func (m *webhookNotifier) CreateRef(ctx context.Context, pusher *user_model.User
 	}
 }
 
-func (m *webhookNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, before, after string) {
+func (m *webhookNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, event notify_service.PullRequestSyncEvent) {
 	if err := pr.LoadIssue(ctx); err != nil {
 		log.Error("LoadIssue: %v", err)
 		return
@@ -861,8 +861,8 @@ func (m *webhookNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 
 	if err := PrepareWebhooks(ctx, EventSource{Repository: pr.Issue.Repo}, webhook_module.HookEventPullRequestSync, &api.PullRequestPayload{
 		Action:      api.HookIssueSynchronized,
-		Before:      before,
-		After:       after,
+		Before:      event.Before,
+		After:       event.After,
 		Index:       pr.Issue.Index,
 		PullRequest: convert.ToPayloadPullRequest(ctx, pr, doer),
 		Repository:  convert.ToRepo(ctx, pr.Issue.Repo, access_model.Permission{AccessMode: perm.AccessModeOwner}),

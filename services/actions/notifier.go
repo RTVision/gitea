@@ -4,6 +4,7 @@
 package actions
 
 import (
+	"cmp"
 	"context"
 	"errors"
 
@@ -654,7 +655,7 @@ func (n *actionsNotifier) AutoMergePullRequest(ctx context.Context, doer *user_m
 	n.MergePullRequest(ctx, doer, pr)
 }
 
-func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, before, after string) {
+func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, event notify_service.PullRequestSyncEvent) {
 	ctx = withMethod(ctx, "PullRequestSynchronized")
 
 	if err := pr.LoadIssue(ctx); err != nil {
@@ -672,14 +673,20 @@ func (n *actionsNotifier) PullRequestSynchronized(ctx context.Context, doer *use
 	if apiPullRequest == nil {
 		return
 	}
-	apiPullRequest.Head.Sha = after
+	commitID := event.After
+	if apiPullRequest.Stack != nil && event.StackMergeBase == "" {
+		commitID = "" // The layer boundary comes from live stack state for this event.
+	} else {
+		apiPullRequest.Head.Sha = event.After
+		apiPullRequest.MergeBase = cmp.Or(event.StackMergeBase, apiPullRequest.MergeBase)
+	}
 
 	newNotifyInput(pr.Issue.Repo, doer, webhook_module.HookEventPullRequestSync).
-		WithCommitID(after).
+		WithCommitID(commitID).
 		WithPayload(&api.PullRequestPayload{
 			Action:      api.HookIssueSynchronized,
-			Before:      before,
-			After:       after,
+			Before:      event.Before,
+			After:       event.After,
 			Index:       pr.Issue.Index,
 			PullRequest: apiPullRequest,
 			Repository:  convert.ToRepo(ctx, pr.Issue.Repo, access_model.Permission{AccessMode: perm_model.AccessModeNone}),

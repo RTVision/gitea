@@ -17,6 +17,12 @@ import (
 	"gitea.dev/modules/repository"
 )
 
+type PullRequestSyncEvent struct {
+	Before         string
+	After          string
+	StackMergeBase string // Layer boundary captured with After by explicit stack sync.
+}
+
 // Notifier defines an interface to notify receiver
 type Notifier interface {
 	Run()
@@ -47,7 +53,7 @@ type Notifier interface {
 	NewPullRequest(ctx context.Context, pr *issues_model.PullRequest, mentions []*user_model.User)
 	MergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest)
 	AutoMergePullRequest(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest)
-	PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, before, after string)
+	PullRequestSynchronized(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, event PullRequestSyncEvent)
 	PullRequestReview(ctx context.Context, pr *issues_model.PullRequest, review *issues_model.Review, comment *issues_model.Comment, mentions []*user_model.User)
 	PullRequestCodeComment(ctx context.Context, pr *issues_model.PullRequest, comment *issues_model.Comment, mentions []*user_model.User)
 	PullRequestChangeTargetBranch(ctx context.Context, doer *user_model.User, pr *issues_model.PullRequest, oldBranch, oldSHA string)

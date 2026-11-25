@@ -117,14 +117,19 @@ func TestStackLifecycle(t *testing.T) {
 	wrong[1].ParentSHA = entries[1].OldParentSHA
 	_, err = SynchronizeStack(ctx, owner, stack.ID, 2, wrong)
 	require.ErrorIs(t, err, issues_model.ErrStackRevision)
-	collector := &stackSyncCollector{heads: make(map[int64][2]string)}
+	collector := &stackSyncCollector{events: make(map[int64]notify_service.PullRequestSyncEvent)}
 	notify_service.RegisterNotifier(collector)
-	t.Cleanup(func() { collector.heads = nil })
+	t.Cleanup(func() { collector.events = nil })
 	stack, err = SynchronizeStack(ctx, owner, stack.ID, 2, expected)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, stack.Revision)
-	assert.Equal(t, [2]string{entries[0].HeadSHA, expected[0].HeadSHA}, collector.heads[2])
-	assert.Equal(t, [2]string{entries[1].HeadSHA, expected[1].HeadSHA}, collector.heads[5])
+	for i, layer := range expected {
+		assert.Equal(t, notify_service.PullRequestSyncEvent{
+			Before:         entries[i].HeadSHA,
+			After:          layer.HeadSHA,
+			StackMergeBase: layer.ParentSHA,
+		}, collector.events[layer.PullRequestID])
+	}
 	synced, err := issues_model.GetStackEntries(ctx, stack.ID)
 	require.NoError(t, err)
 	assert.Equal(t, newParent, synced[1].OldParentSHA)
@@ -285,12 +290,12 @@ func TestStackInsertLayer(t *testing.T) {
 
 type stackSyncCollector struct {
 	notify_service.NullNotifier
-	heads map[int64][2]string
+	events map[int64]notify_service.PullRequestSyncEvent
 }
 
-func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_model.User, pr *issues_model.PullRequest, before, after string) {
-	if n.heads != nil {
-		n.heads[pr.ID] = [2]string{before, after}
+func (n *stackSyncCollector) PullRequestSynchronized(_ context.Context, _ *user_model.User, pr *issues_model.PullRequest, event notify_service.PullRequestSyncEvent) {
+	if n.events != nil {
+		n.events[pr.ID] = event
 	}
 }
 
