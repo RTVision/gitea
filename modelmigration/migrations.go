@@ -455,6 +455,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(377, "Change raw_concurrency of action_run and action_run_job to TEXT on MSSQL", v29.ChangeActionsRawConcurrencyToText),
 		newMigration(378, "Add hash_sha256 column to attachment", v29.AddHashSHA256ToAttachment),
 		newMigration(379, "Add workflow_ref to action_run", v29.AddWorkflowRefToActionRun),
+		newMigration(380, "Repair Debian and RPM signing keys rejected by Sequoia", v29.RepairPackageSigningKeys),
 	}
 	return preparedMigrations
 }
