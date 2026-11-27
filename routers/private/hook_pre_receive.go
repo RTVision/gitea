@@ -168,12 +168,6 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		}
 	}
 
-	if ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
-		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID, repo.ID); err != nil {
-			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
-			return
-		}
-	}
 	if isDeletingBranch && branchName == repo.GetPullRequestTargetBranch(ctx) {
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is protected from deletion", branchName)
 		return
@@ -183,6 +177,13 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	if err != nil {
 		ctx.PrivateInternalErrorf("Unable to get protected branch: %v", err)
 		return
+	}
+	isStackLanding := ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase
+	if isStackLanding {
+		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, repo.ID, branchName, oldCommitID, newCommitID, protectBranch); err != nil {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
+			return
+		}
 	}
 
 	// Allow pushes to non-protected branches
@@ -317,7 +318,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 
 		// Check all status checks and reviews are ok
 		err = pull_service.CheckPullBranchProtections(ctx, pr, true)
-		if err == nil && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
+		if err == nil && isStackLanding {
 			err = pull_service.CheckStackPublicationProtections(ctx, pr.ID)
 		}
 		if err != nil {

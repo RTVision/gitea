@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
 	access_model "gitea.dev/models/perm/access"
 	repo_model "gitea.dev/models/repo"
@@ -19,7 +20,21 @@ import (
 	"gitea.dev/modules/graceful"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/timeutil"
+	"gitea.dev/modules/util"
 )
+
+var errStackLandingRequiresMergeQueue = util.ErrorWrap(util.ErrUnprocessableContent, "stack landing is unavailable when the trunk requires a merge queue")
+
+func checkStackLandingQueue(ctx context.Context, repoID int64, branch string) error {
+	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, repoID, branch)
+	if err != nil {
+		return err
+	}
+	if rule != nil && rule.RequireMergeQueue {
+		return errStackLandingRequiresMergeQueue
+	}
+	return nil
+}
 
 // stackMergingLayers returns the layers that one pending trunk push publishes, bottom first.
 func stackMergingLayers(journal *stackJournal) []*stackLayerJournal {
@@ -52,6 +67,9 @@ func stackLayersReady(ctx context.Context, repo *repo_model.Repository, mode, tr
 // landStackLayers merges each layer onto the unpublished merge of the layer below and publishes them all with one
 // trunk push, so no layer is rebuilt on a landed predecessor and has to pass its checks again.
 func landStackLayers(ctx context.Context, op *issues_model.StackOperation, journal *stackJournal, batch []*stackLayerJournal, trunk string, target *Target, actor *user_model.User) error {
+	if err := checkStackLandingQueue(ctx, target.Repo.ID, target.Branch); err != nil {
+		return err
+	}
 	for _, layer := range batch {
 		release, err := globallock.Lock(ctx, getPullWorkingLockKey(layer.PullID))
 		if err != nil {
@@ -171,7 +189,10 @@ func mergeStackLayerOnto(mergeCtx *mergeContext, op *issues_model.StackOperation
 }
 
 // CheckStackMergePublication fences the final Git publication against the durable intent.
-func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, branch, oldSHA, newSHA string, repoIDs ...int64) error {
+func CheckStackMergePublication(ctx context.Context, pullID, actorID, repoID int64, branch, oldSHA, newSHA string, rule *git_model.ProtectedBranch) error {
+	if rule != nil && rule.RequireMergeQueue {
+		return errStackLandingRequiresMergeQueue
+	}
 	pr, err := issues_model.GetPullRequestByID(ctx, pullID)
 	if err != nil {
 		return err
@@ -180,7 +201,7 @@ func CheckStackMergePublication(ctx context.Context, pullID, actorID int64, bran
 	if err != nil || stack == nil {
 		return err
 	}
-	if stack.TrunkBranch != branch || (len(repoIDs) > 0 && stack.RepoID != repoIDs[0]) {
+	if stack.TrunkBranch != branch || stack.RepoID != repoID {
 		return ErrPullRequestStacked
 	}
 	if err := validateStackOperation(ctx, pr, stack.ActiveOperationID, actorID); err != nil {

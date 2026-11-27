@@ -120,8 +120,13 @@ func StartStackOperation(ctx context.Context, actor *user_model.User, opts Stack
 	if err != nil {
 		return nil, err
 	}
-	if opts.Kind == "land" && !prUnit.PullRequestsConfig().IsMergeStyleAllowed(opts.MergeStyle) {
-		return nil, ErrInvalidMergeStyle{ID: repo.ID, Style: opts.MergeStyle}
+	if opts.Kind == "land" {
+		if !prUnit.PullRequestsConfig().IsMergeStyleAllowed(opts.MergeStyle) {
+			return nil, ErrInvalidMergeStyle{ID: repo.ID, Style: opts.MergeStyle}
+		}
+		if err := checkStackLandingQueue(ctx, repo.ID, stack.TrunkBranch); err != nil {
+			return nil, err
+		}
 	}
 	if opts.Kind == "rebase" && !prUnit.PullRequestsConfig().AllowRebaseUpdate {
 		return nil, errors.New("server rebase updates are disabled for this repository")
