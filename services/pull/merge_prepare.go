@@ -65,7 +65,6 @@ func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullReque
 		log.Error("createTemporaryRepoForPR: %v", err)
 		return nil, cancel, err
 	}
-
 	mergeCtx = &mergeContext{
 		prTmpRepoContext: prCtx,
 		doer:             doer,
@@ -98,7 +97,6 @@ func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullReque
 	}
 
 	mergeCtx.sig = doer.NewGitSig()
-	mergeCtx.committer = mergeCtx.sig
 
 	gitRepo, err := git.OpenRepositoryLocal(ctx, mergeCtx.tmpBasePath)
 	if err != nil {
@@ -107,17 +105,7 @@ func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullReque
 	}
 	defer gitRepo.Close()
 
-	// Determine if we should sign, using the temp repo's own refs (see SignMerge for why)
-	sign, key, signer, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, git.BranchPrefix+tmpRepoBaseBranch, git.BranchPrefix+tmpRepoTrackingBranch, mergeCtx.target.Repo)
-	if err != nil && !asymkey_service.IsErrWontSign(err) {
-		log.Error("%-v SignMerge: %v", mergeCtx.pr, err) // the merge proceeds unsigned regardless, so log it here
-	}
-	if sign {
-		mergeCtx.signKey = key
-		if mergeCtx.target.Repo.GetTrustModel() == repo_model.CommitterTrustModel || mergeCtx.target.Repo.GetTrustModel() == repo_model.CollaboratorCommitterTrustModel {
-			mergeCtx.committer = signer
-		}
-	}
+	mergeCtx.committer, mergeCtx.signKey = getMergeCommitter(ctx, pr, doer, gitRepo, git.BranchPrefix+tmpRepoBaseBranch, git.BranchPrefix+tmpRepoTrackingBranch, mergeCtx.target.Repo)
 
 	commitTimeStr := time.Now().Format(time.RFC3339)
 
@@ -132,6 +120,20 @@ func createTemporaryRepoForMerge(ctx context.Context, pr *issues_model.PullReque
 	)
 
 	return mergeCtx, cancel, nil
+}
+
+func getMergeCommitter(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, gitRepo *git.Repository, baseRef, headRef string, targetRepo *repo_model.Repository) (*git.Signature, *git.SigningKey) {
+	sign, key, signer, err := asymkey_service.SignMerge(ctx, pr, doer, gitRepo, baseRef, headRef, targetRepo)
+	if err != nil && !asymkey_service.IsErrWontSign(err) {
+		log.Error("%-v SignMerge: %v", pr, err) // the merge proceeds unsigned regardless, so log it here
+	}
+	if !sign {
+		return doer.NewGitSig(), nil
+	}
+	if targetRepo.GetTrustModel() == repo_model.CommitterTrustModel || targetRepo.GetTrustModel() == repo_model.CollaboratorCommitterTrustModel {
+		return signer, key
+	}
+	return doer.NewGitSig(), key
 }
 
 // prepareTemporaryRepoForMerge takes a repository that has been created using createTemporaryRepo

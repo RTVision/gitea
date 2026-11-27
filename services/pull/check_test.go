@@ -83,7 +83,7 @@ func TestCheckSigningRequirementsHeadCommits(t *testing.T) {
 	require.NoError(t, pr.LoadHeadRepo(ctx))
 
 	check := func() error {
-		return checkSigningRequirements(ctx, pr, nil, repo_model.MergeStyleFastForwardOnly)
+		return checkSigningRequirements(ctx, pr, nil, repo_model.MergeStyleFastForwardOnly, false, true)
 	}
 
 	// No protected branch rule on the base branch: the check must pass.

@@ -144,6 +144,11 @@ func CheckStackChain(ctx context.Context, repo *repo_model.Repository, trunk, mo
 		} else if scheduled {
 			check.Invalid = fmt.Errorf("%w: pull request #%d is scheduled to auto-merge", issues_model.ErrStackRevision, pr.Index)
 		}
+		if queued, err := pull_model.GetMergeQueueEntryByPullID(ctx, id); err != nil {
+			return checks[:i], err
+		} else if queued != nil {
+			check.Invalid = fmt.Errorf("%w: pull request #%d is in the merge queue", issues_model.ErrStackRevision, pr.Index)
+		}
 		if err := pr.LoadHeadRepo(ctx); err != nil {
 			return checks[:i], err
 		}

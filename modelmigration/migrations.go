@@ -456,6 +456,8 @@ func prepareMigrationTasks() []*migration {
 		newMigration(378, "Add hash_sha256 column to attachment", v29.AddHashSHA256ToAttachment),
 		newMigration(379, "Add workflow_ref to action_run", v29.AddWorkflowRefToActionRun),
 		newMigration(380, "Repair Debian and RPM signing keys rejected by Sequoia", v29.RepairPackageSigningKeys),
+		newMigration(381, "Add pull_merge_queue_entry table", v29.AddPullMergeQueueEntryTable),
+		newMigration(382, "Update OwnerID as zero for repository level runner tokens", v29.UpdateOwnerIDOfRepoLevelRunnerTokens),
 	}
 	return preparedMigrations
 }
