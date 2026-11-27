@@ -122,10 +122,15 @@ func TestStackOperationLeaseAndRecovery(t *testing.T) {
 	assert.Equal(t, base, bareRun("rev-parse", "release"))
 	layer.LandingBaseSHA, layer.MergeCandidateSHA = base, externalHead
 	require.NoError(t, saveStackJournal(ctx, op, journal))
-	require.NoError(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, "release", base, externalHead))
-	require.ErrorIs(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, "branch2", base, externalHead), ErrPullRequestStacked)
-	require.ErrorIs(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, "release", newHead, externalHead), issues_model.ErrStackRevision)
-	require.Error(t, CheckStackMergePublication(ctx, pr.ID, 4, "release", base, externalHead))
+	require.NoError(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, repo.ID, "release", base, externalHead, nil))
+	require.ErrorIs(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, repo.ID, "branch2", base, externalHead, nil), ErrPullRequestStacked)
+	require.ErrorIs(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, repo.ID, "release", newHead, externalHead, nil), issues_model.ErrStackRevision)
+	require.Error(t, CheckStackMergePublication(ctx, pr.ID, 4, repo.ID, "release", base, externalHead, nil))
+	rule := &git_model.ProtectedBranch{
+		RepoID: repo.ID, RuleName: "release",
+		ProtectedBranchConfig: git_model.ProtectedBranchConfig{RequireMergeQueue: true},
+	}
+	require.ErrorIs(t, CheckStackMergePublication(ctx, pr.ID, actor.ID, repo.ID, "release", base, externalHead, rule), errStackLandingRequiresMergeQueue)
 	candidateRef := fmt.Sprintf("refs/stack-operations/%d/merge-%d", op.ID, entry.ID)
 	bareRun("update-ref", candidateRef, externalHead)
 	bareRun("update-ref", "refs/heads/release", externalHead)

@@ -225,7 +225,7 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 			}
 		}
 
-		if err := checkSigningRequirements(ctx, pr, doer, mergeStyle); err != nil {
+		if err := checkSigningRequirements(ctx, pr, doer, mergeStyle, forceMerge, len(landingTargets) == 0); err != nil {
 			return err
 		}
 
@@ -247,7 +247,7 @@ func CheckPullMergeable(stdCtx context.Context, doer *user_model.User, perm *acc
 //   - fast-forward-only creates no Gitea commit, so Gitea's signing key is not used.
 //   - merge, rebase, rebase-merge and squash produce a Gitea-signed commit, so
 //     Gitea must be configured to sign it.
-func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle) error {
+func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, forceMerge, allowMergeQueue bool) error {
 	pb, err := getPullProtectedBranch(ctx, pr)
 	if err != nil {
 		return err
@@ -255,7 +255,6 @@ func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest,
 	if pb == nil || !pb.RequireSignedCommits {
 		return nil
 	}
-
 	repoID, branch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pr)
 	if err != nil {
 		return err
@@ -264,6 +263,10 @@ func checkSigningRequirements(ctx context.Context, pr *issues_model.PullRequest,
 	if err != nil {
 		return err
 	}
+	if allowMergeQueue && MergesThroughQueue(ctx, pb, policyRepo, doer, forceMerge) {
+		mergeStyle = pb.MergeQueue.MergeMethod
+	}
+
 	gitRepo, closer, err := git.RepositoryFromContextOrOpen(ctx, policyRepo)
 	if err != nil {
 		return err

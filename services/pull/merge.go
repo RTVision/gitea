@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unicode"
 	"uuid"
 
 	"gitea.dev/models/db"
@@ -199,41 +198,6 @@ func GetDefaultMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr
 	return getMergeMessage(ctx, baseGitRepo, pr, mergeStyle, nil, targets...)
 }
 
-func AddCommitMessageTailer(message, tailerKey, tailerValue string) string {
-	tailerLine := tailerKey + ": " + tailerValue
-	message = strings.ReplaceAll(message, "\r\n", "\n")
-	message = strings.ReplaceAll(message, "\r", "\n")
-	if strings.Contains(message, "\n"+tailerLine+"\n") || strings.HasSuffix(message, "\n"+tailerLine) {
-		return message
-	}
-
-	if !strings.HasSuffix(message, "\n") {
-		message += "\n"
-	}
-	pos1 := strings.LastIndexByte(message[:len(message)-1], '\n')
-	pos2 := -1
-	if pos1 != -1 {
-		pos2 = strings.IndexByte(message[pos1:], ':')
-		if pos2 != -1 {
-			pos2 += pos1
-		}
-	}
-	var lastLineKey string
-	if pos1 != -1 && pos2 != -1 {
-		lastLineKey = message[pos1+1 : pos2]
-	}
-
-	isLikelyTailerLine := lastLineKey != "" && unicode.IsUpper(rune(lastLineKey[0])) && strings.Contains(message, "-")
-	for i := 0; isLikelyTailerLine && i < len(lastLineKey); i++ {
-		r := rune(lastLineKey[i])
-		isLikelyTailerLine = unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-'
-	}
-	if !strings.HasSuffix(message, "\n\n") && !isLikelyTailerLine {
-		message += "\n"
-	}
-	return message + tailerLine
-}
-
 // ErrInvalidMergeStyle represents an error if merging with disabled merge strategy
 type ErrInvalidMergeStyle struct {
 	ID    int64
@@ -310,6 +274,14 @@ func clearMergeIntent(ctx context.Context, pr *issues_model.PullRequest) error {
 	})
 }
 
+func clearUnmergedIntent(ctx context.Context, pr *issues_model.PullRequest) {
+	if merged, err := hasPullRequestCommitBeenMerged(ctx, pr); err == nil && !merged && pr.MergedCommitID != "" { // clear the intent only if the commit verifiably didn't reach the base branch
+		if err := clearMergeIntent(ctx, pr); err != nil {
+			log.Error("Unable to clear merge intent of %-v: %v", pr, err)
+		}
+	}
+}
+
 func hasPullRequestCommitBeenMerged(ctx context.Context, pr *issues_model.PullRequest) (bool, error) {
 	if pr.MergedCommitID == "" {
 		return false, nil
@@ -374,17 +346,12 @@ func Merge(outerCtx context.Context, prID int64, doer *user_model.User, mergeSty
 		if !hasCommitBeenMerged {
 			_, err = doMergeAndPush(ctx, pr, doer, mergeStyle, message, mergeAndPushOptions{
 				expectedHeadCommitID: expectedHeadCommitID,
-				onMergedIntoTempBase: func(commitID string) error {
+				onMergeCommitCreated: func(commitID string) error {
 					return recordMergeIntent(ctx, pr, doer, commitID, wasAutoMerged)
 				},
 			})
 			if err != nil {
-				// clear the intent only if the commit verifiably didn't reach the base branch
-				if merged, checkErr := hasPullRequestCommitBeenMerged(ctx, pr); checkErr == nil && !merged && pr.MergedCommitID != "" {
-					if clearErr := clearMergeIntent(ctx, pr); clearErr != nil {
-						log.Error("Unable to clear merge intent of %-v: %v", pr, clearErr)
-					}
-				}
+				clearUnmergedIntent(ctx, pr)
 				return err
 			}
 		}
@@ -473,33 +440,131 @@ func handleCloseCrossReferences(ctx context.Context, pr *issues_model.PullReques
 
 type mergeAndPushOptions struct {
 	expectedHeadCommitID string
-	onMergedIntoTempBase func(commitID string) error
+	onMergeCommitCreated func(commitID string) error
 }
 
 // doMergeAndPush performs the merge operation without changing any pull information in database and pushes it up to the base repository
 func doMergeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, message string, opts mergeAndPushOptions) (string, error) { //nolint:unparam // non-error result is never used
+	if git.DefaultFeatures().SupportGitMergeTree && (mergeStyle == repo_model.MergeStyleMerge || mergeStyle == repo_model.MergeStyleSquash) {
+		return doMergeTreeAndPush(ctx, pr, doer, mergeStyle, message, opts)
+	}
+
+	// Clone base repo.
 	mergeCtx, cancel, err := createTemporaryRepoForMerge(ctx, pr, doer, opts.expectedHeadCommitID)
 	if err != nil {
 		return "", err
 	}
 	defer cancel()
 
+	// Merge commits.
 	if err := doMergeStyle(mergeCtx, mergeStyle, message); err != nil {
 		return "", err
 	}
-	mergeBaseSHA, mergeCommitID, err := publishMergeObjects(mergeCtx)
+
+	mergeCommitID, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, tmpRepoBaseBranch)
+	if err != nil {
+		return "", fmt.Errorf("failed to get full commit id for the new merge: %w", err)
+	}
+	baseCommitID, err := git.GetFullCommitID(ctx, mergeCtx.tmpRepo, git.BranchPrefix+"original_"+tmpRepoBaseBranch)
+	if err != nil {
+		return "", fmt.Errorf("doMergeAndPush: get original base commit: %w", err)
+	}
+	return pushMergeCommit(ctx, pr, doer, mergeCtx.tmpRepo, mergeCommitID, baseCommitID, opts)
+}
+
+// doMergeTreeAndPush merges or squashes in the base repo, without a temp repo
+func doMergeTreeAndPush(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, mergeStyle repo_model.MergeStyle, message string, opts mergeAndPushOptions) (string, error) {
+	baseGitRepo, err := git.OpenRepository(ctx, pr.BaseRepo)
 	if err != nil {
 		return "", err
 	}
+	defer baseGitRepo.Close()
 
-	pr.MergedBaseCommitID = mergeBaseSHA
-	if opts.onMergedIntoTempBase != nil {
-		if err := opts.onMergedIntoTempBase(mergeCommitID); err != nil {
+	baseCommitID, err := baseGitRepo.GetBranchCommitID(ctx, pr.BaseBranch)
+	if err != nil {
+		return "", err
+	}
+	headCommitID, err := git.GetFullCommitID(ctx, pr.HeadRepo, getPullHeadRef(pr))
+	if err != nil {
+		return "", err
+	}
+	if opts.expectedHeadCommitID != "" && headCommitID != opts.expectedHeadCommitID {
+		return "", ErrSHADoesNotMatch{GivenSHA: opts.expectedHeadCommitID, CurrentSHA: headCommitID}
+	}
+	if !pr.IsSameRepo() && !baseGitRepo.IsReferenceExist(ctx, headCommitID) {
+		if err := git.FetchRemoteTempCommit(ctx, pr.BaseRepo, pr.HeadRepo, headCommitID); err != nil {
 			return "", err
 		}
 	}
 
-	if err := pushMergeToTarget(mergeCtx, doer, ""); err != nil {
+	author := doer.NewGitSig()
+	committer, signKey := getMergeCommitter(ctx, pr, doer, baseGitRepo, baseCommitID, headCommitID, pr.BaseRepo)
+	parents := []string{baseCommitID}
+	if mergeStyle == repo_model.MergeStyleSquash {
+		if author, err = getAuthorSignatureSquash(ctx, pr, baseGitRepo, git.RefName(baseCommitID), git.RefName(headCommitID)); err != nil {
+			return "", err
+		}
+		message = squashCommitMessage(message, author, committer)
+	} else {
+		parents = append(parents, headCommitID)
+	}
+
+	treeID, hasConflicts, conflictFiles, err := git.MergeTree(ctx, pr.BaseRepo, baseCommitID, headCommitID, "")
+	if gitcmd.IsStderr(err, gitcmd.StderrUnrelatedHistories) {
+		return "", ErrMergeUnrelatedHistories{Style: mergeStyle, Err: err}
+	} else if err != nil {
+		return "", err
+	} else if hasConflicts {
+		return "", ErrMergeConflicts{Style: mergeStyle, StdOut: strings.Join(conflictFiles, "\n")}
+	}
+	mergeCommitID, err := git.CommitTree(ctx, pr.BaseRepo, author, committer, treeID, git.CommitTreeOpts{
+		Parents:   parents,
+		Message:   message,
+		Key:       signKey,
+		NoGPGSign: signKey == nil,
+	})
+	if err != nil {
+		return "", err
+	}
+	return pushMergeCommit(ctx, pr, doer, pr.BaseRepo, mergeCommitID.String(), baseCommitID, opts)
+}
+
+func pushMergeCommit(ctx context.Context, pr *issues_model.PullRequest, doer *user_model.User, fromRepo git.RepositoryFacade, mergeCommitID, mergeBase string, opts mergeAndPushOptions) (string, error) {
+	// Now it's questionable about where this should go - either after or before the push
+	// I think in the interests of data safety - failures to push to the lfs should prevent
+	// the merge as you can always remerge.
+	if setting.LFS.StartServer {
+		if err := LFSPush(ctx, fromRepo, mergeCommitID, mergeBase, pr); err != nil {
+			return "", err
+		}
+	}
+
+	var headUser *user_model.User
+	if err := pr.HeadRepo.LoadOwner(ctx); err != nil {
+		if !user_model.IsErrUserNotExist(err) {
+			log.Error("Can't find user: %d for head repository in %-v: %v", pr.HeadRepo.OwnerID, pr, err)
+			return "", err
+		}
+		log.Warn("Can't find user: %d for head repository in %-v - defaulting to doer: %s - %v", pr.HeadRepo.OwnerID, pr, doer.Name, err)
+		headUser = doer
+	} else {
+		headUser = pr.HeadRepo.Owner
+	}
+
+	pr.MergedBaseCommitID = mergeBase
+	if opts.onMergeCommitCreated != nil {
+		if err := opts.onMergeCommitCreated(mergeCommitID); err != nil {
+			return "", err
+		}
+	}
+
+	// Push back to upstream.
+	// This cause an api call to "/api/internal/hook/post-receive/...",
+	// If it's merge, all db transaction and operations should be there but not here to prevent deadlock.
+	if err := git.PushManaged(ctx, fromRepo, pr.BaseRepo, git.PushOptions{
+		Branch: mergeCommitID + ":" + git.BranchPrefix + pr.BaseBranch,
+		Env:    repo_module.FullPushingEnvironment(headUser, doer, pr.BaseRepo, pr.BaseRepo.Name, pr.ID, pr.Index),
+	}); err != nil {
 		return "", err
 	}
 	return mergeCommitID, nil
@@ -535,7 +600,7 @@ func publishMergeObjects(mergeCtx *mergeContext) (mergeBaseSHA, mergeCommitID st
 	// I think in the interests of data safety - failures to push to the lfs should prevent
 	// the merge as you can always remerge.
 	if setting.LFS.StartServer {
-		if err := LFSPush(mergeCtx, mergeCtx.tmpBasePath, mergeCtx.tmpRepo, mergeCommitID, mergeBaseSHA, mergeCtx.pr, mergeCtx.target); err != nil {
+		if err := LFSPush(mergeCtx, mergeCtx.tmpRepo, mergeCommitID, mergeBaseSHA, mergeCtx.pr, mergeCtx.target); err != nil {
 			return "", "", err
 		}
 	}
@@ -770,14 +835,8 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return util.ErrorWrap(ErrNotReadyToMerge, "Not all required status checks successful")
 	}
 
-	if !issues_model.HasEnoughApprovals(ctx, pb, pr) {
-		return util.ErrorWrap(ErrNotReadyToMerge, "Does not have enough approvals")
-	}
-	if issues_model.MergeBlockedByRejectedReview(ctx, pb, pr) {
-		return util.ErrorWrap(ErrNotReadyToMerge, "There are requested changes")
-	}
-	if issues_model.MergeBlockedByOfficialReviewRequests(ctx, pb, pr) {
-		return util.ErrorWrap(ErrNotReadyToMerge, "There are official review requests")
+	if err := checkPullReviews(ctx, pb, pr); err != nil {
+		return err
 	}
 
 	outdated, err := isPullBranchOutdated(ctx, pb, pr)
@@ -823,6 +882,18 @@ func CheckPullBranchProtections(ctx context.Context, pr *issues_model.PullReques
 		return util.ErrorWrap(ErrNotReadyToMerge, "Changed protected files")
 	}
 
+	return nil
+}
+
+func checkPullReviews(ctx context.Context, pb *git_model.ProtectedBranch, pr *issues_model.PullRequest) error {
+	switch {
+	case !issues_model.HasEnoughApprovals(ctx, pb, pr):
+		return util.ErrorWrap(ErrNotReadyToMerge, "Does not have enough approvals")
+	case issues_model.MergeBlockedByRejectedReview(ctx, pb, pr):
+		return util.ErrorWrap(ErrNotReadyToMerge, "There are requested changes")
+	case issues_model.MergeBlockedByOfficialReviewRequests(ctx, pb, pr):
+		return util.ErrorWrap(ErrNotReadyToMerge, "There are official review requests")
+	}
 	return nil
 }
 

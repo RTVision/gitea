@@ -10,6 +10,7 @@ import (
 
 	git_model "gitea.dev/models/git"
 	issues_model "gitea.dev/models/issues"
+	pull_model "gitea.dev/models/pull"
 	"gitea.dev/models/unit"
 	"gitea.dev/modules/git"
 	"gitea.dev/modules/git/gitcmd"
@@ -118,8 +119,24 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 
 	repo := ctx.Repo.Repository
 	gitRepo := ctx.Repo.GitRepo
-	objectFormat := ctx.Repo.GetObjectFormat()
-	isDeletingBranch := newCommitID == objectFormat.EmptyObjectID().String()
+	emptyID := ctx.Repo.GetObjectFormat().EmptyObjectID().String()
+	isDeletingBranch := newCommitID == emptyID
+	isUpdate := oldCommitID != emptyID
+	if !ctx.opts.IsWiki {
+		if owned, err := pull_model.IsMergeQueueRef(ctx, repo.ID, refFullName); err != nil {
+			ctx.PrivateInternalErrorf("Unable to check merge queue ref: %v", err)
+			return
+		} else if owned {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is reserved for the merge queue", branchName)
+			return
+		}
+		if isUpdate && ctx.opts.PullRequestID == 0 {
+			if err := issues_model.CheckBranchNotQueuedForMerge(ctx, repo.ID, branchName); err != nil {
+				ctx.PrivateUserErrorAuto(err)
+				return
+			}
+		}
+	}
 
 	defaultBranch := repo.DefaultBranch
 	if ctx.opts.IsWiki && repo.DefaultWikiBranch != "" {
@@ -130,7 +147,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is the default branch and cannot be deleted", branchName)
 		return
 	}
-	if !ctx.opts.IsWiki && newCommitID == objectFormat.EmptyObjectID().String() {
+	if !ctx.opts.IsWiki && isDeletingBranch {
 		if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, branchName); err != nil {
 			if errors.Is(err, issues_model.ErrBranchInStack) {
 				ctx.PrivateUserErrorf(http.StatusForbidden, "%s", err)
@@ -151,12 +168,6 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		}
 	}
 
-	if ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
-		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, branchName, oldCommitID, newCommitID, repo.ID); err != nil {
-			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
-			return
-		}
-	}
 	if isDeletingBranch && branchName == repo.GetPullRequestTargetBranch(ctx) {
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is protected from deletion", branchName)
 		return
@@ -166,6 +177,13 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	if err != nil {
 		ctx.PrivateInternalErrorf("Unable to get protected branch: %v", err)
 		return
+	}
+	isStackLanding := ctx.opts.PullRequestID != 0 && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase
+	if isStackLanding {
+		if err := pull_service.CheckStackMergePublication(ctx, ctx.opts.PullRequestID, ctx.Doer.ID, repo.ID, branchName, oldCommitID, newCommitID, protectBranch); err != nil {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "Stack merge publication rejected: %v", err)
+			return
+		}
 	}
 
 	// Allow pushes to non-protected branches
@@ -183,6 +201,12 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		if !protectBranch.CanUserDelete(ctx, ctx.Doer, ctx.Repo.Permission) {
 			ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is protected from deletion", branchName)
 		}
+		return
+	}
+
+	requiresMergeQueue := isUpdate && !ctx.opts.IsWiki && protectBranch.RequireMergeQueue
+	if requiresMergeQueue && ctx.opts.PullRequestID == 0 && !git_model.CanBypassBranchProtection(ctx, protectBranch, ctx.Doer, ctx.Repo.Permission.IsAdmin()) {
+		ctx.PrivateUserErrorf(http.StatusForbidden, "Changes must be made through the merge queue for branch %s", branchName)
 		return
 	}
 
@@ -214,7 +238,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	}
 
 	// 6. If we're not allowed to push directly
-	if !canPush {
+	if !canPush || (requiresMergeQueue && ctx.opts.PullRequestID != 0) {
 		// Is this is a merge from the UI/API?
 		if ctx.opts.PullRequestID == 0 {
 			// 6a. If we're not merging from the UI/API then there are two ways we got here:
@@ -280,9 +304,21 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 			return
 		}
 
+		if protectBranch.RequireMergeQueue {
+			entry, err := pull_model.GetMergeQueueEntryByPullID(ctx, pr.ID)
+			if err != nil {
+				ctx.PrivateInternalErrorf("Unable to get merge queue entry of pull request %d: %v", pr.ID, err)
+				return
+			}
+			if entry == nil || entry.BaseBranch != branchName || entry.GroupHeadSHA != newCommitID || entry.State != pull_model.MergeQueueStateMergeable {
+				ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s requires pull requests to be merged through the merge queue", branchName)
+			}
+			return
+		}
+
 		// Check all status checks and reviews are ok
 		err = pull_service.CheckPullBranchProtections(ctx, pr, true)
-		if err == nil && ctx.opts.PushTrigger == repo_module.PushTriggerPRMergeToBase {
+		if err == nil && isStackLanding {
 			err = pull_service.CheckStackPublicationProtections(ctx, pr.ID)
 		}
 		if err != nil {

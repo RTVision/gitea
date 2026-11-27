@@ -855,14 +855,6 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 
 	pull_service.StartPullRequestCheckOnView(ctx, pull)
 
-	if !prInfo.IsPullRequestBroken {
-		data.ShowUpdatePullInfo = pull.CommitsBehind > 0 && !issue.IsClosed && !pull.IsChecking() && !pull.IsFilesConflicted() && !prInfo.IsPullRequestBroken
-		prInfo.preparePullUpdateActions(ctx)
-		if ctx.Written() {
-			return
-		}
-	}
-
 	if ctx.IsSigned {
 		if err := pull.LoadHeadRepo(ctx); err != nil {
 			log.Error("LoadHeadRepo: %v", err)
@@ -927,15 +919,46 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 		return
 	}
 
-	prInfo.prepareMergeBoxProtectionChecks(ctx)
+	policyRepoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, pull)
+	if err != nil {
+		ctx.ServerErrorAuto(err)
+		return
+	}
+	rule, err := git_model.GetFirstMatchProtectedBranchRule(ctx, policyRepoID, policyBranch)
+	if err != nil {
+		ctx.ServerErrorAuto(err)
+		return
+	}
+	prInfo.ProtectedBranchRule = rule
+	if rule != nil {
+		rule.Repo, err = repo_model.GetRepositoryByID(ctx, policyRepoID)
+		if err != nil {
+			ctx.ServerErrorAuto(err)
+			return
+		}
+	}
+	if rule != nil && rule.RequireMergeQueue && !prInfo.isStacked && !pull.HasMerged {
+		data.MergeQueueLink = ctx.Repo.RepoLink + "/queue/" + util.PathEscapeSegments(pull.BaseBranch)
+		if prInfo.queueEntry != nil {
+			prInfo.prepareQueuedMergeBox(ctx)
+			return
+		}
+	}
+	if pull.CommitsBehind > 0 && !prInfo.IsPullRequestBroken && !pull.IsChecking() && !pull.IsFilesConflicted() {
+		data.ShowUpdatePullInfo = true
+		prInfo.preparePullUpdateActions(ctx)
+		if ctx.Written() {
+			return
+		}
+	}
+	prInfo.prepareMergeBoxStatusCheckData(ctx)
 	if ctx.Written() {
 		return
 	}
-
-	data.ShowPullCommands = pull.HeadRepo != nil
-	data.ShowMergeInstructions = data.ShowPullCommands && ctx.Repo.Permission.CanWrite(unit.TypeCode) &&
-		(prInfo.ProtectedBranchRule == nil || prInfo.ProtectedBranchRule.CanUserPush(ctx, ctx.Doer, ctx.Repo.Permission))
-
+	prInfo.prepareMergeBoxProtectedRules(ctx)
+	if ctx.Written() {
+		return
+	}
 	prInfo.prepareMergeBoxCommitSigning(ctx)
 
 	prConfig := issue.Repo.MustGetUnit(ctx, unit.TypePullRequests).PullRequestsConfig()
@@ -964,9 +987,12 @@ func (prInfo *pullRequestViewInfo) prepareMergeBox(ctx *context.Context, issue *
 	// admin can merge without checks, writer can merge when checks succeed
 	// admin and writer both can make an auto merge schedule (not affected by overridable blockers)
 	data.canBypassProtection = isRepoAdmin
-	if ctx.IsSigned && prInfo.ProtectedBranchRule != nil {
-		data.canBypassProtection = git_model.CanBypassBranchProtection(ctx, prInfo.ProtectedBranchRule, ctx.Doer, isRepoAdmin)
+	if ctx.IsSigned && rule != nil {
+		data.canBypassProtection = git_model.CanBypassBranchProtection(ctx, rule, ctx.Doer, isRepoAdmin)
 	}
+	data.ShowPullCommands = pull.HeadRepo != nil
+	data.ShowMergeInstructions = data.ShowPullCommands && ctx.Repo.Permission.CanWrite(unit.TypeCode) &&
+		(data.MergeQueueLink == "" || data.canBypassProtection) && (rule == nil || rule.CanUserPush(ctx, ctx.Doer, ctx.Repo.Permission))
 
 	if _, data.AutoMerge, err = pull_model.GetScheduledMergeByPullID(ctx, pull.ID); err != nil {
 		ctx.ServerErrorAuto(err)
@@ -1028,37 +1054,6 @@ func (prInfo *pullRequestViewInfo) preparePullUpdateActions(ctx *context.Context
 		data.UpdatePrimaryAction = data.UpdateStyleOptions[0]
 	}
 	data.UpdatePrimaryAction.Selected = true
-}
-
-func (prInfo *pullRequestViewInfo) prepareMergeBoxProtectionChecks(ctx *context.Context) {
-	policyRepoID, policyBranch, err := issues_model.ResolvePullRequestPolicyTarget(ctx, prInfo.issue.PullRequest)
-	if err != nil {
-		ctx.ServerErrorAuto(err)
-		return
-	}
-	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, policyRepoID, policyBranch)
-	if err != nil {
-		ctx.ServerErrorAuto(err)
-		return
-	}
-	if pb != nil {
-		pb.Repo, err = repo_model.GetRepositoryByID(ctx, policyRepoID)
-		if err != nil {
-			ctx.ServerErrorAuto(err)
-			return
-		}
-		prInfo.ProtectedBranchRule = pb
-	}
-
-	prInfo.prepareMergeBoxStatusCheckData(ctx)
-	if ctx.Written() {
-		return
-	}
-
-	prInfo.prepareMergeBoxProtectedRules(ctx)
-	if ctx.Written() {
-		return
-	}
 }
 
 func (prInfo *pullRequestViewInfo) prepareMergeBoxProtectedRules(ctx *context.Context) {

@@ -83,7 +83,20 @@ func TestNativeStackOrderedLanding(t *testing.T) {
 
 				require.ErrorIs(t, pull_service.Merge(t.Context(), upper.ID, actor, style, "", "", false), pull_service.ErrPullRequestStacked)
 				if style == repo_model.MergeStyleMerge {
-					_, err := db.GetEngine(t.Context()).Insert(&git_model.ProtectedBranch{
+					rule := &git_model.ProtectedBranch{
+						RepoID: repo.ID, RuleName: "release",
+						ProtectedBranchConfig: git_model.ProtectedBranchConfig{RequireMergeQueue: true},
+					}
+					require.NoError(t, db.Insert(t.Context(), rule))
+					_, err := pull_service.StartStackOperation(t.Context(), actor, pull_service.StackOperationOptions{StackID: stack.ID, ExpectedRevision: stack.Revision, Kind: "land", MergeStyle: style})
+					require.ErrorContains(t, err, "trunk requires a merge queue")
+					operations, err := issues_model.GetStackOperations(t.Context(), stack.ID)
+					require.NoError(t, err)
+					assert.Empty(t, operations)
+					_, err = db.DeleteByID[git_model.ProtectedBranch](t.Context(), rule.ID)
+					require.NoError(t, err)
+
+					_, err = db.GetEngine(t.Context()).Insert(&git_model.ProtectedBranch{
 						ProtectedBranchConfig: git_model.ProtectedBranchConfig{
 							EnableStatusCheck:   true,
 							StatusCheckContexts: []string{"stack-ci"},
