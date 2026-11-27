@@ -147,7 +147,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Branch %s is the default branch and cannot be deleted", branchName)
 		return
 	}
-	if !ctx.opts.IsWiki && newCommitID == objectFormat.EmptyObjectID().String() {
+	if !ctx.opts.IsWiki && isDeletingBranch {
 		if err := issues_model.CheckStackBranchMutation(ctx, repo.ID, branchName); err != nil {
 			if errors.Is(err, issues_model.ErrBranchInStack) {
 				ctx.PrivateUserErrorf(http.StatusForbidden, "%s", err)
